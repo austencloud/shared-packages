@@ -1,0 +1,78 @@
+/**
+ * Media Manager CSS Tokens
+ *
+ * Override these variables in your app to customize the media manager appearance.
+ * Uses --mm- prefix. Falls back to sensible dark-theme defaults.
+ */
+
+:root {
+  /* ===== Surface Colors ===== */
+  --mm-surface: #1a1a2e;
+  --mm-surface-raised: #222240;
+  --mm-surface-overlay: #2a2a4a;
+  --mm-surface-hover: #2e2e50;
+
+  /* ===== Text Colors ===== */
+  --mm-text: #e8e8f0;
+  --mm-text-muted: #9999b0;
+  --mm-text-dim: #66668a;
+
+  /* ===== Border Colors ===== */
+  --mm-border: #333355;
+  --mm-border-subtle: #2a2a48;
+
+  /* ===== Accent Colors ===== */
+  --mm-accent: #6366f1;
+  --mm-accent-hover: #4f46e5;
+
+  /* ===== Status Colors ===== */
+  --mm-danger: #ef4444;
+  --mm-warning: #f59e0b;
+
+  /* ===== Tag Colors ===== */
+  --mm-tag-flame: #f97316;
+  --mm-tag-gold: #eab308;
+  --mm-tag-royal: #8b5cf6;
+  --mm-tag-cyan: #06b6d4;
+  --mm-tag-green: #22c55e;
+  --mm-tag-red: #ef4444;
+  --mm-tag-purple: #a855f7;
+  --mm-tag-navy: #1e40af;
+  --mm-tag-teal: #0d9488;
+  --mm-tag-pink: #ec4899;
+  --mm-tag-lime: #84cc16;
+  --mm-tag-gray: #6b7280;
+
+  /* ===== Grid ===== */
+  --mm-grid-gap: 8px;
+  --mm-grid-item-radius: 8px;
+
+  /* ===== Overlay ===== */
+  --mm-overlay-bg: rgba(0, 0, 0, 0.6);
+  --mm-overlay-blur: 4px;
+
+  /* ===== Panel ===== */
+  --mm-panel-radius: 12px;
+  --mm-panel-shadow: 0 24px 48px rgba(0, 0, 0, 0.4);
+
+  /* ===== Animation ===== */
+  --mm-duration-fast: 150ms;
+  --mm-duration-normal: 200ms;
+  --mm-duration-slow: 250ms;
+  --mm-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* ===== Z-Index Layers ===== */
+  --mm-z-sidebar: 100;
+  --mm-z-toolbar: 200;
+  --mm-z-panel: 1050;
+  --mm-z-overlay: 1050;
+}
+
+/* ===== Reduced Motion ===== */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --mm-duration-fast: 0ms;
+    --mm-duration-normal: 0ms;
+    --mm-duration-slow: 0ms;
+  }
+}
