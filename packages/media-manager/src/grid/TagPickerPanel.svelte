@@ -136,35 +136,31 @@
 					<div class="picker-tag-list">
 						{#each categoryTags as tag (tag.id)}
 							{@const state = getTagState(tag)}
+							{@const hex = getTagHex(tag)}
 							<button
-								class="picker-tag-btn"
+								class="picker-chip"
+								class:applied={state === 'all'}
+								class:partial={state === 'some'}
+								style="--chip-hex: {hex}"
 								onclick={() => handleTagClick(tag)}
 								title={state === 'all'
-									? 'On all selected. Click to remove.'
+									? 'Applied. Click to remove.'
 									: state === 'some'
-										? 'On some selected. Click to apply to all.'
-										: 'Click to apply to all selected.'}
+										? 'On some items. Click to apply to all.'
+										: 'Click to apply.'}
 							>
-								<div
-									class="picker-checkbox"
-									class:all={state === 'all'}
-									class:some={state === 'some'}
-								>
-									{#if state === 'all'}
-										<svg class="picker-check-icon" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="2">
-											<path d="M2 5l2.5 2.5L8 3" />
-										</svg>
-									{:else if state === 'some'}
-										<svg class="picker-check-icon" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="2.5">
-											<path d="M2 5h6" />
-										</svg>
-									{/if}
-								</div>
-								<span
-									class="picker-tag-dot"
-									style="background: {getTagHex(tag)}"
-								></span>
-								<span class="picker-tag-name">{tag.name}</span>
+								{#if state === 'all'}
+									<svg class="chip-check" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2">
+										<path d="M2.5 6l2.5 2.5L9.5 4" />
+									</svg>
+								{:else if state === 'some'}
+									<span class="chip-count">
+										{selectedItems.filter(i => i.tags.includes(tag.id)).length}/{selectedItems.length}
+									</span>
+								{:else}
+									<span class="chip-dot" style="background: {hex}"></span>
+								{/if}
+								<span class="chip-label">{tag.name}</span>
 							</button>
 						{/each}
 					</div>
@@ -320,73 +316,71 @@
 
 	.picker-tag-list {
 		display: flex;
-		flex-direction: column;
-		gap: 2px;
-		padding: 0 8px 8px;
+		flex-wrap: wrap;
+		gap: 6px;
+		padding: 4px 8px 10px;
 	}
 
-	.picker-tag-btn {
-		display: flex;
+	.picker-chip {
+		display: inline-flex;
 		align-items: center;
-		gap: 8px;
-		padding: 4px 8px;
-		border: none;
-		border-radius: 4px;
+		gap: 5px;
+		padding: 6px 12px;
+		min-height: 40px;
+		border: 1px solid var(--mm-border, #333355);
+		border-radius: 9999px;
 		background: transparent;
-		text-align: left;
-		cursor: pointer;
-		transition: background 0.15s;
-	}
-
-	.picker-tag-btn:hover {
-		background: var(--mm-surface-hover, #2e2e50);
-	}
-
-	.picker-checkbox {
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		width: 16px;
-		height: 16px;
-		flex-shrink: 0;
-		border-radius: 3px;
-		border: 1px solid var(--mm-text-dim, #66668a);
-		background: transparent;
-		transition: all 0.15s;
-	}
-
-	.picker-checkbox.all {
-		border-color: var(--mm-accent, #6366f1);
-		background: var(--mm-accent, #6366f1);
-		color: white;
-	}
-
-	.picker-checkbox.some {
-		border-color: var(--mm-accent, #6366f1);
-		background: color-mix(in srgb, var(--mm-accent, #6366f1) 30%, transparent);
-		color: var(--mm-accent, #6366f1);
-	}
-
-	.picker-check-icon {
-		width: 10px;
-		height: 10px;
-	}
-
-	.picker-tag-dot {
-		width: 10px;
-		height: 10px;
-		flex-shrink: 0;
-		border-radius: 50%;
-	}
-
-	.picker-tag-name {
-		flex: 1;
-		min-width: 0;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
+		color: var(--mm-text-muted, #9999b0);
 		font-size: 12px;
+		font-weight: 500;
+		cursor: pointer;
+		white-space: nowrap;
+		transition: all 0.15s;
+		user-select: none;
+	}
+
+	.picker-chip:hover {
+		border-color: var(--chip-hex);
+		background: color-mix(in srgb, var(--chip-hex) 10%, transparent);
 		color: var(--mm-text, #e8e8f0);
+	}
+
+	.picker-chip.applied {
+		background: color-mix(in srgb, var(--chip-hex) 25%, transparent);
+		border-color: var(--chip-hex);
+		color: var(--mm-text, #e8e8f0);
+	}
+
+	.picker-chip.partial {
+		background: color-mix(in srgb, var(--chip-hex) 12%, transparent);
+		border-color: var(--chip-hex);
+		border-style: dashed;
+		color: var(--mm-text, #e8e8f0);
+	}
+
+	.chip-check {
+		width: 12px;
+		height: 12px;
+		flex-shrink: 0;
+		color: var(--chip-hex);
+	}
+
+	.chip-count {
+		font-size: 10px;
+		font-weight: 600;
+		color: var(--chip-hex);
+		font-variant-numeric: tabular-nums;
+	}
+
+	.chip-dot {
+		width: 8px;
+		height: 8px;
+		border-radius: 50%;
+		flex-shrink: 0;
+	}
+
+	.chip-label {
+		line-height: 1;
 	}
 
 	.picker-empty {
