@@ -1,0 +1,95 @@
+/*
+ * Cirque Aflame token mapping for @austencloud/chip-toggle.
+ * Maps generic --chip-* properties to Cirque's design tokens.
+ * Import in your root layout: import '@austencloud/chip-toggle/css/cirque-tokens.css';
+ */
+
+:root {
+	/* ── Base (inactive) ─────────────────────────────────── */
+	--chip-bg: var(--stroke-subtle);
+	--chip-border: var(--interactive-selected);
+	--chip-text: var(--gray-text, rgba(255, 255, 255, 0.6));
+	--chip-hover-bg: var(--interactive-active);
+	--chip-hover-border: var(--theme-stroke-strong);
+	--chip-hover-text: var(--theme-text);
+	--chip-focus: var(--cirque-royal);
+	--chip-radius: var(--radius-2xl);
+	--chip-transition: var(--transition-fast);
+
+	/* ── Purple / Default ────────────────────────────────── */
+	--chip-purple-bg: var(--royal-bg-strong);
+	--chip-purple-border: var(--cirque-royal);
+	--chip-purple-text: var(--royal-text);
+	--chip-purple-glow: var(--royal-glow);
+	--chip-purple-focus: var(--cirque-royal);
+
+	/* ── Flame ───────────────────────────────────────────── */
+	--chip-flame-bg: var(--flame-bg-strong);
+	--chip-flame-border: var(--cirque-aflame);
+	--chip-flame-text: var(--flame-text);
+	--chip-flame-glow: var(--flame-glow);
+	--chip-flame-focus: var(--cirque-aflame);
+
+	/* ── Gold ────────────────────────────────────────────── */
+	--chip-gold-bg: var(--gold-bg-strong);
+	--chip-gold-border: var(--cirque-gold);
+	--chip-gold-text: var(--gold-text);
+	--chip-gold-glow: var(--gold-glow);
+	--chip-gold-focus: var(--cirque-gold);
+
+	/* ── Cyan ────────────────────────────────────────────── */
+	--chip-cyan-bg: var(--cyan-bg-strong);
+	--chip-cyan-border: var(--cirque-cyan);
+	--chip-cyan-text: var(--cyan-text);
+	--chip-cyan-glow: var(--cyan-glow);
+	--chip-cyan-focus: var(--cirque-cyan);
+
+	/* ── Blue ────────────────────────────────────────────── */
+	--chip-blue-bg: var(--blue-bg-strong);
+	--chip-blue-border: var(--color-blue-500, #3b82f6);
+	--chip-blue-text: var(--blue-text);
+	--chip-blue-glow: 0 0 16px var(--blue-bg-strong);
+	--chip-blue-focus: var(--color-blue-500, #3b82f6);
+
+	/* ── Lime ────────────────────────────────────────────── */
+	--chip-lime-bg: var(--lime-bg-strong);
+	--chip-lime-border: var(--lime-border);
+	--chip-lime-text: var(--lime-text);
+	--chip-lime-glow: var(--lime-glow);
+	--chip-lime-focus: var(--lime-border);
+
+	/* ── Amber ───────────────────────────────────────────── */
+	--chip-amber-bg: var(--gold-bg-strong);
+	--chip-amber-border: var(--cirque-gold);
+	--chip-amber-text: var(--gold-text);
+	--chip-amber-glow: var(--gold-glow);
+	--chip-amber-focus: var(--cirque-gold);
+
+	/* ── Rose ────────────────────────────────────────────── */
+	--chip-rose-bg: var(--rose-bg-strong);
+	--chip-rose-border: var(--rose-border);
+	--chip-rose-text: var(--rose-text);
+	--chip-rose-glow: var(--rose-glow);
+	--chip-rose-focus: var(--rose-border);
+
+	/* ── Emerald ─────────────────────────────────────────── */
+	--chip-emerald-bg: var(--emerald-bg-strong);
+	--chip-emerald-border: var(--emerald-border);
+	--chip-emerald-text: var(--emerald-text);
+	--chip-emerald-glow: var(--emerald-glow);
+	--chip-emerald-focus: var(--emerald-border);
+
+	/* ── Red ─────────────────────────────────────────────── */
+	--chip-red-bg: var(--red-bg-strong);
+	--chip-red-border: var(--color-red-500, #ef4444);
+	--chip-red-text: var(--red-text);
+	--chip-red-glow: 0 0 16px var(--red-bg-strong);
+	--chip-red-focus: var(--color-red-500, #ef4444);
+
+	/* ── Gray ────────────────────────────────────────────── */
+	--chip-gray-bg: var(--gray-bg-strong);
+	--chip-gray-border: var(--gray-border);
+	--chip-gray-text: var(--color-gray-300, #d1d5db);
+	--chip-gray-glow: 0 0 16px var(--gray-bg-hover);
+	--chip-gray-focus: var(--gray-border);
+}

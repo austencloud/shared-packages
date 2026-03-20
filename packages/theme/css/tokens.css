@@ -1,0 +1,254 @@
+/**
+ * Static Design Tokens
+ *
+ * Layer 1: Values that do NOT change with background luminance.
+ * These are the foundational tokens for spacing, typography, timing, etc.
+ *
+ * Dynamic theme variables (--theme-*) are injected via JS in theme-calculator.ts
+ */
+
+:root {
+  /* ============================================================================
+     TOUCH TARGET - WCAG 2.5.5 AAA compliant (48px minimum)
+     ============================================================================ */
+  --min-touch-target: 48px;
+  --alt-touch-target: 40px; /* For less critical elements */
+
+  /* ============================================================================
+     TYPOGRAPHY SCALE - Accessibility-First Design System
+     ============================================================================
+
+     TIER 1: ESSENTIAL TEXT (14px minimum) - Material Design standard
+     Use for: body text, form labels, buttons, links, error messages,
+              any text users MUST read to understand/use the interface
+
+     TIER 2: SUPPLEMENTARY TEXT (12px minimum) - Absolute floor
+     Use for: navigation labels under icons, badges, timestamps,
+              metadata, captions where context is already clear
+
+     NEVER: Go below 12px for any user-visible text
+     ============================================================================ */
+
+  /* Semantic Typography Tokens - USE THESE */
+  --font-size-min: 0.875rem; /* 14px - minimum for essential/body text */
+  --font-size-compact: 0.75rem; /* 12px - minimum for supplementary text */
+
+  /* Scale Tokens - For general sizing */
+  --font-size-xs: 0.75rem; /* 12px */
+  --font-size-sm: 0.875rem; /* 14px */
+  --font-size-base: 1rem; /* 16px */
+  --font-size-md: 1rem; /* 16px */
+  --font-size-lg: 1.125rem; /* 18px */
+  --font-size-xl: 1.25rem; /* 20px */
+  --font-size-2xl: 1.5rem; /* 24px */
+  --font-size-3xl: 1.875rem; /* 30px */
+
+  /* ============================================================================
+     SPACING SCALE
+     ============================================================================ */
+  --spacing-xs: 0.25rem;
+  --spacing-sm: 0.5rem;
+  --spacing-md: 1rem;
+  --spacing-lg: 1.5rem;
+  --spacing-xl: 2rem;
+  --spacing-2xl: 3rem;
+
+  /* ============================================================================
+     2026 UNIFIED TRANSITION SYSTEM
+     Modern, physics-based transitions with consistent timing
+     ============================================================================ */
+
+  /* Duration Tiers */
+  --duration-instant: 100ms; /* Micro-feedback (hover states, toggles) */
+  --duration-fast: 150ms; /* Quick UI responses (buttons, inputs) */
+  --duration-normal: 200ms; /* Standard transitions (panels, tabs) */
+  --duration-emphasis: 280ms; /* Emphasized changes (module switches) */
+  --duration-dramatic: 350ms; /* Major transitions (drawers, modals) */
+
+  /* Easing Curves - Physics-based for natural motion */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1); /* Decelerate (entering) */
+  --ease-in: cubic-bezier(0.7, 0, 0.84, 0); /* Accelerate (exiting) */
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1); /* Symmetric (standard) */
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1); /* Overshoot (playful) */
+  --ease-smooth: cubic-bezier(0.25, 0.1, 0.25, 1); /* Subtle (refined) */
+
+  /* Composite Transitions - Ready-to-use presets */
+  --transition-micro: var(--duration-instant) var(--ease-out);
+  --transition-fast: var(--duration-fast) var(--ease-out);
+  --transition-normal: var(--duration-normal) var(--ease-out);
+  --transition-emphasis: var(--duration-emphasis) var(--ease-in-out);
+  --transition-spring: var(--duration-normal) var(--ease-spring);
+  --transition-dramatic: var(--duration-dramatic) var(--ease-out);
+
+  /* Stagger Timing */
+  --stagger-micro: 30ms;
+  --stagger-normal: 50ms;
+  --stagger-relaxed: 80ms;
+
+  /* Transform Values */
+  --slide-distance-sm: 8px;
+  --slide-distance-md: 12px;
+  --slide-distance-lg: 20px;
+  --scale-subtle: 0.98;
+  --scale-normal: 0.95;
+  --scale-dramatic: 0.85;
+
+  /* Legacy aliases */
+  --transition-slow: var(--duration-dramatic) var(--ease-in-out);
+  --transition-bounce: var(--duration-emphasis) var(--ease-spring);
+
+  /* ============================================================================
+     MICRO-INTERACTION VALUES
+     ============================================================================ */
+
+  /* Hover lifts */
+  --hover-lift-sm: -1px;
+  --hover-lift-md: -2px;
+  --hover-lift-none: 0px;
+
+  /* Hover scales */
+  --hover-scale-sm: 1.01;
+  --hover-scale-md: 1.02;
+  --hover-scale-lg: 1.03;
+
+  /* Active states */
+  --active-scale: 0.98;
+  --active-scale-sm: 0.99;
+
+  /* ============================================================================
+     BLUR EFFECTS
+     ============================================================================ */
+  --glass-blur: 20px;
+  --glass-blur-strong: 40px;
+  --glass-backdrop: blur(var(--glass-blur));
+  --glass-backdrop-strong: blur(var(--glass-blur-strong));
+
+  /* ============================================================================
+     SHADOW SYSTEM
+     ============================================================================ */
+  --shadow-glass:
+    0 8px 32px rgba(0, 0, 0, 0.12), 0 4px 16px rgba(0, 0, 0, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  --shadow-glass-hover:
+    0 12px 40px rgba(0, 0, 0, 0.15), 0 6px 20px rgba(0, 0, 0, 0.1),
+    0 0 0 1px rgba(255, 255, 255, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+  --shadow-modal:
+    0 25px 48px rgba(0, 0, 0, 0.25), 0 12px 24px rgba(0, 0, 0, 0.15),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  --shadow-elevated:
+    0 20px 40px rgba(0, 0, 0, 0.2), 0 8px 16px rgba(0, 0, 0, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
+
+  /* 2026 Simplified Shadows */
+  --shadow-2026-sm: 0 1px 3px rgba(0, 0, 0, 0.06);
+  --shadow-2026-md: 0 2px 8px rgba(0, 0, 0, 0.08);
+  --shadow-2026-lg: 0 4px 16px rgba(0, 0, 0, 0.1);
+
+  /* ============================================================================
+     BORDER RADIUS
+     ============================================================================ */
+  --radius-2026-xs: 6px;
+  --radius-2026-sm: 10px;
+  --radius-2026-md: 14px;
+  --radius-2026-lg: 18px;
+  --radius-2026-full: 100px;
+
+  /* ============================================================================
+     SHEET SYSTEM - Design Tokens
+     Unified styling for Drawer components
+     ============================================================================ */
+
+  /* Z-Index Hierarchy */
+  --sheet-z-modal: 1200;
+  --sheet-z-overlay: 1100;
+  --sheet-z-base: 1000;
+  --sheet-z-low: 150;
+
+  /* Backdrop Styles */
+  --backdrop-opaque: rgba(0, 0, 0, 0.85);
+  --backdrop-medium: rgba(0, 0, 0, 0.55);
+  --backdrop-transparent: transparent;
+
+  /* Backdrop Blur */
+  --backdrop-blur-strong: blur(8px);
+  --backdrop-blur-medium: blur(4px);
+  --backdrop-blur-none: none;
+
+  /* Sheet Background Styles */
+  --sheet-bg-solid: rgb(15, 15, 20);
+  --sheet-bg-glass: var(--theme-panel-elevated-bg, rgba(0, 0, 0, 0.4));
+  --sheet-bg-gradient: linear-gradient(
+    135deg,
+    rgba(0, 0, 0, 0.45) 0%,
+    rgba(0, 0, 0, 0.6) 100%
+  );
+  --sheet-bg: var(--sheet-bg-solid);
+  --sheet-bg-transparent: transparent;
+
+  /* Border Radius */
+  --sheet-radius-large: 24px;
+  --sheet-radius-medium: 20px;
+  --sheet-radius-small: 16px;
+  --sheet-radius-button: 12px;
+
+  /* Sheet Shadows */
+  --sheet-shadow-bottom: 0 -12px 32px rgba(0, 0, 0, 0.35);
+  --sheet-shadow-top: 0 12px 32px rgba(0, 0, 0, 0.35);
+  --sheet-shadow-right:
+    -8px 0 32px rgba(0, 0, 0, 0.3), -2px 0 8px rgba(0, 0, 0, 0.2);
+  --sheet-shadow-left:
+    8px 0 32px rgba(0, 0, 0, 0.3), 2px 0 8px rgba(0, 0, 0, 0.2);
+  --sheet-shadow-elevated: 0 -20px 60px rgba(0, 0, 0, 0.5);
+
+  /* Sheet Borders */
+  --sheet-border-subtle: 1px solid
+    var(--theme-stroke, rgba(255, 255, 255, 0.08));
+  --sheet-border-medium: 1px solid
+    var(--theme-stroke-strong, rgba(255, 255, 255, 0.15));
+  --sheet-border-strong: 1px solid
+    var(--theme-stroke-strong, rgba(255, 255, 255, 0.2));
+
+  /* Sheet Transitions */
+  --sheet-transition-spring: 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  --sheet-transition-smooth: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  --sheet-transition-slide: 300ms;
+
+  /* Sheet Header Styles */
+  --sheet-header-bg: var(--theme-card-bg, rgba(255, 255, 255, 0.02));
+  --sheet-header-border: 1px solid
+    var(--theme-stroke, rgba(255, 255, 255, 0.12));
+
+  /* Close Button Styles */
+  --sheet-close-bg: var(--theme-card-bg, rgba(255, 255, 255, 0.08));
+  --sheet-close-bg-hover: var(--theme-card-hover-bg, rgba(255, 255, 255, 0.16));
+  --sheet-close-size-default: 48px;
+  --sheet-close-size-small: 48px;
+
+  /* Drag Handle Styles */
+  --sheet-handle-width: 48px;
+  --sheet-handle-height: 5px;
+  --sheet-handle-bg: var(--theme-stroke-strong, rgba(255, 255, 255, 0.3));
+  --sheet-handle-bg-hover: color-mix(
+    in srgb,
+    var(--theme-stroke-strong, rgba(255, 255, 255, 0.3)) 85%,
+    white
+  );
+  --sheet-handle-radius: 999px;
+  --sheet-handle-spacing: 12px;
+
+  /* ============================================================================
+     ICON SIZES
+     ============================================================================ */
+  --icon-size-sm: 16px;
+  --icon-size-md: 20px;
+  --icon-size-lg: 24px;
+}
+
+/* Mobile Adjustments */
+@media (max-width: 768px) {
+  :root {
+    --spacing-md: 0.75rem;
+    --spacing-lg: 1rem;
+    --spacing-xl: 1.5rem;
+  }
+}

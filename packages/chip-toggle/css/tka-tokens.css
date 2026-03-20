@@ -1,0 +1,96 @@
+/*
+ * TKA Platform token mapping for @austencloud/chip-toggle.
+ * Maps generic --chip-* properties to hardcoded rgba values
+ * matching TKA's original ChipToggle colors.
+ * Import in your root layout: import '@austencloud/chip-toggle/css/tka-tokens.css';
+ */
+
+:root {
+	/* ── Base (inactive) ─────────────────────────────────── */
+	--chip-bg: rgba(255, 255, 255, 0.04);
+	--chip-border: rgba(255, 255, 255, 0.1);
+	--chip-text: rgba(255, 255, 255, 0.6);
+	--chip-hover-bg: rgba(255, 255, 255, 0.08);
+	--chip-hover-border: rgba(255, 255, 255, 0.2);
+	--chip-hover-text: rgba(255, 255, 255, 0.85);
+	--chip-focus: rgba(168, 85, 247, 0.6);
+	--chip-radius: 9999px;
+	--chip-transition: 0.15s;
+
+	/* ── Purple / Default ────────────────────────────────── */
+	--chip-purple-bg: rgba(168, 85, 247, 0.2);
+	--chip-purple-border: rgba(168, 85, 247, 0.5);
+	--chip-purple-text: #d8b4fe;
+	--chip-purple-glow: 0 0 16px rgba(168, 85, 247, 0.15);
+	--chip-purple-focus: rgba(168, 85, 247, 0.6);
+
+	/* ── Flame ───────────────────────────────────────────── */
+	--chip-flame-bg: rgba(249, 115, 22, 0.2);
+	--chip-flame-border: rgba(249, 115, 22, 0.5);
+	--chip-flame-text: #fdba74;
+	--chip-flame-glow: 0 0 16px rgba(249, 115, 22, 0.15);
+	--chip-flame-focus: rgba(249, 115, 22, 0.6);
+
+	/* ── Gold ────────────────────────────────────────────── */
+	--chip-gold-bg: rgba(234, 179, 8, 0.2);
+	--chip-gold-border: rgba(234, 179, 8, 0.5);
+	--chip-gold-text: #fde047;
+	--chip-gold-glow: 0 0 16px rgba(234, 179, 8, 0.15);
+	--chip-gold-focus: rgba(234, 179, 8, 0.6);
+
+	/* ── Cyan ────────────────────────────────────────────── */
+	--chip-cyan-bg: rgba(6, 182, 212, 0.2);
+	--chip-cyan-border: rgba(6, 182, 212, 0.5);
+	--chip-cyan-text: #67e8f9;
+	--chip-cyan-glow: 0 0 16px rgba(6, 182, 212, 0.15);
+	--chip-cyan-focus: rgba(6, 182, 212, 0.6);
+
+	/* ── Blue ────────────────────────────────────────────── */
+	--chip-blue-bg: rgba(59, 130, 246, 0.2);
+	--chip-blue-border: rgba(59, 130, 246, 0.5);
+	--chip-blue-text: #93c5fd;
+	--chip-blue-glow: 0 0 16px rgba(59, 130, 246, 0.15);
+	--chip-blue-focus: rgba(59, 130, 246, 0.6);
+
+	/* ── Lime ────────────────────────────────────────────── */
+	--chip-lime-bg: rgba(132, 204, 22, 0.2);
+	--chip-lime-border: rgba(132, 204, 22, 0.5);
+	--chip-lime-text: #bef264;
+	--chip-lime-glow: 0 0 16px rgba(132, 204, 22, 0.15);
+	--chip-lime-focus: rgba(132, 204, 22, 0.6);
+
+	/* ── Amber ───────────────────────────────────────────── */
+	--chip-amber-bg: rgba(245, 158, 11, 0.2);
+	--chip-amber-border: rgba(245, 158, 11, 0.5);
+	--chip-amber-text: #fcd34d;
+	--chip-amber-glow: 0 0 16px rgba(245, 158, 11, 0.15);
+	--chip-amber-focus: rgba(245, 158, 11, 0.6);
+
+	/* ── Rose ────────────────────────────────────────────── */
+	--chip-rose-bg: rgba(244, 63, 94, 0.2);
+	--chip-rose-border: rgba(244, 63, 94, 0.5);
+	--chip-rose-text: #fda4af;
+	--chip-rose-glow: 0 0 16px rgba(244, 63, 94, 0.15);
+	--chip-rose-focus: rgba(244, 63, 94, 0.6);
+
+	/* ── Emerald ─────────────────────────────────────────── */
+	--chip-emerald-bg: rgba(16, 185, 129, 0.2);
+	--chip-emerald-border: rgba(16, 185, 129, 0.5);
+	--chip-emerald-text: #6ee7b7;
+	--chip-emerald-glow: 0 0 16px rgba(16, 185, 129, 0.15);
+	--chip-emerald-focus: rgba(16, 185, 129, 0.6);
+
+	/* ── Red ─────────────────────────────────────────────── */
+	--chip-red-bg: rgba(239, 68, 68, 0.2);
+	--chip-red-border: rgba(239, 68, 68, 0.5);
+	--chip-red-text: #fca5a5;
+	--chip-red-glow: 0 0 16px rgba(239, 68, 68, 0.15);
+	--chip-red-focus: rgba(239, 68, 68, 0.6);
+
+	/* ── Gray ────────────────────────────────────────────── */
+	--chip-gray-bg: rgba(156, 163, 175, 0.2);
+	--chip-gray-border: rgba(156, 163, 175, 0.5);
+	--chip-gray-text: #d1d5db;
+	--chip-gray-glow: 0 0 16px rgba(156, 163, 175, 0.15);
+	--chip-gray-focus: rgba(156, 163, 175, 0.6);
+}

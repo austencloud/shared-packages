@@ -1,0 +1,25 @@
+/*
+ * Default sidebar CSS custom property values.
+ * Import this file in your app to get sensible defaults,
+ * then override any variable in your own CSS.
+ *
+ * Usage:
+ *   @import '@austencloud/sidebar/css/sidebar-tokens.css';
+ */
+:root {
+  --sidebar-width: 220px;
+  --sidebar-collapsed-width: 64px;
+  --sidebar-bg: var(--theme-panel-bg, rgba(10, 10, 15, 0.95));
+  --sidebar-border: var(--theme-stroke, rgba(255, 255, 255, 0.08));
+  --sidebar-z-index: 150;
+  --sidebar-transition-duration: 280ms;
+  --sidebar-transition-easing: cubic-bezier(0.16, 1, 0.3, 1);
+  --sidebar-module-radius: 12px;
+  --sidebar-section-radius: 10px;
+  --sidebar-text: rgba(255, 255, 255, 0.95);
+  --sidebar-text-dim: rgba(255, 255, 255, 0.6);
+  --sidebar-text-muted: rgba(255, 255, 255, 0.5);
+  --sidebar-focus-ring: rgba(255, 255, 255, 0.5);
+  --sidebar-hover-bg: var(--theme-card-bg, rgba(255, 255, 255, 0.03));
+  --sidebar-active-bg: var(--theme-card-hover-bg, rgba(255, 255, 255, 0.06));
+}

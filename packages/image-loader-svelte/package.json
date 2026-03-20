@@ -1,0 +1,45 @@
+{
+  "name": "@austencloud/image-loader-svelte",
+  "version": "1.0.0",
+  "description": "Svelte bindings for @austencloud/image-loader - LazyImage component and use:lazyImage action",
+  "type": "module",
+  "svelte": "./dist/index.js",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "svelte": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "scripts": {
+    "build": "svelte-package -i src -o dist",
+    "prepublishOnly": "npm run build"
+  },
+  "peerDependencies": {
+    "svelte": "^5.0.0",
+    "@austencloud/image-loader": "^2.0.0"
+  },
+  "devDependencies": {
+    "@sveltejs/package": "^2.0.0",
+    "svelte": "^5.0.0",
+    "typescript": "^5.0.0"
+  },
+  "keywords": [
+    "svelte",
+    "lazy-loading",
+    "image",
+    "component"
+  ],
+  "author": "Austen Cloud <austencloud@gmail.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/austencloud/shared-packages.git"
+  }
+}

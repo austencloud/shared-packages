@@ -1,0 +1,3686 @@
+#!/usr/bin/env node
+/**
+ * Feedback Queue Manager
+ *
+ * Run `node scripts/fetch-feedback.js help` to see all available commands.
+ *
+ * Workflow:
+ *   1. Agent runs with no args → claims next unclaimed feedback (prioritized: no priority > high > medium > low)
+ *   2. If complex, agent adds subtasks to break it down
+ *   3. Future agents see subtasks and can work on prerequisites first
+ *   4. Agent resolves when all subtasks complete
+ *   5. When moving to in-review/completed, add resolution notes to explain what was done
+ *
+ * Concurrency Safety (Race Condition Prevention):
+ *   - Each script invocation gets a unique SESSION_ID
+ *   - Each claim attempt generates a unique claimToken (UUID)
+ *   - Claims use Firestore transactions for atomic read-check-write
+ *   - Post-claim verification re-reads the document to confirm ownership
+ *   - Even if two transactions both "succeed", only one claimToken persists
+ *   - The losing agent sees a clear "Lost claim race" message and retries with next item
+ *   - Tokens are visible in `list` output for debugging concurrent claims
+ */
+
+import admin from "firebase-admin";
+import { readFileSync } from "fs";
+import { execSync } from "child_process";
+import { existsSync, mkdirSync } from "fs";
+import { randomUUID } from "crypto";
+import { fileURLToPath } from "url";
+import { dirname, join } from "path";
+
+// ESM equivalent of __dirname
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+// Import config and lib relative to script location
+import config from "../config/feedback.config.js";
+import cfClient from "../lib/cloud-functions-client.js";
+
+// Generate a unique session ID for this script invocation
+// This allows us to distinguish between different agents/sessions
+const SESSION_ID = randomUUID();
+
+// Project root is current working directory
+const PROJECT_ROOT = process.cwd();
+
+// Load service account key from project root
+const serviceAccount = JSON.parse(
+  readFileSync(join(PROJECT_ROOT, "serviceAccountKey.json"), "utf8")
+);
+
+// Initialize Firebase Admin
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount),
+});
+
+const db = admin.firestore();
+
+// Import config values
+const {
+  ADMIN_USER_ID,
+  ADMIN_USER,
+  STALE_THRESHOLDS,
+  VALID_TRANSITIONS,
+  JOURNAL_TYPES,
+  WIP_LIMITS,
+  EMERGENCY_CONFIG,
+} = config;
+
+// ============================================================================
+// SESSION REGISTRATION
+// ============================================================================
+
+/**
+ * Register this CLI session on startup
+ *
+ * Creates an entry in agentSessions so other agents can see who's working.
+ * This enables the bulletproof claim coordination system.
+ */
+async function registerSession() {
+  try {
+    const hostname = process.env.COMPUTERNAME || process.env.HOSTNAME || "unknown";
+
+    await db.collection("agentSessions").doc(SESSION_ID).set({
+      sessionId: SESSION_ID,
+      agentType: "claude-cli",
+      registeredAt: admin.firestore.FieldValue.serverTimestamp(),
+      lastActivity: admin.firestore.FieldValue.serverTimestamp(),
+      activeClaims: [],
+      userId: ADMIN_USER_ID,
+      metadata: {
+        hostname,
+        pid: process.pid,
+        cwd: process.cwd(),
+        nodeVersion: process.version,
+      },
+    });
+
+    console.log(`  📡 Session registered: ${SESSION_ID.substring(0, 8)}...`);
+    return true;
+  } catch (error) {
+    // Non-fatal - session registration is optional
+    console.error(`  ⚠️  Failed to register session: ${error.message}`);
+    return false;
+  }
+}
+
+/**
+ * Update session activity (called periodically during long operations)
+ */
+async function updateSessionActivity() {
+  try {
+    await db.collection("agentSessions").doc(SESSION_ID).update({
+      lastActivity: admin.firestore.FieldValue.serverTimestamp(),
+    });
+  } catch {
+    // Ignore - session may not exist
+  }
+}
+
+/**
+ * Clean up session on exit (optional - stale cleanup will handle it anyway)
+ */
+async function cleanupSession() {
+  try {
+    // Release any claims held by this session
+    const sessionDoc = await db.collection("agentSessions").doc(SESSION_ID).get();
+    if (sessionDoc.exists) {
+      const data = sessionDoc.data();
+      if (data.activeClaims && data.activeClaims.length > 0) {
+        console.log(`\n  ⚠️  Session has ${data.activeClaims.length} active claims. Use 'unclaim' to release them.`);
+      }
+    }
+    // Don't delete session - let stale cleanup handle it so other agents can see history
+  } catch {
+    // Ignore cleanup errors
+  }
+}
+
+// Legacy alias
+const STALE_CLAIM_MS = STALE_THRESHOLDS.ACTIVITY_TIMEOUT_MS;
+
+// ============================================================================
+// STALENESS & CLAIM HEALTH
+// ============================================================================
+
+/**
+ * Check if a claim is stale (abandonable by another agent)
+ *
+ * A claim is stale if:
+ * 1. No activity for ACTIVITY_TIMEOUT_MS (45 min default), OR
+ * 2. Total claim time exceeds TOTAL_CLAIM_MAX_MS (8 hours default)
+ *
+ * @param {object} item - Feedback item with claim fields
+ * @returns {{ isStale: boolean, reason: string|null, ageMs: number, activityAgeMs: number }}
+ */
+function checkClaimStaleness(item) {
+  const now = Date.now();
+
+  // Get timestamps, using claimedAt as fallback for lastActivity
+  const claimedAt = item.claimedAt?.toDate?.()?.getTime() || null;
+  const lastActivity = item.lastActivity?.toDate?.()?.getTime() || claimedAt;
+
+  if (!claimedAt) {
+    return { isStale: true, reason: "no-claim-time", ageMs: Infinity, activityAgeMs: Infinity };
+  }
+
+  const totalAgeMs = now - claimedAt;
+  const activityAgeMs = lastActivity ? now - lastActivity : totalAgeMs;
+
+  // Check hard cap first (8 hours)
+  if (totalAgeMs > STALE_THRESHOLDS.TOTAL_CLAIM_MAX_MS) {
+    return { isStale: true, reason: "exceeded-max-time", ageMs: totalAgeMs, activityAgeMs };
+  }
+
+  // Check activity timeout (45 min)
+  if (activityAgeMs > STALE_THRESHOLDS.ACTIVITY_TIMEOUT_MS) {
+    return { isStale: true, reason: "no-activity", ageMs: totalAgeMs, activityAgeMs };
+  }
+
+  return { isStale: false, reason: null, ageMs: totalAgeMs, activityAgeMs };
+}
+
+/**
+ * Format milliseconds as human-readable duration
+ */
+function formatDuration(ms) {
+  const minutes = Math.floor(ms / 60000);
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  const remainingMins = minutes % 60;
+  return remainingMins > 0 ? `${hours}h ${remainingMins}m` : `${hours}h`;
+}
+
+/**
+ * Check if a claim is approaching staleness (for warnings)
+ */
+function isApproachingStale(item) {
+  const { activityAgeMs } = checkClaimStaleness(item);
+  return activityAgeMs > STALE_THRESHOLDS.WARNING_THRESHOLD_MS;
+}
+
+// ============================================================================
+// PARTIAL ID RESOLUTION
+// ============================================================================
+
+/**
+ * Resolve a partial feedback ID to its full ID
+ *
+ * The list command shows truncated IDs (e.g., "lYX2vHmn...") but Firestore
+ * requires exact IDs. This function finds the full ID from a prefix.
+ *
+ * @param {string} partialId - Full or partial (8+ chars) document ID
+ * @returns {Promise<{fullId: string|null, error: string|null, matches: string[]}>}
+ */
+async function resolvePartialId(partialId) {
+  // If it looks like a full ID (20 chars), try exact match first
+  if (partialId.length >= 20) {
+    const doc = await db.collection("feedback").doc(partialId).get();
+    if (doc.exists) {
+      return { fullId: partialId, error: null, matches: [partialId] };
+    }
+    return { fullId: null, error: `Feedback not found: ${partialId}`, matches: [] };
+  }
+
+  // For partial IDs, we need to query and match
+  // Firestore doesn't support prefix queries on doc IDs, so we fetch all and filter
+  // This is acceptable because the feedback collection is small (<1000 docs typically)
+  const snapshot = await db.collection("feedback")
+    .where("status", "in", ["new", "in-progress", "in-review", "completed"])
+    .get();
+
+  const matches = [];
+  snapshot.forEach(doc => {
+    if (doc.id.startsWith(partialId)) {
+      matches.push(doc.id);
+    }
+  });
+
+  if (matches.length === 0) {
+    // Also check archived items in case they're looking for those
+    const archivedSnapshot = await db.collection("feedback")
+      .where("status", "==", "archived")
+      .limit(500) // Don't fetch entire archive
+      .get();
+
+    archivedSnapshot.forEach(doc => {
+      if (doc.id.startsWith(partialId)) {
+        matches.push(doc.id);
+      }
+    });
+  }
+
+  if (matches.length === 0) {
+    return { fullId: null, error: `No feedback found matching ID prefix: ${partialId}`, matches: [] };
+  }
+
+  if (matches.length === 1) {
+    return { fullId: matches[0], error: null, matches };
+  }
+
+  // Multiple matches - return error with the matches so user can be more specific
+  return {
+    fullId: null,
+    error: `Ambiguous ID prefix "${partialId}" matches ${matches.length} items`,
+    matches
+  };
+}
+
+/**
+ * Helper to resolve ID and exit early on failure
+ * Used at the top of functions that need a valid docId
+ *
+ * @param {string} partialId - Full or partial document ID
+ * @returns {Promise<string|null>} - Full ID or null (with error already printed)
+ */
+async function resolveAndValidateId(partialId) {
+  const { fullId, error, matches } = await resolvePartialId(partialId);
+
+  if (error) {
+    console.log(`\n  ❌ ${error}`);
+    if (matches.length > 1) {
+      console.log(`\n  Matching IDs:`);
+      matches.slice(0, 5).forEach(id => {
+        console.log(`     ${id}`);
+      });
+      if (matches.length > 5) {
+        console.log(`     ... and ${matches.length - 5} more`);
+      }
+      console.log(`\n  Please provide more characters to disambiguate.\n`);
+    } else {
+      console.log();
+    }
+    return null;
+  }
+
+  // If the user provided a partial ID, show them the resolution
+  if (partialId.length < 20 && fullId) {
+    console.log(`  🔗 Resolved ${partialId}... → ${fullId}`);
+  }
+
+  return fullId;
+}
+
+// ============================================================================
+// WORK JOURNAL
+// ============================================================================
+
+/**
+ * Add an entry to a feedback item's work journal
+ *
+ * The journal is an append-only log of all activity on an item.
+ * Enables work recovery and audit trails.
+ *
+ * @param {string} docId - Feedback document ID
+ * @param {string} type - Entry type (from JOURNAL_TYPES)
+ * @param {string} message - Human-readable description
+ * @param {object} data - Additional structured data
+ */
+async function addJournalEntry(docId, type, message = "", data = {}) {
+  try {
+    const journalRef = db
+      .collection("feedback")
+      .doc(docId)
+      .collection("journal")
+      .doc(); // Auto-generate ID
+
+    await journalRef.set({
+      timestamp: admin.firestore.FieldValue.serverTimestamp(),
+      type,
+      sessionId: SESSION_ID,
+      message,
+      data,
+    });
+
+    return journalRef.id;
+  } catch (error) {
+    // Journal failures shouldn't block main operations
+    console.error(`  ⚠️  Failed to write journal entry: ${error.message}`);
+    return null;
+  }
+}
+
+/**
+ * Get journal entries for a feedback item
+ *
+ * @param {string} docId - Feedback document ID
+ * @param {number} limit - Max entries to return (default 20)
+ */
+async function getJournalEntries(docId, limit = 20) {
+  try {
+    const snapshot = await db
+      .collection("feedback")
+      .doc(docId)
+      .collection("journal")
+      .orderBy("timestamp", "desc")
+      .limit(limit)
+      .get();
+
+    return snapshot.docs.map((doc) => ({
+      id: doc.id,
+      ...doc.data(),
+      timestamp: doc.data().timestamp?.toDate?.() || null,
+    }));
+  } catch (error) {
+    console.error(`  ⚠️  Failed to read journal: ${error.message}`);
+    return [];
+  }
+}
+
+/**
+ * Refresh the lastActivity timestamp on a claimed item
+ * Called by all operations that indicate active work
+ */
+async function refreshActivity(docId, activityType = "activity") {
+  try {
+    await db.collection("feedback").doc(docId).update({
+      lastActivity: admin.firestore.FieldValue.serverTimestamp(),
+      lastActivityType: activityType,
+    });
+  } catch (error) {
+    // Non-fatal - just means stale detection might be off
+    console.error(`  ⚠️  Failed to refresh activity: ${error.message}`);
+  }
+}
+
+// ============================================================================
+// STATE MACHINE
+// ============================================================================
+
+/**
+ * Validate a status transition
+ *
+ * @param {string} fromStatus - Current status
+ * @param {string} toStatus - Desired status
+ * @param {boolean} isAdmin - Whether this is an admin operation
+ * @returns {{ valid: boolean, error: string|null }}
+ */
+function validateTransition(fromStatus, toStatus, isAdmin = false) {
+  // Same status is always valid (no-op)
+  if (fromStatus === toStatus) {
+    return { valid: true, error: null };
+  }
+
+  const allowed = VALID_TRANSITIONS[fromStatus] || [];
+
+  if (!allowed.includes(toStatus)) {
+    const allowedStr = allowed.length > 0 ? allowed.join(", ") : "none";
+    return {
+      valid: false,
+      error: `Invalid transition: ${fromStatus} → ${toStatus}. Allowed from ${fromStatus}: ${allowedStr}`,
+    };
+  }
+
+  // Special case: archived -> new requires admin
+  if (fromStatus === "archived" && toStatus === "new" && !isAdmin) {
+    return {
+      valid: false,
+      error: "Reopening archived items requires admin access",
+    };
+  }
+
+  return { valid: true, error: null };
+}
+
+// ============================================================================
+// UTILITY FUNCTIONS
+// ============================================================================
+
+/**
+ * Generate a deterministic conversation ID from two user IDs
+ */
+function generateConversationId(userId1, userId2) {
+  const sorted = [userId1, userId2].sort();
+  return `${sorted[0]}_${sorted[1]}`;
+}
+
+/**
+ * Send a direct message to a user (in their conversation with admin)
+ * This mirrors the message they receive when submitting feedback
+ *
+ * Includes deduplication: won't send if already notified for same status
+ */
+async function sendDirectMessageToUser(
+  userId,
+  feedbackId,
+  feedbackTitle,
+  feedbackStatus,
+  messageContent
+) {
+  if (!userId) {
+    console.log("  ⚠️  No userId - skipping message");
+    return null;
+  }
+
+  // Don't send messages to yourself
+  if (userId === ADMIN_USER_ID) {
+    console.log("  ℹ️  Skipping message to admin (self)");
+    return null;
+  }
+
+  // Check for duplicate notification
+  try {
+    const feedbackRef = db.collection("feedback").doc(feedbackId);
+    const feedbackDoc = await feedbackRef.get();
+    if (feedbackDoc.exists) {
+      const data = feedbackDoc.data();
+      // Skip if already notified for this status
+      if (data.lastNotifiedStatus === feedbackStatus) {
+        console.log(`  ℹ️  Already notified for status "${feedbackStatus}" - skipping`);
+        return null;
+      }
+    }
+  } catch (e) {
+    // Continue even if check fails
+  }
+
+  try {
+    const conversationId = generateConversationId(ADMIN_USER_ID, userId);
+    const conversationRef = db.collection("conversations").doc(conversationId);
+    const conversationSnap = await conversationRef.get();
+
+    // Get or create conversation
+    if (!conversationSnap.exists) {
+      // Fetch user info
+      const userDoc = await db.collection("users").doc(userId).get();
+      const userData = userDoc.exists ? userDoc.data() : {};
+      const userDisplayName = userData.displayName || userData.username || "User";
+      const userPhotoURL = userData.photoURL || null;
+
+      // Create new conversation
+      const participants = [ADMIN_USER_ID, userId].sort();
+      const now = new Date();
+      await conversationRef.set({
+        participants,
+        participantInfo: {
+          [ADMIN_USER_ID]: {
+            userId: ADMIN_USER_ID,
+            displayName: ADMIN_USER.displayName,
+            avatar: ADMIN_USER.photoURL,
+            joinedAt: now,
+          },
+          [userId]: {
+            userId,
+            displayName: userDisplayName,
+            ...(userPhotoURL && { avatar: userPhotoURL }),
+            joinedAt: now,
+          },
+        },
+        unreadCount: { [ADMIN_USER_ID]: 0, [userId]: 0 },
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    }
+
+    // Create the message with feedback attachment
+    const messagesRef = conversationRef.collection("messages");
+    const messageData = {
+      senderId: ADMIN_USER_ID,
+      senderName: ADMIN_USER.displayName,
+      senderAvatar: ADMIN_USER.photoURL,
+      content: messageContent,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      readBy: [ADMIN_USER_ID],
+      attachments: [
+        {
+          type: "feedback",
+          url: `/feedback/${feedbackId}`,
+          metadata: {
+            feedbackId,
+            feedbackTitle: feedbackTitle || "Your feedback",
+            feedbackStatus,
+          },
+        },
+      ],
+      isDeleted: false,
+      replyTo: null,
+      reactions: null,
+      editHistory: null,
+    };
+
+    const messageRef = await messagesRef.add(messageData);
+
+    // Update conversation metadata
+    await conversationRef.update({
+      lastMessage: {
+        content: messageContent,
+        senderId: ADMIN_USER_ID,
+        senderName: ADMIN_USER.displayName,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        hasAttachment: true,
+      },
+      [`unreadCount.${userId}`]: admin.firestore.FieldValue.increment(1),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
+    // Update notification tracking to prevent duplicates
+    try {
+      await db.collection("feedback").doc(feedbackId).update({
+        lastNotifiedAt: admin.firestore.FieldValue.serverTimestamp(),
+        lastNotifiedStatus: feedbackStatus,
+      });
+    } catch (e) {
+      // Non-critical - continue even if tracking update fails
+    }
+
+    console.log(`  💬 Direct message sent to user`);
+    return messageRef.id;
+  } catch (error) {
+    console.error("  ⚠️  Failed to send direct message:", error.message);
+    return null;
+  }
+}
+
+/**
+ * Send notification to user when their feedback is resolved/completed
+ */
+async function notifyUserFeedbackResolved(
+  userId,
+  feedbackId,
+  feedbackTitle,
+  message
+) {
+  if (!userId) {
+    console.log("  ⚠️  No userId - skipping notification");
+    return null;
+  }
+
+  try {
+    const notificationRef = db
+      .collection("users")
+      .doc(userId)
+      .collection("notifications");
+
+    const notification = {
+      userId,
+      type: "feedback-resolved",
+      feedbackId,
+      feedbackTitle: feedbackTitle || "Your feedback",
+      message: message || "Your feedback has been addressed! Check it out.",
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      read: false,
+      fromUserId: "system",
+      fromUserName: "Ringmaster",
+    };
+
+    const docRef = await notificationRef.add(notification);
+    console.log(`  📬 Notification sent to user`);
+    return docRef.id;
+  } catch (error) {
+    console.error("  ⚠️  Failed to send notification:", error.message);
+    return null;
+  }
+}
+
+// NOTE: resolvePartialId has been moved to the PARTIAL ID RESOLUTION section near the top of the file
+
+/**
+ * Download images from Firebase Storage for a feedback item
+ * Returns array of local file paths
+ */
+async function downloadFeedbackImages(feedbackId, imageUrls) {
+  if (!imageUrls || imageUrls.length === 0) {
+    return [];
+  }
+
+  // Ensure feedback-images directory exists
+  const imageDir = "./feedback-images";
+  if (!existsSync(imageDir)) {
+    mkdirSync(imageDir);
+  }
+
+  const downloadedPaths = [];
+
+  for (let i = 0; i < imageUrls.length; i++) {
+    const url = imageUrls[i];
+    const filename = `feedback-${feedbackId}-${i + 1}.png`;
+    const filepath = `${imageDir}/${filename}`;
+
+    try {
+      // Use curl with --ssl-no-revoke to handle certificate issues
+      execSync(`curl --ssl-no-revoke -s -o "${filepath}" "${url}"`, {
+        stdio: "pipe",
+      });
+      downloadedPaths.push(filepath);
+    } catch (error) {
+      console.error(
+        `  ⚠️  Failed to download image ${i + 1}: ${error.message}`
+      );
+    }
+  }
+
+  return downloadedPaths;
+}
+
+/**
+ * Atomically claim a feedback item using Firestore transaction
+ * Prevents race conditions when multiple agents try to claim simultaneously
+ *
+ * Uses a unique claim token per attempt - even if two agents run the exact
+ * same transaction code, only one will successfully write their token.
+ * Post-claim verification ensures we actually own the claim.
+ *
+ * @param {string} docId - The document ID to claim
+ * @param {boolean} isReclaim - Whether this is reclaiming a stale item
+ * @returns {Object|null} - The claimed item data, or null if claim failed
+ */
+async function atomicClaim(docId, isReclaim = false) {
+  const forceFlag = process.argv.includes('--force');
+
+  // ==========================================================================
+  // CLOUD FUNCTIONS PATH (Bulletproof)
+  // Server generates tokens, validates sessions, prevents all race conditions
+  // ==========================================================================
+  try {
+    const cfResult = await cfClient.claimFeedbackViaFunction(
+      docId,
+      SESSION_ID,
+      isReclaim,
+      forceFlag
+    );
+
+    if (cfResult !== null) {
+      // Cloud Functions handled the claim
+      if (cfResult.success) {
+        const shortToken = cfResult.claimToken?.substring(0, 8) || "server";
+        console.log(`  ✅ Claim successful [${shortToken}] via Cloud Function`);
+
+        // Journal the successful claim (async, non-blocking)
+        addJournalEntry(docId, JOURNAL_TYPES.CLAIMED, isReclaim ? "Reclaimed (was stale)" : "Claimed", {
+          claimToken: shortToken,
+          isReclaim,
+          mode: "cloud-function",
+        }).catch(() => {});
+
+        // Fetch the full document to return
+        const doc = await db.collection("feedback").doc(docId).get();
+        return { id: doc.id, ...doc.data(), isReclaim };
+      } else {
+        // Cloud Function rejected the claim
+        console.log(`  ❌ Claim rejected: ${cfResult.error || "Unknown error"}`);
+        return null;
+      }
+    }
+    // If cfResult is null, Cloud Functions unavailable - fall through to direct mode
+    console.log(`  ⚠️  Cloud Functions unavailable, using direct mode`);
+  } catch (cfError) {
+    console.log(`  ⚠️  Cloud Function error: ${cfError.message}, falling back to direct mode`);
+  }
+
+  // ==========================================================================
+  // DIRECT MODE FALLBACK (Legacy)
+  // Only used when Cloud Functions are unavailable
+  // ==========================================================================
+  const claimToken = randomUUID();
+  const shortToken = claimToken.substring(0, 8);
+
+  try {
+    const docRef = db.collection("feedback").doc(docId);
+
+    console.log(`  🔒 Attempting claim [${shortToken}] on ${docId.substring(0, 8)}... (direct mode)`);
+
+    // Check WIP limit based on ACTIVE CLAIMS, not stored status
+    // This is the correct model: WIP = items with active, non-stale claims
+    if (!isReclaim) {
+      const allInProgressSnapshot = await db
+        .collection("feedback")
+        .where("status", "==", "in-progress")
+        .get();
+
+      // Count only items with active (non-stale) claims
+      let activeClaimCount = 0;
+      for (const doc of allInProgressSnapshot.docs) {
+        const data = doc.data();
+        if (data.claimToken && data.claimedAt?.toDate?.()) {
+          const claimAge = Date.now() - data.claimedAt.toDate().getTime();
+          if (claimAge <= STALE_CLAIM_MS) {
+            activeClaimCount++;
+          }
+        }
+        // Items with status="in-progress" but no claim token are orphaned
+        // They don't count toward WIP - they'll be shown as available
+      }
+
+      const wipLimit = WIP_LIMITS['in-progress'];
+      if (wipLimit > 0 && activeClaimCount >= wipLimit) {
+        if (!forceFlag) {
+          console.log(`\n  ⚠️  WIP limit reached (${activeClaimCount}/${wipLimit} active claims)`);
+          console.log(`     Add --force to claim anyway\n`);
+          return null;
+        }
+        console.log(`  ⚠️  WIP limit exceeded - proceeding with --force flag`);
+      }
+    }
+
+    const result = await db.runTransaction(async (transaction) => {
+      const doc = await transaction.get(docRef);
+
+      if (!doc.exists) {
+        throw new Error("Item no longer exists");
+      }
+
+      const data = doc.data();
+
+      // Check if still claimable - MUST check for existing claimToken too
+      // Bug fix: Status could be 'new' but claimToken exists if transaction timing overlaps
+      if (data.status === "in-progress" && !isReclaim) {
+        // Another agent claimed it between our query and this transaction
+        const otherToken = data.claimToken?.substring(0, 8) || "unknown";
+        throw new Error(`Already claimed by another agent [${otherToken}]`);
+      }
+
+      // Secondary check: If there's a recent claimToken (within last 5 seconds), reject
+      // This catches race conditions where status update hasn't propagated yet
+      if (!isReclaim && data.claimToken && data.claimedAt) {
+        const claimAge = data.claimedAt?.toDate?.()
+          ? Date.now() - data.claimedAt.toDate().getTime()
+          : Infinity;
+        if (claimAge < 5000) {
+          const otherToken = data.claimToken.substring(0, 8);
+          throw new Error(`Recently claimed by another agent [${otherToken}] (${Math.round(claimAge/1000)}s ago)`);
+        }
+      }
+
+      // For reclaims, verify it's still stale using new staleness check
+      if (isReclaim && data.status === "in-progress") {
+        const staleness = checkClaimStaleness(data);
+        const hasExpiredRequest = data.claimRequestedAt &&
+          (Date.now() - data.claimRequestedAt.toDate().getTime() > STALE_THRESHOLDS.REQUEST_WAIT_MS);
+
+        if (!staleness.isStale && !hasExpiredRequest) {
+          const otherToken = data.claimToken?.substring(0, 8) || "unknown";
+          throw new Error(`Item is no longer stale (claimed by [${otherToken}])`);
+        }
+      }
+
+      // If status changed to completed/archived, don't claim
+      if (["completed", "archived"].includes(data.status)) {
+        throw new Error("Item is no longer claimable");
+      }
+
+      // Perform atomic update with our unique claim token
+      // Also set lastActivity for the new heartbeat system
+      transaction.update(docRef, {
+        status: "in-progress",
+        claimedAt: admin.firestore.FieldValue.serverTimestamp(),
+        claimedBy: ADMIN_USER_ID,
+        claimToken: claimToken, // Unique token for THIS claim attempt
+        claimSession: SESSION_ID, // Session ID for this script invocation
+        lastActivity: admin.firestore.FieldValue.serverTimestamp(), // Heartbeat system
+        lastActivityType: "claimed",
+        // Clear any pending claim request (we're taking over)
+        claimRequestedAt: admin.firestore.FieldValue.delete(),
+        claimRequestedBy: admin.firestore.FieldValue.delete(),
+        claimRequestReason: admin.firestore.FieldValue.delete(),
+      });
+
+      return { id: doc.id, ...data, isReclaim };
+    });
+
+    // POST-CLAIM VERIFICATION: Re-read to confirm we own the claim
+    // This is the definitive check - even if two transactions both "commit",
+    // only one will have their token persisted
+    // Add 100ms delay to allow Firestore write propagation (eventual consistency)
+    await new Promise(resolve => setTimeout(resolve, 100));
+    const verifyDoc = await docRef.get();
+    const verifyData = verifyDoc.data();
+
+    if (verifyData.claimToken !== claimToken) {
+      // Another agent won the race - their token is in the document
+      const winnerToken = verifyData.claimToken?.substring(0, 8) || "unknown";
+      console.log(`  ❌ Lost claim race [${shortToken}] to [${winnerToken}]`);
+      return null;
+    }
+
+    console.log(`  ✅ Claim successful [${shortToken}]`);
+
+    // Update session's active claims (async, non-blocking)
+    db.collection("agentSessions").doc(SESSION_ID).update({
+      activeClaims: admin.firestore.FieldValue.arrayUnion(docId),
+      lastActivity: admin.firestore.FieldValue.serverTimestamp(),
+    }).catch(() => {}); // Ignore session update failures
+
+    // Journal the successful claim (async, non-blocking)
+    addJournalEntry(docId, JOURNAL_TYPES.CLAIMED, isReclaim ? "Reclaimed (was stale)" : "Claimed", {
+      claimToken: shortToken,
+      isReclaim,
+      title: result.title || "No title",
+      priority: result.priority || "unset",
+    }).catch(() => {}); // Ignore journal failures
+
+    return result;
+  } catch (error) {
+    if (
+      error.message.includes("Already claimed") ||
+      error.message.includes("no longer")
+    ) {
+      console.log(`  ⚠️  ${error.message}`);
+      return null;
+    }
+    throw error;
+  }
+}
+
+/**
+ * List all feedback with queue status summary
+ */
+async function listAllFeedback() {
+  console.log("\n📋 Feedback Queue Status\n");
+  console.log("=".repeat(70));
+
+  try {
+    const snapshot = await db
+      .collection("feedback")
+      .orderBy("createdAt", "desc")
+      .get();
+
+    if (snapshot.empty) {
+      console.log("\n  No feedback found in the database.\n");
+      return;
+    }
+
+    const items = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+
+    // Helper: Derive effective status from claim state
+    // This matches the ClaimStatusDeriver logic in the TypeScript codebase
+    function deriveEffectiveStatus(item) {
+      const storedStatus = item.status || "new";
+      const hasClaim = Boolean(item.claimToken && item.claimedAt?.toDate?.());
+
+      if (!hasClaim) {
+        // No claim - if stored is "in-progress", it's orphaned → treat as "new"
+        if (storedStatus === "in-progress") {
+          return { displayStatus: "new", isOrphaned: true };
+        }
+        return { displayStatus: storedStatus, isOrphaned: false };
+      }
+
+      // Has claim - check staleness using the new activity-based check
+      const staleness = checkClaimStaleness(item);
+
+      if (staleness.isStale) {
+        // Stale claim - treat as "new" if stored was new/in-progress
+        if (storedStatus === "new" || storedStatus === "in-progress") {
+          return { displayStatus: "new", isStale: true, staleReason: staleness.reason };
+        }
+        return { displayStatus: storedStatus, isStale: true, staleReason: staleness.reason };
+      }
+
+      // Check if approaching stale (for warning)
+      const isApproaching = isApproachingStale(item);
+
+      // Active claim → always in-progress
+      return { displayStatus: "in-progress", isActive: true, isApproachingStale: isApproaching };
+    }
+
+    // Count by DERIVED status (based on claim state, not stored status)
+    const counts = { new: 0, "in-progress": 0, "in-review": 0, completed: 0, archived: 0 };
+    let orphanedCount = 0;
+    let staleCount = 0;
+
+    items.forEach((item) => {
+      const status = item.status || "new";
+      // Map legacy statuses
+      if (status === "resolved" || status === "deferred") {
+        counts.archived++;
+        return;
+      }
+
+      const { displayStatus, isOrphaned, isStale } = deriveEffectiveStatus(item);
+      if (isOrphaned) orphanedCount++;
+      if (isStale) staleCount++;
+
+      if (counts.hasOwnProperty(displayStatus)) {
+        counts[displayStatus]++;
+      } else {
+        counts.new++;
+      }
+    });
+
+    console.log(
+      `\n  Queue: ${counts.new} new | ${counts["in-progress"]} in progress | ${counts["in-review"]} in review | ${counts.archived} archived\n`
+    );
+    if (orphanedCount > 0 || staleCount > 0) {
+      console.log(`  ℹ️  (${orphanedCount} orphaned, ${staleCount} stale - shown as available)`);
+    }
+    console.log("─".repeat(70));
+
+    // Categorize items by DERIVED status
+    const newItems = items.filter((i) => {
+      const { displayStatus } = deriveEffectiveStatus(i);
+      return displayStatus === "new";
+    });
+    const inProgressItems = items.filter((i) => {
+      const { displayStatus } = deriveEffectiveStatus(i);
+      return displayStatus === "in-progress";
+    });
+    const inReviewItems = items.filter((i) => i.status === "in-review");
+    const completedItems = items.filter((i) => i.status === "completed");
+    const archivedItems = items.filter(
+      (i) =>
+        i.status === "archived" ||
+        i.status === "resolved" ||
+        i.status === "deferred"
+    );
+
+    if (newItems.length > 0) {
+      console.log("\n  🆕 UNCLAIMED (ready to work on):\n");
+      newItems.forEach((item, idx) => {
+        const title = (item.title || "No title").substring(0, 50);
+        const { isOrphaned, isStale } = deriveEffectiveStatus(item);
+        const suffix = isOrphaned ? " ⚠️ ORPHANED" : isStale ? " ⚠️ STALE" : "";
+        console.log(
+          `     ${item.id.substring(0, 8)}... | ${item.type || "N/A"} | ${title}${item.title?.length > 50 ? "..." : ""}${suffix}`
+        );
+      });
+    }
+
+    if (inProgressItems.length > 0) {
+      console.log("\n  🔄 IN PROGRESS (being worked on):\n");
+      inProgressItems.forEach((item) => {
+        const title = (item.title || "No title").substring(0, 50);
+        const claimedAt = item.claimedAt?.toDate?.()
+          ? item.claimedAt.toDate().toLocaleString()
+          : "Unknown";
+        const claimToken = item.claimToken?.substring(0, 8) || "no-token";
+        const isStale =
+          item.claimedAt?.toDate?.() &&
+          Date.now() - item.claimedAt.toDate().getTime() > STALE_CLAIM_MS;
+        console.log(
+          `     ${item.id.substring(0, 8)}... | ${item.type || "N/A"} | ${title}${item.title?.length > 50 ? "..." : ""}`
+        );
+        console.log(
+          `       └─ Token: [${claimToken}] | Claimed: ${claimedAt}${isStale ? " ⚠️ STALE" : ""}`
+        );
+      });
+    }
+
+    if (inReviewItems.length > 0) {
+      console.log("\n  👁️ IN REVIEW (awaiting tester confirmation):\n");
+      inReviewItems.forEach((item) => {
+        const title = (item.title || "No title").substring(0, 50);
+        console.log(
+          `     ${item.id.substring(0, 8)}... | ${item.type || "N/A"} | ${title}${item.title?.length > 50 ? "..." : ""}`
+        );
+      });
+    }
+
+    if (completedItems.length > 0) {
+      console.log("\n  ✅ COMPLETED (ready for release):\n");
+      completedItems.forEach((item) => {
+        const title = (item.title || "No title").substring(0, 50);
+        console.log(
+          `     ${item.id.substring(0, 8)}... | ${item.type || "N/A"} | ${title}${item.title?.length > 50 ? "..." : ""}`
+        );
+      });
+    }
+
+    if (archivedItems.length > 0) {
+      console.log("\n  📦 ARCHIVED:\n");
+      archivedItems.slice(0, 5).forEach((item) => {
+        const title = (item.title || "No title").substring(0, 50);
+        const note = item.resolutionNotes
+          ? ` - ${item.resolutionNotes.substring(0, 30)}${item.resolutionNotes.length > 30 ? "..." : ""}`
+          : "";
+        console.log(
+          `     ${item.id.substring(0, 8)}... | ${item.type || "N/A"} | ${title}${item.title?.length > 50 ? "..." : ""}${note}`
+        );
+      });
+      if (archivedItems.length > 5) {
+        console.log(`     ... and ${archivedItems.length - 5} more`);
+      }
+    }
+
+    console.log("\n" + "=".repeat(70) + "\n");
+  } catch (error) {
+    console.error("\n  Error listing feedback:", error.message);
+    throw error;
+  }
+}
+
+/**
+ * Claim the next available feedback item
+ * Returns the item details for the agent to work on
+ * @param {string|null} priorityFilter - Optional priority to filter by ('low', 'medium', 'high')
+ */
+async function claimNextFeedback(priorityFilter = null) {
+  try {
+    // First check if there's a stale in-progress item we should reclaim
+    // (only if not filtering by priority)
+    let itemToClaim = null;
+    let isReclaim = false;
+
+    if (!priorityFilter) {
+      const staleSnapshot = await db
+        .collection("feedback")
+        .where("status", "==", "in-progress")
+        .get();
+
+      for (const doc of staleSnapshot.docs) {
+        const data = doc.data();
+        if (data.claimedAt?.toDate?.()) {
+          const claimAge = Date.now() - data.claimedAt.toDate().getTime();
+          if (claimAge > STALE_CLAIM_MS) {
+            itemToClaim = { id: doc.id, ...data };
+            isReclaim = true;
+            break;
+          }
+        }
+      }
+    }
+
+    // If no stale items, get the highest priority "new" item
+    // Priority order: no priority first (needs triage), then high, medium, low
+    // Within same priority, oldest first
+    if (!itemToClaim) {
+      const newSnapshot = await db
+        .collection("feedback")
+        .where("status", "==", "new")
+        .get();
+
+      if (!newSnapshot.empty) {
+        let items = newSnapshot.docs.map((doc) => ({
+          id: doc.id,
+          ...doc.data(),
+        }));
+
+        // Filter by priority if specified
+        if (priorityFilter) {
+          items = items.filter((item) => item.priority === priorityFilter);
+          if (items.length === 0) {
+            console.log("\n" + "=".repeat(70));
+            console.log(
+              `\n  ✨ No ${priorityFilter.toUpperCase()} priority items in queue!\n`
+            );
+            console.log(
+              "  Run `node scripts/fetch-feedback.js.js list` to see all items."
+            );
+            console.log("\n" + "=".repeat(70) + "\n");
+            return null;
+          }
+        }
+
+        // Sort by priority order, then by createdAt
+        const priorityOrder = { "": 0, high: 1, medium: 2, low: 3 };
+        const sortedItems = items.sort((a, b) => {
+          const priorityA = priorityOrder[a.priority || ""] ?? 4;
+          const priorityB = priorityOrder[b.priority || ""] ?? 4;
+          if (priorityA !== priorityB) {
+            return priorityA - priorityB;
+          }
+          // Within same priority, oldest first
+          const timeA = a.createdAt?.toDate?.()?.getTime() || 0;
+          const timeB = b.createdAt?.toDate?.()?.getTime() || 0;
+          return timeA - timeB;
+        });
+
+        if (sortedItems.length > 0) {
+          itemToClaim = sortedItems[0];
+        }
+      } else if (!priorityFilter) {
+        // Also check items with no status field (legacy) - only when not filtering
+        const legacySnapshot = await db
+          .collection("feedback")
+          .orderBy("createdAt", "asc")
+          .get();
+
+        const legacyItem = legacySnapshot.docs.find((doc) => {
+          const data = doc.data();
+          return !data.status || data.status === "new";
+        });
+
+        if (legacyItem) {
+          itemToClaim = { id: legacyItem.id, ...legacyItem.data() };
+        }
+      }
+    }
+
+    // If no new items, fall back to in-progress items (resume work)
+    if (!itemToClaim && !priorityFilter) {
+      const inProgressSnapshot = await db
+        .collection("feedback")
+        .where("status", "==", "in-progress")
+        .get();
+
+      if (!inProgressSnapshot.empty) {
+        // Sort by claimedAt (oldest first) to resume oldest work
+        const inProgressItems = inProgressSnapshot.docs
+          .map((doc) => ({ id: doc.id, ...doc.data() }))
+          .sort((a, b) => {
+            const timeA = a.claimedAt?.toDate?.()?.getTime() || 0;
+            const timeB = b.claimedAt?.toDate?.()?.getTime() || 0;
+            return timeA - timeB;
+          });
+
+        if (inProgressItems.length > 0) {
+          itemToClaim = inProgressItems[0];
+          isReclaim = true; // Mark as resuming existing work
+        }
+      }
+    }
+
+    if (!itemToClaim) {
+      console.log("\n" + "=".repeat(70));
+      console.log(
+        "\n  ✨ QUEUE EMPTY - No unclaimed or in-progress feedback items!\n"
+      );
+      console.log(
+        "  Run `node scripts/fetch-feedback.js.js list` to see all items."
+      );
+      console.log("\n" + "=".repeat(70) + "\n");
+      return null;
+    }
+
+    // Claim the item atomically (prevents race conditions)
+    const claimedItem = await atomicClaim(itemToClaim.id, isReclaim);
+
+    if (!claimedItem) {
+      // Claim failed (item was claimed by another agent)
+      console.log("\n  🔄 Retrying with next available item...\n");
+      // Add random delay (50-500ms) to desynchronize parallel agents
+      // This prevents two agents from querying in lockstep and selecting the same items repeatedly
+      const delayMs = 50 + Math.floor(Math.random() * 450);
+      await new Promise(resolve => setTimeout(resolve, delayMs));
+      // Recursively try the next item (will re-query, not use stale list)
+      return claimNextFeedback(priorityFilter);
+    }
+
+    // Use the transaction-verified data
+    itemToClaim = claimedItem;
+
+    // Output the claimed item details
+    const createdAt = itemToClaim.createdAt?.toDate?.()
+      ? itemToClaim.createdAt.toDate().toLocaleString()
+      : "Unknown date";
+
+    console.log("\n" + "=".repeat(70));
+    const headerText = isReclaim ? "🔄 RESUMING IN-PROGRESS" : "🎯 CLAIMED";
+    console.log(`\n  ${headerText} FEEDBACK\n`);
+    console.log("─".repeat(70));
+    console.log(`  ID: ${itemToClaim.id}`);
+    console.log(`  Type: ${itemToClaim.type || "N/A"}`);
+    console.log(`  Priority: ${itemToClaim.priority || "N/A"}`);
+    console.log(
+      `  User: ${itemToClaim.userDisplayName || itemToClaim.userEmail || "Anonymous"}`
+    );
+    console.log(`  Created: ${createdAt}`);
+    console.log("─".repeat(70));
+    console.log(`  Title: ${itemToClaim.title || "No title"}`);
+    console.log("─".repeat(70));
+    console.log(`  Description:\n`);
+    console.log(`  ${itemToClaim.description || "No description"}`);
+    console.log("─".repeat(70));
+    console.log(`  Module: ${itemToClaim.capturedModule || "Unknown"}`);
+    console.log(`  Tab: ${itemToClaim.capturedTab || "Unknown"}`);
+    if (itemToClaim.resolutionNotes) {
+      console.log("─".repeat(70));
+      console.log(`  Previous Notes: ${itemToClaim.resolutionNotes}`);
+    }
+
+    // Show subtasks if they exist
+    if (itemToClaim.subtasks?.length > 0) {
+      console.log("─".repeat(70));
+      const completed = itemToClaim.subtasks.filter(
+        (s) => s.status === "completed"
+      ).length;
+      console.log(
+        `  📋 SUBTASKS (${completed}/${itemToClaim.subtasks.length} completed):\n`
+      );
+      itemToClaim.subtasks.forEach((s) => {
+        const statusIcon =
+          s.status === "completed"
+            ? "✅"
+            : s.status === "in-progress"
+              ? "🔄"
+              : "⬚";
+        const deps =
+          s.dependsOn?.length > 0
+            ? ` (depends: ${s.dependsOn.join(", ")})`
+            : "";
+        console.log(`     ${statusIcon} #${s.id} ${s.title}${deps}`);
+      });
+
+      // Find next available subtask (pending, with all dependencies completed)
+      const nextSubtask = itemToClaim.subtasks.find((s) => {
+        if (s.status !== "pending") return false;
+        if (!s.dependsOn?.length) return true;
+        return s.dependsOn.every((depId) => {
+          const dep = itemToClaim.subtasks.find((d) => d.id === depId);
+          return dep?.status === "completed";
+        });
+      });
+
+      if (nextSubtask) {
+        console.log(
+          `\n  ➡️ Next subtask: #${nextSubtask.id} ${nextSubtask.title}`
+        );
+      }
+    }
+
+    // Download and display images if they exist
+    if (itemToClaim.imageUrls && itemToClaim.imageUrls.length > 0) {
+      console.log("─".repeat(70));
+      console.log(`  📸 IMAGES (${itemToClaim.imageUrls.length}):\n`);
+
+      const downloadedPaths = await downloadFeedbackImages(
+        itemToClaim.id,
+        itemToClaim.imageUrls
+      );
+
+      if (downloadedPaths.length > 0) {
+        downloadedPaths.forEach((path, idx) => {
+          console.log(`     [${idx + 1}] Downloaded to: ${path}`);
+        });
+        console.log(
+          `\n  ✅ Images ready to view - use the Read tool on the paths above`
+        );
+      }
+    }
+
+    console.log("\n" + "=".repeat(70));
+    console.log(
+      `\n  To resolve: node scripts/fetch-feedback.js.js ${itemToClaim.id} in-review "Your notes here"\n`
+    );
+
+    return itemToClaim;
+  } catch (error) {
+    console.error("\n  Error claiming feedback:", error.message);
+    throw error;
+  }
+}
+
+/**
+ * Update feedback title by Firestore document ID
+ */
+async function updateFeedbackTitle(docId, title) {
+  try {
+    const docRef = db.collection("feedback").doc(docId);
+    const doc = await docRef.get();
+
+    if (!doc.exists) {
+      console.log(`\n  ❌ Feedback not found: ${docId}\n`);
+      return null;
+    }
+
+    await docRef.update({
+      title: title,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
+    console.log("\n" + "=".repeat(70));
+    console.log(`\n  ✅ TITLE UPDATED\n`);
+    console.log("─".repeat(70));
+    console.log(`  ID: ${docId}`);
+    console.log(`  New Title: ${title}`);
+    console.log("\n" + "=".repeat(70) + "\n");
+
+    return { id: docId, title };
+  } catch (error) {
+    console.error("\n  Error updating title:", error.message);
+    throw error;
+  }
+}
+
+/**
+ * Update description
+ */
+async function updateFeedbackDescription(docId, description) {
+  try {
+    const docRef = db.collection("feedback").doc(docId);
+    const doc = await docRef.get();
+
+    if (!doc.exists) {
+      console.log(`\n  ❌ Feedback not found: ${docId}\n`);
+      return null;
+    }
+
+    await docRef.update({
+      description: description,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
+    console.log("\n" + "=".repeat(70));
+    console.log(`\n  ✅ DESCRIPTION UPDATED\n`);
+    console.log("─".repeat(70));
+    console.log(`  ID: ${docId}`);
+    console.log(`  New Description: ${description.substring(0, 100)}${description.length > 100 ? '...' : ''}`);
+    console.log("\n" + "=".repeat(70) + "\n");
+
+    return { id: docId, description };
+  } catch (error) {
+    console.error("\n  Error updating description:", error.message);
+    throw error;
+  }
+}
+
+/**
+ * Update resolution notes
+ */
+async function updateResolutionNotes(docId, notes) {
+  try {
+    const docRef = db.collection("feedback").doc(docId);
+    const doc = await docRef.get();
+
+    if (!doc.exists) {
+      console.log(`\n  ❌ Feedback not found: ${docId}\n`);
+      return null;
+    }
+
+    await docRef.update({
+      resolutionNotes: notes,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
+    const item = doc.data();
+    console.log("\n" + "=".repeat(70));
+    console.log(`\n  ✅ RESOLUTION NOTES UPDATED\n`);
+    console.log("─".repeat(70));
+    console.log(`  ID: ${docId}`);
+    console.log(`  Title: ${item.title || "No title"}`);
+    console.log(`  Resolution Notes: ${notes}`);
+    console.log("\n" + "=".repeat(70) + "\n");
+
+    return { id: docId, resolutionNotes: notes };
+  } catch (error) {
+    console.error("\n  Error updating resolution notes:", error.message);
+    throw error;
+  }
+}
+
+/**
+ * Update changelog entry
+ */
+async function updateChangelogEntry(docId, entry) {
+  try {
+    const docRef = db.collection("feedback").doc(docId);
+    const doc = await docRef.get();
+
+    if (!doc.exists) {
+      console.log(`\n  ❌ Feedback not found: ${docId}\n`);
+      return null;
+    }
+
+    await docRef.update({
+      changelogEntry: entry,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
+    const item = doc.data();
+    console.log("\n" + "=".repeat(70));
+    console.log(`\n  ✅ CHANGELOG ENTRY UPDATED\n`);
+    console.log("─".repeat(70));
+    console.log(`  ID: ${docId}`);
+    console.log(`  Title: ${item.title || "No title"}`);
+    console.log(`  Changelog Entry: ${entry}`);
+    console.log("\n" + "=".repeat(70) + "\n");
+
+    return { id: docId, changelogEntry: entry };
+  } catch (error) {
+    console.error("\n  Error updating changelog entry:", error.message);
+    throw error;
+  }
+}
+
+/**
+ * Update feedback status by Firestore document ID
+ * @param {string} docId - The document ID to update
+ * @param {string} status - The new status
+ * @param {string} resolutionNotes - Admin-only resolution notes
+ * @param {string} userFacingNotes - Optional user-visible notes (for notifying submitter)
+ * @param {string} changelogEntry - Optional user-facing changelog text
+ */
+async function updateFeedbackById(docId, status, resolutionNotes, userFacingNotes = null, changelogEntry = null) {
+  try {
+    const docRef = db.collection("feedback").doc(docId);
+    const doc = await docRef.get();
+
+    if (!doc.exists) {
+      console.log(`\n  ❌ Feedback not found: ${docId}\n`);
+      return null;
+    }
+
+    // Map common status aliases to correct format (4 valid statuses)
+    const statusMap = {
+      in_progress: "in-progress",
+      in_review: "in-review",
+      inprogress: "in-progress",
+      inreview: "in-review",
+      resolved: "archived", // resolved is now archived
+      deferred: "archived", // deferred is now archived (use resolutionNotes to explain)
+    };
+    const normalizedStatus = statusMap[status] || status;
+
+    // Validate status is one of the 5 valid values
+    const validStatuses = [
+      "new",
+      "in-progress",
+      "in-review",
+      "completed",
+      "archived",
+    ];
+    if (!validStatuses.includes(normalizedStatus)) {
+      console.log(
+        `\n  ⚠️ Invalid status "${status}". Valid: ${validStatuses.join(", ")}\n`
+      );
+      return null;
+    }
+
+    // STATE MACHINE: Validate the transition is allowed
+    const item = doc.data();
+    const currentStatus = item.status || "new";
+    const transition = validateTransition(currentStatus, normalizedStatus);
+
+    if (!transition.valid) {
+      console.log(`\n  ⛔ INVALID STATUS TRANSITION\n`);
+      console.log(`  ${transition.error}\n`);
+      console.log(`  Current status: ${currentStatus}`);
+      console.log(`  Attempted: ${normalizedStatus}\n`);
+      return null;
+    }
+
+    const updateData = {
+      status: normalizedStatus,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    };
+
+    // Clear claim fields when archiving, completing, or moving to review
+    if (["archived", "completed", "in-review"].includes(normalizedStatus)) {
+      updateData.claimedAt = admin.firestore.FieldValue.delete();
+      updateData.claimedBy = admin.firestore.FieldValue.delete();
+      updateData.claimToken = admin.firestore.FieldValue.delete();
+      updateData.claimSession = admin.firestore.FieldValue.delete();
+    }
+    if (normalizedStatus === "archived") {
+      updateData.resolvedAt = admin.firestore.FieldValue.serverTimestamp();
+    }
+
+    if (resolutionNotes) {
+      updateData.adminNotes = resolutionNotes;
+    }
+
+    // Add user-facing notes if provided
+    if (userFacingNotes) {
+      updateData.userFacingNotes = userFacingNotes;
+    }
+
+    // Add changelog entry if provided
+    if (changelogEntry) {
+      updateData.changelogEntry = changelogEntry;
+    }
+
+    // Also refresh lastActivity if still in-progress (counts as activity)
+    if (normalizedStatus === "in-progress") {
+      updateData.lastActivity = admin.firestore.FieldValue.serverTimestamp();
+      updateData.lastActivityType = "status-update";
+    }
+
+    // Clear heartbeat fields when leaving in-progress
+    if (currentStatus === "in-progress" && normalizedStatus !== "in-progress") {
+      updateData.lastActivity = admin.firestore.FieldValue.delete();
+      updateData.lastActivityType = admin.firestore.FieldValue.delete();
+    }
+
+    await docRef.update(updateData);
+
+    // Journal the status change
+    addJournalEntry(docId, JOURNAL_TYPES.STATUS_CHANGE, `${currentStatus} → ${normalizedStatus}`, {
+      fromStatus: currentStatus,
+      toStatus: normalizedStatus,
+      adminNotes: resolutionNotes || null,
+      userFacingNotes: userFacingNotes || null,
+    }).catch(() => {}); // Non-blocking
+
+    // item was already fetched earlier for state machine validation
+    console.log("\n" + "=".repeat(70));
+    console.log(`\n  ✅ FEEDBACK UPDATED\n`);
+    console.log("─".repeat(70));
+    console.log(`  ID: ${docId}`);
+    console.log(`  Title: ${item.title || "No title"}`);
+    console.log(`  New Status: ${normalizedStatus}`);
+    if (resolutionNotes) {
+      console.log(`  Admin Notes: ${resolutionNotes}`);
+    }
+    if (userFacingNotes) {
+      console.log(`  User Notes: ${userFacingNotes}`);
+    }
+    if (changelogEntry) {
+      console.log(`  Changelog Entry: ${changelogEntry}`);
+    }
+
+    // Send direct message to user when marking as completed or archived
+    if (["completed", "archived"].includes(normalizedStatus) && item.userId) {
+      console.log("─".repeat(70));
+
+      let messageContent;
+      if (normalizedStatus === "completed") {
+        // Prefer user-facing notes for the message, fall back to resolution notes
+        const userMessage = userFacingNotes || resolutionNotes;
+        messageContent = userMessage
+          ? `Your feedback has been addressed: ${userMessage}`
+          : "Your feedback has been addressed and is ready for the next release!";
+      } else if (normalizedStatus === "archived") {
+        // Check if there's a version tag
+        const version = item.fixedInVersion || null;
+        if (version) {
+          messageContent = `Your feedback was included in version ${version}! Thank you for helping improve Ringmaster.`;
+        } else {
+          const userMessage = userFacingNotes || resolutionNotes;
+          messageContent = userMessage
+            ? `Your feedback has been resolved: ${userMessage}`
+            : "Your feedback has been resolved. Thank you for your input!";
+        }
+      }
+
+      await sendDirectMessageToUser(
+        item.userId,
+        docId,
+        item.title,
+        normalizedStatus,
+        messageContent
+      );
+    }
+
+    console.log("\n" + "=".repeat(70) + "\n");
+
+    return { id: docId, ...item };
+  } catch (error) {
+    console.error("\n  Error updating feedback:", error.message);
+    throw error;
+  }
+}
+
+/**
+ * Add a subtask to a feedback item
+ */
+async function addSubtask(docId, title, description, dependsOn = []) {
+  try {
+    const docRef = db.collection("feedback").doc(docId);
+    const doc = await docRef.get();
+
+    if (!doc.exists) {
+      console.log(`\n  ❌ Feedback not found: ${docId}\n`);
+      return null;
+    }
+
+    const item = doc.data();
+    const subtasks = item.subtasks || [];
+
+    // Generate a simple numeric ID
+    const newId = String(subtasks.length + 1);
+
+    const newSubtask = {
+      id: newId,
+      title,
+      description,
+      status: "pending",
+    };
+
+    // Only add dependsOn if there are dependencies
+    if (dependsOn.length > 0) {
+      newSubtask.dependsOn = dependsOn;
+    }
+
+    subtasks.push(newSubtask);
+
+    await docRef.update({
+      subtasks,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
+    console.log("\n" + "=".repeat(70));
+    console.log(`\n  ✅ SUBTASK ADDED\n`);
+    console.log("─".repeat(70));
+    console.log(`  Feedback: ${item.title || docId}`);
+    console.log(`  Subtask #${newId}: ${title}`);
+    if (dependsOn.length > 0) {
+      console.log(`  Depends on: ${dependsOn.join(", ")}`);
+    }
+    console.log("\n" + "=".repeat(70) + "\n");
+
+    return newSubtask;
+  } catch (error) {
+    console.error("\n  Error adding subtask:", error.message);
+    throw error;
+  }
+}
+
+/**
+ * Delete a subtask from a feedback item
+ */
+async function deleteSubtask(docId, subtaskId) {
+  try {
+    const docRef = db.collection("feedback").doc(docId);
+    const doc = await docRef.get();
+
+    if (!doc.exists) {
+      console.log(`\n  ❌ Feedback not found: ${docId}\n`);
+      return null;
+    }
+
+    const item = doc.data();
+    const subtasks = item.subtasks || [];
+
+    const subtaskIndex = subtasks.findIndex((s) => s.id === subtaskId);
+    if (subtaskIndex === -1) {
+      console.log(`\n  ❌ Subtask not found: ${subtaskId}\n`);
+      return null;
+    }
+
+    const deletedSubtask = subtasks[subtaskIndex];
+    subtasks.splice(subtaskIndex, 1);
+
+    await docRef.update({
+      subtasks,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
+    const completed = subtasks.filter((s) => s.status === "completed").length;
+    const total = subtasks.length;
+
+    console.log("\n" + "=".repeat(70));
+    console.log(`\n  🗑️ SUBTASK DELETED\n`);
+    console.log("─".repeat(70));
+    console.log(`  Feedback: ${item.title || docId}`);
+    console.log(`  Deleted: #${subtaskId} - ${deletedSubtask.title}`);
+    console.log(`  Remaining: ${total} subtasks (${completed} completed)`);
+    console.log("\n" + "=".repeat(70) + "\n");
+
+    return deletedSubtask;
+  } catch (error) {
+    console.error("\n  Error deleting subtask:", error.message);
+    throw error;
+  }
+}
+
+/**
+ * Update subtask status
+ */
+async function updateSubtaskStatus(docId, subtaskId, status) {
+  try {
+    const docRef = db.collection("feedback").doc(docId);
+    const doc = await docRef.get();
+
+    if (!doc.exists) {
+      console.log(`\n  ❌ Feedback not found: ${docId}\n`);
+      return null;
+    }
+
+    const item = doc.data();
+    const subtasks = item.subtasks || [];
+
+    const subtaskIndex = subtasks.findIndex((s) => s.id === subtaskId);
+    if (subtaskIndex === -1) {
+      console.log(`\n  ❌ Subtask not found: ${subtaskId}\n`);
+      return null;
+    }
+
+    const validStatuses = ["pending", "in-progress", "completed"];
+    if (!validStatuses.includes(status)) {
+      console.log(
+        `\n  ⚠️ Invalid subtask status. Valid: ${validStatuses.join(", ")}\n`
+      );
+      return null;
+    }
+
+    subtasks[subtaskIndex].status = status;
+    if (status === "completed") {
+      subtasks[subtaskIndex].completedAt = new Date();
+    }
+
+    await docRef.update({
+      subtasks,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
+    // Show progress
+    const completed = subtasks.filter((s) => s.status === "completed").length;
+    const total = subtasks.length;
+
+    console.log("\n" + "=".repeat(70));
+    console.log(`\n  ✅ SUBTASK UPDATED\n`);
+    console.log("─".repeat(70));
+    console.log(`  Feedback: ${item.title || docId}`);
+    console.log(`  Subtask #${subtaskId}: ${subtasks[subtaskIndex].title}`);
+    console.log(`  New Status: ${status}`);
+    console.log(`  Progress: ${completed}/${total} subtasks completed`);
+    console.log("\n" + "=".repeat(70) + "\n");
+
+    return subtasks[subtaskIndex];
+  } catch (error) {
+    console.error("\n  Error updating subtask:", error.message);
+    throw error;
+  }
+}
+
+/**
+ * List subtasks for a feedback item
+ */
+async function listSubtasks(docId) {
+  try {
+    const doc = await db.collection("feedback").doc(docId).get();
+
+    if (!doc.exists) {
+      console.log(`\n  ❌ Feedback not found: ${docId}\n`);
+      return null;
+    }
+
+    const item = { id: doc.id, ...doc.data() };
+    const subtasks = item.subtasks || [];
+
+    console.log("\n" + "=".repeat(70));
+    console.log(`\n  📋 SUBTASKS for: ${item.title || docId}\n`);
+    console.log("─".repeat(70));
+
+    if (subtasks.length === 0) {
+      console.log("  No subtasks defined.\n");
+    } else {
+      const completed = subtasks.filter((s) => s.status === "completed").length;
+      console.log(`  Progress: ${completed}/${subtasks.length} completed\n`);
+
+      subtasks.forEach((s) => {
+        const statusIcon =
+          s.status === "completed"
+            ? "✅"
+            : s.status === "in-progress"
+              ? "🔄"
+              : "⬚";
+        const deps =
+          s.dependsOn?.length > 0
+            ? ` (depends: ${s.dependsOn.join(", ")})`
+            : "";
+        console.log(`  ${statusIcon} #${s.id} ${s.title}${deps}`);
+        console.log(
+          `     ${s.description.substring(0, 70)}${s.description.length > 70 ? "..." : ""}`
+        );
+      });
+    }
+
+    console.log("\n" + "=".repeat(70) + "\n");
+
+    return subtasks;
+  } catch (error) {
+    console.error("\n  Error listing subtasks:", error.message);
+    throw error;
+  }
+}
+
+/**
+ * Delete a feedback item
+ */
+async function deleteFeedback(docId) {
+  try {
+    const docRef = db.collection("feedback").doc(docId);
+    const doc = await docRef.get();
+
+    if (!doc.exists) {
+      console.log(`\n  ❌ Feedback not found: ${docId}\n`);
+      return null;
+    }
+
+    const item = doc.data();
+    await docRef.delete();
+
+    console.log("\n" + "=".repeat(70));
+    console.log(`\n  🗑️ FEEDBACK DELETED\n`);
+    console.log("─".repeat(70));
+    console.log(`  ID: ${docId}`);
+    console.log(`  Title: ${item.title || "No title"}`);
+    console.log("\n" + "=".repeat(70) + "\n");
+
+    return { id: docId, deleted: true };
+  } catch (error) {
+    console.error("\n  Error deleting feedback:", error.message);
+    throw error;
+  }
+}
+
+/**
+ * Get feedback by Firestore document ID
+ */
+async function getFeedbackById(docId) {
+  try {
+    const doc = await db.collection("feedback").doc(docId).get();
+
+    if (!doc.exists) {
+      console.log(`\n  ❌ Feedback not found: ${docId}\n`);
+      return null;
+    }
+
+    const item = { id: doc.id, ...doc.data() };
+    const createdAt = item.createdAt?.toDate?.()
+      ? item.createdAt.toDate().toLocaleString()
+      : "Unknown date";
+
+    console.log("\n" + "=".repeat(70));
+    console.log(`\n  FEEDBACK DETAILS\n`);
+    console.log("─".repeat(70));
+    console.log(`  ID: ${item.id}`);
+    console.log(`  Type: ${item.type || "N/A"}`);
+    console.log(`  Status: ${item.status || "new"}`);
+    console.log(`  Priority: ${item.priority || "N/A"}`);
+    console.log(
+      `  User: ${item.userDisplayName || item.userEmail || "Anonymous"}`
+    );
+    console.log(`  Created: ${createdAt}`);
+    console.log("─".repeat(70));
+    console.log(`  Title: ${item.title || "No title"}`);
+    console.log("─".repeat(70));
+    console.log(`  Description:\n`);
+    console.log(`  ${item.description || "No description"}`);
+    console.log("─".repeat(70));
+    console.log(`  Module: ${item.capturedModule || "Unknown"}`);
+    console.log(`  Tab: ${item.capturedTab || "Unknown"}`);
+    if (item.resolutionNotes) {
+      console.log("─".repeat(70));
+      console.log(`  Resolution: ${item.resolutionNotes}`);
+    }
+
+    // Show subtasks if they exist
+    if (item.subtasks?.length > 0) {
+      console.log("─".repeat(70));
+      const completed = item.subtasks.filter(
+        (s) => s.status === "completed"
+      ).length;
+      console.log(
+        `  📋 SUBTASKS (${completed}/${item.subtasks.length} completed):\n`
+      );
+      item.subtasks.forEach((s) => {
+        const statusIcon =
+          s.status === "completed"
+            ? "✅"
+            : s.status === "in-progress"
+              ? "🔄"
+              : "⬚";
+        const deps =
+          s.dependsOn?.length > 0
+            ? ` (depends: ${s.dependsOn.join(", ")})`
+            : "";
+        console.log(`     ${statusIcon} #${s.id} ${s.title}${deps}`);
+        console.log(
+          `        ${s.description.substring(0, 60)}${s.description.length > 60 ? "..." : ""}`
+        );
+      });
+    }
+
+    // Download and display images if they exist
+    if (item.imageUrls && item.imageUrls.length > 0) {
+      console.log("─".repeat(70));
+      console.log(`  📸 IMAGES (${item.imageUrls.length}):\n`);
+
+      const downloadedPaths = await downloadFeedbackImages(
+        item.id,
+        item.imageUrls
+      );
+
+      if (downloadedPaths.length > 0) {
+        downloadedPaths.forEach((path, idx) => {
+          console.log(`     [${idx + 1}] Downloaded to: ${path}`);
+        });
+        console.log(
+          `\n  ✅ Images ready to view - use the Read tool on the paths above`
+        );
+      }
+    }
+
+    console.log("\n" + "=".repeat(70) + "\n");
+
+    return item;
+  } catch (error) {
+    console.error("\n  Error fetching feedback:", error.message);
+    throw error;
+  }
+}
+
+/**
+ * Defer feedback until a specific date
+ */
+async function deferFeedback(docId, deferUntilDate, reason) {
+  try {
+    const feedbackRef = db.collection("feedback").doc(docId);
+    const doc = await feedbackRef.get();
+
+    if (!doc.exists) {
+      console.log(`\n  ❌ Feedback item ${docId} not found.\n`);
+      return;
+    }
+
+    // Parse date (YYYY-MM-DD format)
+    const parsedDate = new Date(deferUntilDate);
+    if (isNaN(parsedDate.getTime())) {
+      console.log(
+        `\n  ❌ Invalid date format. Use YYYY-MM-DD (e.g., 2026-03-15)\n`
+      );
+      return;
+    }
+
+    // Set to end of day
+    parsedDate.setHours(23, 59, 59, 999);
+
+    await feedbackRef.update({
+      status: "archived",
+      deferredUntil: admin.firestore.Timestamp.fromDate(parsedDate),
+      resolutionNotes: reason || `Deferred until ${deferUntilDate}`,
+      archivedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
+    console.log("\n" + "=".repeat(70));
+    console.log(`\n  ⏰ DEFERRED until ${deferUntilDate}`);
+    console.log(`\n  Item: ${docId}`);
+    console.log(`  Reason: ${reason || "No reason provided"}`);
+    console.log(`\n  📌 This item will auto-reactivate on ${deferUntilDate}`);
+    console.log(`     Run 'node scripts/reactivate-deferred.js' manually`);
+    console.log(`     or wait for daily cron job to run.`);
+    console.log("\n" + "=".repeat(70) + "\n");
+  } catch (error) {
+    console.error("\n  Error deferring feedback:", error.message);
+    throw error;
+  }
+}
+
+/**
+ * Update feedback priority
+ */
+async function updateFeedbackPriority(docId, priority) {
+  const validPriorities = ["low", "medium", "high"];
+  if (!validPriorities.includes(priority)) {
+    console.log(
+      `\n  ⚠️ Invalid priority "${priority}". Valid: ${validPriorities.join(", ")}\n`
+    );
+    return null;
+  }
+
+  try {
+    const docRef = db.collection("feedback").doc(docId);
+    const doc = await docRef.get();
+
+    if (!doc.exists) {
+      console.log(`\n  ❌ Feedback not found: ${docId}\n`);
+      return null;
+    }
+
+    await docRef.update({
+      priority: priority,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
+    const item = doc.data();
+    console.log("\n" + "=".repeat(70));
+    console.log(`\n  ✅ PRIORITY UPDATED\n`);
+    console.log("─".repeat(70));
+    console.log(`  ID: ${docId}`);
+    console.log(`  Title: ${item.title || "No title"}`);
+    console.log(`  Priority: ${priority.toUpperCase()}`);
+    console.log("\n" + "=".repeat(70) + "\n");
+
+    return { id: docId, priority };
+  } catch (error) {
+    console.error("\n  Error updating priority:", error.message);
+    throw error;
+  }
+}
+
+/**
+ * Auto-prioritize feedback items based on type and description keywords
+ * Priority rules:
+ * - HIGH: bugs, crashes, data loss, security, blocking issues, "can't", "broken", "error"
+ * - MEDIUM: core features, important UX issues, "should", "need", "want"
+ * - LOW: polish, cosmetic, nice-to-haves, "could", "maybe", "minor"
+ *
+ * With --json flag: outputs raw JSON for AI analysis instead of auto-assigning
+ */
+async function prioritizeFeedback(dryRun = false, jsonOutput = false) {
+  try {
+    // Fetch all "new" items without a priority
+    const snapshot = await db
+      .collection("feedback")
+      .where("status", "==", "new")
+      .get();
+
+    const unprioritized = snapshot.docs
+      .map((doc) => ({ id: doc.id, ...doc.data() }))
+      .filter((item) => !item.priority);
+
+    if (unprioritized.length === 0) {
+      if (jsonOutput) {
+        console.log(
+          JSON.stringify({
+            items: [],
+            message: "All feedback items already have priorities",
+          })
+        );
+      } else {
+        console.log("\n" + "=".repeat(70));
+        console.log("\n  ✨ All feedback items already have priorities!\n");
+        console.log("=".repeat(70) + "\n");
+      }
+      return;
+    }
+
+    // JSON output mode - just dump the raw data for AI analysis
+    if (jsonOutput) {
+      const items = unprioritized.map((item) => ({
+        id: item.id,
+        type: item.type || "general",
+        title: item.title || null,
+        description: item.description || item.content || null,
+        module: item.module || null,
+        tab: item.tab || null,
+        userName: item.userName || null,
+        createdAt: item.createdAt?._seconds
+          ? new Date(item.createdAt._seconds * 1000).toISOString()
+          : null,
+      }));
+      console.log(JSON.stringify({ items, count: items.length }, null, 2));
+      return;
+    }
+
+    console.log("\n" + "=".repeat(70));
+    console.log(
+      `\n  🎯 AUTO-PRIORITIZING ${unprioritized.length} FEEDBACK ITEMS\n`
+    );
+    console.log("─".repeat(70));
+
+    // Keywords for priority detection
+    const highKeywords = [
+      "crash",
+      "broken",
+      "error",
+      "bug",
+      "fail",
+      "can't",
+      "cannot",
+      "doesn't work",
+      "won't",
+      "stuck",
+      "freeze",
+      "hang",
+      "data loss",
+      "security",
+      "blocking",
+      "urgent",
+      "critical",
+      "severe",
+      "major",
+      "unusable",
+      "impossible",
+    ];
+    const lowKeywords = [
+      "could",
+      "maybe",
+      "minor",
+      "small",
+      "cosmetic",
+      "polish",
+      "nice to have",
+      "nitpick",
+      "suggestion",
+      "idea",
+      "would be nice",
+      "eventually",
+      "someday",
+      "tweak",
+      "slightly",
+      "little",
+    ];
+
+    const results = { high: [], medium: [], low: [] };
+
+    for (const item of unprioritized) {
+      const text =
+        `${item.description || ""} ${item.title || ""}`.toLowerCase();
+      const type = item.type || "general";
+
+      let priority = "medium"; // Default
+
+      // Type-based priority
+      if (type === "bug") {
+        priority = "high"; // Bugs start as high
+      }
+
+      // Keyword overrides
+      const hasHighKeyword = highKeywords.some((kw) => text.includes(kw));
+      const hasLowKeyword = lowKeywords.some((kw) => text.includes(kw));
+
+      if (hasHighKeyword) {
+        priority = "high";
+      } else if (hasLowKeyword && type !== "bug") {
+        priority = "low";
+      }
+
+      // Feature requests without urgency keywords are medium
+      if (type === "feature" && !hasHighKeyword && !hasLowKeyword) {
+        priority = "medium";
+      }
+
+      // Enhancements are typically medium-low
+      if (type === "enhancement" && !hasHighKeyword) {
+        priority = hasLowKeyword ? "low" : "medium";
+      }
+
+      // General feedback without keywords is low
+      if (type === "general" && !hasHighKeyword) {
+        priority = "low";
+      }
+
+      results[priority].push(item);
+
+      const title = (
+        item.title ||
+        item.description?.substring(0, 40) ||
+        "Untitled"
+      ).substring(0, 45);
+      const icon =
+        priority === "high" ? "🔴" : priority === "medium" ? "🟡" : "🟢";
+      console.log(
+        `  ${icon} ${priority.toUpperCase().padEnd(6)} | ${item.type?.padEnd(11) || "general    "} | ${title}${title.length >= 45 ? "..." : ""}`
+      );
+
+      if (!dryRun) {
+        await db.collection("feedback").doc(item.id).update({
+          priority,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+      }
+    }
+
+    console.log("\n" + "─".repeat(70));
+    console.log(
+      `\n  Summary: ${results.high.length} high | ${results.medium.length} medium | ${results.low.length} low`
+    );
+
+    if (dryRun) {
+      console.log(
+        "\n  ⚠️  DRY RUN - No changes made. Run without --dry-run to apply."
+      );
+    } else {
+      console.log("\n  ✅ All items prioritized!");
+    }
+
+    console.log("\n" + "=".repeat(70) + "\n");
+
+    return results;
+  } catch (error) {
+    console.error("\n  Error prioritizing feedback:", error.message);
+    throw error;
+  }
+}
+
+/**
+ * Mark feedback as internal-only (excluded from user-facing changelog)
+ */
+async function setInternalOnly(docId, isInternalOnly) {
+  try {
+    const feedbackRef = db.collection("feedback").doc(docId);
+    const doc = await feedbackRef.get();
+
+    if (!doc.exists) {
+      console.log(`\n  ❌ Feedback item ${docId} not found.\n`);
+      return;
+    }
+
+    const value = isInternalOnly === "true" || isInternalOnly === true;
+
+    await feedbackRef.update({
+      isInternalOnly: value,
+    });
+
+    const item = doc.data();
+    console.log("\n" + "=".repeat(70));
+    console.log(`\n  ✅ UPDATED`);
+    console.log(`\n  Item: ${item.title || docId}`);
+    console.log(
+      `  Internal Only: ${value ? "YES (excluded from user changelog)" : "NO (included in user changelog)"}`
+    );
+    console.log("\n" + "=".repeat(70) + "\n");
+  } catch (error) {
+    console.error("\n  Error updating feedback:", error.message);
+    throw error;
+  }
+}
+
+/**
+ * Show help documentation
+ */
+function showHelp() {
+  console.log(`
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                        FEEDBACK QUEUE MANAGER                                ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+QUEUE COMMANDS
+──────────────────────────────────────────────────────────────────────────────
+  (no args)              Auto-claim next "new" item (by priority)
+  low | medium | high    Claim next item with specific priority only
+  claim <id>             Claim a specific item by ID
+  mine                   Show YOUR in-progress items (for resuming after compact)
+  list                   List all feedback grouped by status
+  stats                  Show queue statistics summary
+  search <query>         Search feedback by keyword in title/description
+
+CLAIM HEALTH (keep your claim active)
+──────────────────────────────────────────────────────────────────────────────
+  heartbeat <id> ["msg"] Send keep-alive signal (run every 30 min while working)
+  touch <id> "filepath"  Record file being edited (for work recovery)
+  journal <id>           Show activity log for an item
+
+CLAIM TAKEOVER (when you need someone else's claim)
+──────────────────────────────────────────────────────────────────────────────
+  unclaim <id>           Release a stale claim (>45 min inactive)
+  request-claim <id> "reason"
+                         Request an active claim (starts 15-min countdown)
+  unclaim <id> --emergency "reason"
+                         Emergency takeover (audited, requires justification)
+
+ITEM MANAGEMENT
+──────────────────────────────────────────────────────────────────────────────
+  <id>                   View specific feedback details
+  <id> <status> "notes"  Update status (new, in-progress, in-review, completed, archived)
+  <id> <status> "admin notes" --user-notes "user message"
+                         Update status with both admin and user-facing notes
+  <id> title "text"      Update title
+  <id> priority <p>      Update priority (low, medium, high)
+  <id> resolution "text" Add resolution notes (what was done)
+  <id> internal-only <t> Mark as internal (true) or user-facing (false)
+  <id> defer "YYYY-MM-DD" "reason"  Defer until date
+  delete <id>            Permanently delete feedback item
+
+SUBTASKS
+──────────────────────────────────────────────────────────────────────────────
+  <id> subtask list                     List all subtasks
+  <id> subtask add "title" "desc"       Add a subtask
+  <id> subtask <subId> <status>         Update subtask status
+
+CREATE FEEDBACK
+──────────────────────────────────────────────────────────────────────────────
+  add --title "T" --description "D" [options]
+  create "title" "description" [type] [module] [tab]
+
+  Options for 'add':
+    --title "text"        Required: Title of the feedback
+    --description "text"  Required: Description
+    --type <type>         bug, feature, enhancement, general (default: enhancement)
+    --priority <p>        low, medium, high
+    --module <name>       Module name (e.g., compose, create)
+    --tab <name>          Tab name
+    --internal-only       Mark as internal (not user-facing)
+    --user <name>         User identifier (default: austen)
+
+AUTO-PRIORITIZE
+──────────────────────────────────────────────────────────────────────────────
+  prioritize             Auto-assign priorities to unprioritized items
+  prioritize --dry-run   Preview without making changes
+  prioritize --json      Output raw JSON for AI analysis
+
+WORKFLOW
+──────────────────────────────────────────────────────────────────────────────
+  1. Run with no args to claim next item → status becomes "in-progress"
+  2. Work on the item, optionally breaking into subtasks
+  3. Move to "in-review" when done: <id> in-review "Fixed by doing X"
+  4. Admin marks "completed" after testing: <id> completed "Verified"
+  5. Release batches completed items → "archived" with version tag
+
+EXAMPLES
+──────────────────────────────────────────────────────────────────────────────
+  node scripts/fetch-feedback.js.js                     # Claim next item
+  node scripts/fetch-feedback.js.js high                # Claim next high-priority
+  node scripts/fetch-feedback.js.js abc123              # View item abc123
+  node scripts/fetch-feedback.js.js abc123 in-review "Fixed overflow bug"
+  node scripts/fetch-feedback.js.js search "button"     # Find feedback about buttons
+  node scripts/fetch-feedback.js.js stats               # See queue overview
+  node scripts/fetch-feedback.js.js add --title "Fix X" --description "Details" --type bug
+`);
+}
+
+// ============================================================================
+// HEARTBEAT & CLAIM REQUEST COMMANDS
+// ============================================================================
+
+/**
+ * Send a heartbeat to keep a claim active
+ *
+ * @param {string} docId - Feedback document ID
+ * @param {string} message - Optional status message
+ */
+async function sendHeartbeat(docId, message = null) {
+  // ==========================================================================
+  // CLOUD FUNCTIONS PATH (Bulletproof)
+  // Server validates session ownership before updating
+  // ==========================================================================
+  try {
+    const cfResult = await cfClient.heartbeatViaFunction(docId, SESSION_ID, message || "");
+
+    if (cfResult !== null) {
+      if (cfResult.success) {
+        console.log("\n" + "=".repeat(70));
+        console.log(`\n  💓 HEARTBEAT SENT (via Cloud Function)\n`);
+        console.log("─".repeat(70));
+        console.log(`  ID: ${docId}`);
+        if (message) console.log(`  Message: ${message}`);
+        console.log(`  Claim refreshed - next stale in: ${formatDuration(STALE_THRESHOLDS.ACTIVITY_TIMEOUT_MS)}`);
+        console.log("\n" + "=".repeat(70) + "\n");
+        return { id: docId, heartbeat: true };
+      } else {
+        console.log(`\n  ❌ Heartbeat rejected: ${cfResult.error || "Unknown error"}\n`);
+        return null;
+      }
+    }
+    console.log(`  ⚠️  Cloud Functions unavailable, using direct mode`);
+  } catch (cfError) {
+    console.log(`  ⚠️  Cloud Function error: ${cfError.message}, falling back to direct mode`);
+  }
+
+  // ==========================================================================
+  // DIRECT MODE FALLBACK (Legacy)
+  // ==========================================================================
+  try {
+    const docRef = db.collection("feedback").doc(docId);
+    const doc = await docRef.get();
+
+    if (!doc.exists) {
+      console.log(`\n  ❌ Feedback not found: ${docId}\n`);
+      return null;
+    }
+
+    const item = doc.data();
+    if (item.status !== "in-progress") {
+      console.log(`\n  ⚠️  Item is not in-progress (current: ${item.status}). Cannot heartbeat.\n`);
+      return null;
+    }
+
+    // Update lastActivity
+    await docRef.update({
+      lastActivity: admin.firestore.FieldValue.serverTimestamp(),
+      lastActivityType: "heartbeat",
+    });
+
+    // Journal the heartbeat
+    await addJournalEntry(docId, JOURNAL_TYPES.HEARTBEAT, message || "Heartbeat", {
+      claimToken: item.claimToken?.substring(0, 8),
+    });
+
+    const staleness = checkClaimStaleness(item);
+    const wasApproachingStale = staleness.activityAgeMs > STALE_THRESHOLDS.WARNING_THRESHOLD_MS;
+
+    console.log("\n" + "=".repeat(70));
+    console.log(`\n  💓 HEARTBEAT SENT\n`);
+    console.log("─".repeat(70));
+    console.log(`  ID: ${docId}`);
+    console.log(`  Title: ${(item.title || "No title").substring(0, 50)}`);
+    if (message) console.log(`  Message: ${message}`);
+    console.log(`  Claim refreshed - next stale in: ${formatDuration(STALE_THRESHOLDS.ACTIVITY_TIMEOUT_MS)}`);
+    if (wasApproachingStale) {
+      console.log(`  ✅ Claim was approaching stale - now refreshed!`);
+    }
+    console.log("\n" + "=".repeat(70) + "\n");
+
+    return { id: docId, heartbeat: true };
+  } catch (error) {
+    console.error("\n  Error sending heartbeat:", error.message);
+    throw error;
+  }
+}
+
+/**
+ * Request to take over someone else's claim
+ *
+ * Starts a 15-minute countdown. After the countdown expires,
+ * the requester can claim the item normally.
+ *
+ * @param {string} docId - Feedback document ID
+ * @param {string} reason - Why you need the claim
+ */
+async function requestClaim(docId, reason) {
+  try {
+    const docRef = db.collection("feedback").doc(docId);
+    const doc = await docRef.get();
+
+    if (!doc.exists) {
+      console.log(`\n  ❌ Feedback not found: ${docId}\n`);
+      return null;
+    }
+
+    const item = doc.data();
+    if (item.status !== "in-progress") {
+      console.log(`\n  ℹ️  Item is not in-progress. You can claim it directly.\n`);
+      console.log(`  Run: node scripts/fetch-feedback.js claim ${docId}\n`);
+      return null;
+    }
+
+    // Check if already stale
+    const staleness = checkClaimStaleness(item);
+    if (staleness.isStale) {
+      console.log(`\n  ℹ️  Claim is already stale. You can claim it directly.\n`);
+      console.log(`  Run: node scripts/fetch-feedback.js claim ${docId}\n`);
+      return null;
+    }
+
+    // Check if there's already a pending request
+    if (item.claimRequestedAt) {
+      const requestAge = Date.now() - item.claimRequestedAt.toDate().getTime();
+      const remaining = STALE_THRESHOLDS.REQUEST_WAIT_MS - requestAge;
+      if (remaining > 0) {
+        console.log(`\n  ⏳ A claim request is already pending.\n`);
+        console.log(`  Requested by: ${item.claimRequestedBy || "unknown"}`);
+        console.log(`  Reason: ${item.claimRequestReason || "none"}`);
+        console.log(`  Time remaining: ${formatDuration(remaining)}`);
+        console.log(`\n  Wait for it to expire, then claim normally.\n`);
+        return null;
+      }
+    }
+
+    // Record the claim request
+    await docRef.update({
+      claimRequestedAt: admin.firestore.FieldValue.serverTimestamp(),
+      claimRequestedBy: SESSION_ID.substring(0, 8),
+      claimRequestReason: reason,
+    });
+
+    // Journal the request
+    await addJournalEntry(docId, JOURNAL_TYPES.CLAIM_REQUESTED, reason, {
+      currentToken: item.claimToken?.substring(0, 8),
+      requesterSession: SESSION_ID.substring(0, 8),
+    });
+
+    const waitMinutes = Math.ceil(STALE_THRESHOLDS.REQUEST_WAIT_MS / 60000);
+
+    console.log("\n" + "=".repeat(70));
+    console.log(`\n  ⏳ CLAIM REQUEST SUBMITTED\n`);
+    console.log("─".repeat(70));
+    console.log(`  ID: ${docId}`);
+    console.log(`  Title: ${(item.title || "No title").substring(0, 50)}`);
+    console.log(`  Current holder: [${item.claimToken?.substring(0, 8) || "unknown"}]`);
+    console.log(`  Your reason: ${reason}`);
+    console.log(`\n  Wait period: ${waitMinutes} minutes`);
+    console.log(`  After the wait, run: node scripts/fetch-feedback.js claim ${docId}`);
+    console.log("\n  The current holder can see your request and may release early.");
+    console.log("\n" + "=".repeat(70) + "\n");
+
+    return { id: docId, requested: true, waitMs: STALE_THRESHOLDS.REQUEST_WAIT_MS };
+  } catch (error) {
+    console.error("\n  Error requesting claim:", error.message);
+    throw error;
+  }
+}
+
+/**
+ * Show the work journal for a feedback item
+ *
+ * @param {string} docId - Feedback document ID
+ * @param {number} limit - Max entries to show
+ */
+async function showJournal(docId, limit = 20) {
+  try {
+    const docRef = db.collection("feedback").doc(docId);
+    const doc = await docRef.get();
+
+    if (!doc.exists) {
+      console.log(`\n  ❌ Feedback not found: ${docId}\n`);
+      return null;
+    }
+
+    const item = doc.data();
+    const entries = await getJournalEntries(docId, limit);
+
+    console.log("\n" + "=".repeat(70));
+    console.log(`\n  📓 WORK JOURNAL\n`);
+    console.log("─".repeat(70));
+    console.log(`  ID: ${docId}`);
+    console.log(`  Title: ${(item.title || "No title").substring(0, 50)}`);
+    console.log(`  Status: ${item.status}`);
+    console.log("─".repeat(70));
+
+    if (entries.length === 0) {
+      console.log("\n  No journal entries yet.\n");
+    } else {
+      console.log(`\n  Showing ${entries.length} most recent entries:\n`);
+      entries.forEach((entry, idx) => {
+        const time = entry.timestamp
+          ? entry.timestamp.toLocaleString()
+          : "Unknown time";
+        const icon = getJournalIcon(entry.type);
+        console.log(`  ${idx + 1}. ${icon} [${time}]`);
+        console.log(`     Type: ${entry.type}`);
+        if (entry.message) console.log(`     ${entry.message}`);
+        if (entry.data?.emergency) console.log(`     ⚠️  Emergency: ${entry.data.emergency}`);
+        if (entry.data?.filePath) console.log(`     File: ${entry.data.filePath}`);
+        console.log();
+      });
+    }
+
+    console.log("=".repeat(70) + "\n");
+    return entries;
+  } catch (error) {
+    console.error("\n  Error showing journal:", error.message);
+    throw error;
+  }
+}
+
+/**
+ * Get icon for journal entry type
+ */
+function getJournalIcon(type) {
+  const icons = {
+    [JOURNAL_TYPES.CLAIMED]: "🎯",
+    [JOURNAL_TYPES.HEARTBEAT]: "💓",
+    [JOURNAL_TYPES.NOTE]: "📝",
+    [JOURNAL_TYPES.SUBTASK]: "📋",
+    [JOURNAL_TYPES.STATUS_CHANGE]: "🔄",
+    [JOURNAL_TYPES.FILE_TOUCHED]: "📁",
+    [JOURNAL_TYPES.UNCLAIMED]: "🔓",
+    [JOURNAL_TYPES.CLAIM_REQUESTED]: "⏳",
+    [JOURNAL_TYPES.CLAIM_STOLEN]: "🚨",
+  };
+  return icons[type] || "•";
+}
+
+/**
+ * Record that a file is being edited (for work recovery)
+ *
+ * @param {string} docId - Feedback document ID
+ * @param {string} filePath - Path to the file being edited
+ */
+async function touchFile(docId, filePath) {
+  try {
+    // Try Cloud Function first
+    const cfResult = await cfClient.touchFileViaFunction(docId, SESSION_ID, filePath);
+    if (cfResult !== null) {
+      if (cfResult.success) {
+        if (cfResult.conflict) {
+          console.log(`\n  ⚠️  ${cfResult.message}\n`);
+        } else {
+          console.log(`\n  📁 ${cfResult.message} (via Cloud Function)\n`);
+        }
+        return { id: docId, filePath, conflict: cfResult.conflict };
+      } else {
+        console.log(`\n  ❌ Touch failed: ${cfResult.message}\n`);
+        return null;
+      }
+    }
+
+    // Fall back to direct mode
+    const docRef = db.collection("feedback").doc(docId);
+    const doc = await docRef.get();
+
+    if (!doc.exists) {
+      console.log(`\n  ❌ Feedback not found: ${docId}\n`);
+      return null;
+    }
+
+    const item = doc.data();
+    if (item.status !== "in-progress") {
+      console.log(`\n  ⚠️  Item is not in-progress. Cannot record file touch.\n`);
+      return null;
+    }
+
+    // Update lastActivity
+    await docRef.update({
+      lastActivity: admin.firestore.FieldValue.serverTimestamp(),
+      lastActivityType: "file-edit",
+    });
+
+    // Journal the file touch
+    await addJournalEntry(docId, JOURNAL_TYPES.FILE_TOUCHED, `Editing: ${filePath}`, {
+      filePath,
+      claimToken: item.claimToken?.substring(0, 8),
+    });
+
+    console.log(`\n  📁 Recorded: ${filePath} (direct mode)\n`);
+    return { id: docId, filePath };
+  } catch (error) {
+    console.error("\n  Error recording file touch:", error.message);
+    throw error;
+  }
+}
+
+// ============================================================================
+// UNCLAIM
+// ============================================================================
+
+/**
+ * Unclaim a feedback item (release back to queue)
+ *
+ * Protection against stealing active claims:
+ * - If claim is stale (no activity for 45 min OR >8 hours total): allowed
+ * - If claim is fresh: BLOCKED - must use request-claim protocol
+ * - Emergency flag: bypasses all checks but requires justification
+ *
+ * @param {string} docId - Feedback document ID
+ * @param {object} options - Unclaim options
+ * @param {string} options.emergency - Emergency justification (bypasses checks)
+ */
+async function unclaimFeedback(docId, options = {}) {
+  const { emergency = null, confirmEmergency = false } = options;
+
+  // ==========================================================================
+  // CLOUD FUNCTIONS PATH (Bulletproof)
+  // ==========================================================================
+  try {
+    const cfResult = await cfClient.unclaimViaFunction(
+      docId,
+      SESSION_ID,
+      "new", // newStatus
+      "", // notes
+      !!emergency,
+      emergency || "",
+      confirmEmergency
+    );
+
+    if (cfResult !== null) {
+      if (cfResult.success) {
+        console.log(`\n  🔓 Unclaimed via Cloud Function\n`);
+        return { id: docId, status: "new", unclaimReason: cfResult.reason };
+      } else {
+        console.log(`\n  ❌ Unclaim rejected: ${cfResult.error || "Unknown error"}\n`);
+        return null;
+      }
+    }
+    // Cloud Functions unavailable - fall through to direct mode
+    console.log(`  ⚠️  Cloud Functions unavailable, using direct mode`);
+  } catch (cfError) {
+    console.log(`  ⚠️  Cloud Function error: ${cfError.message}, falling back to direct mode`);
+  }
+
+  // ==========================================================================
+  // DIRECT MODE FALLBACK (Legacy)
+  // ==========================================================================
+  try {
+    const docRef = db.collection("feedback").doc(docId);
+    const doc = await docRef.get();
+
+    if (!doc.exists) {
+      console.log(`\n  ❌ Feedback not found: ${docId}\n`);
+      return null;
+    }
+
+    const item = doc.data();
+    if (item.status !== "in-progress") {
+      console.log(
+        `\n  ⚠️  Item is not in-progress (current: ${item.status}). Cannot unclaim.\n`
+      );
+      return null;
+    }
+
+    const claimToken = item.claimToken?.substring(0, 8) || "none";
+    const staleness = checkClaimStaleness(item);
+
+    // Check if there's a pending claim request that has expired
+    const hasExpiredRequest = item.claimRequestedAt &&
+      (Date.now() - item.claimRequestedAt.toDate().getTime() > STALE_THRESHOLDS.REQUEST_WAIT_MS);
+
+    // Emergency requires confirmation (already checked in main, but double-check)
+    if (emergency && !confirmEmergency) {
+      console.log("\n  ❌ Emergency unclaim requires --confirm-emergency flag\n");
+      return null;
+    }
+
+    // Check emergency cooldown
+    if (emergency) {
+      const recentEmergency = await db.collection("emergencyActions")
+        .where("performedBy", "==", ADMIN_USER_ID)
+        .orderBy("timestamp", "desc")
+        .limit(1)
+        .get();
+
+      if (!recentEmergency.empty) {
+        const lastAction = recentEmergency.docs[0].data();
+        const lastActionTime = lastAction.timestamp?.toDate?.()?.getTime() || 0;
+        const cooldownExpires = lastActionTime + EMERGENCY_CONFIG.COOLDOWN_MS;
+
+        if (Date.now() < cooldownExpires) {
+          const remainingMins = Math.ceil((cooldownExpires - Date.now()) / 60000);
+          console.log("\n  ⛔ EMERGENCY COOLDOWN ACTIVE\n");
+          console.log(`  You used emergency override ${formatDuration(Date.now() - lastActionTime)} ago.`);
+          console.log(`  Cooldown remaining: ${remainingMins} minutes\n`);
+          console.log("  Wait for cooldown to expire, or use another approach:");
+          console.log("    1. Wait for claim to become stale");
+          console.log("    2. Use request-claim to start a 15-min countdown\n");
+          return null;
+        }
+      }
+    }
+
+    // Decision logic
+    const canUnclaim = staleness.isStale || hasExpiredRequest || emergency;
+
+    if (!canUnclaim) {
+      // BLOCKED: Fresh claim, no expired request, no emergency
+      const activityAgeStr = formatDuration(staleness.activityAgeMs);
+      const totalAgeStr = formatDuration(staleness.ageMs);
+      const staleIn = formatDuration(STALE_THRESHOLDS.ACTIVITY_TIMEOUT_MS - staleness.activityAgeMs);
+
+      console.log("\n" + "=".repeat(70));
+      console.log("\n  ⛔ CANNOT UNCLAIM - ACTIVE WORK IN PROGRESS\n");
+      console.log("─".repeat(70));
+      console.log(`  ID: ${docId}`);
+      console.log(`  Title: ${item.title || "No title"}`);
+      console.log(`  Claimed by token: [${claimToken}]`);
+      console.log(`  Last activity: ${activityAgeStr} ago`);
+      console.log(`  Total claim time: ${totalAgeStr}`);
+      console.log(`  Becomes stale in: ${staleIn}`);
+      console.log("\n  Another agent is actively working on this item.\n");
+      console.log("  Options:");
+      console.log("    1. Wait for the claim to become stale (45 min inactivity)");
+      console.log(`    2. Request the claim: request-claim ${docId} "Your reason"`);
+      console.log("       (Starts 15-min countdown, then you can claim)");
+      console.log(`    3. Emergency takeover: unclaim ${docId} --emergency "Justification"`);
+      console.log("       (Audited, requires valid reason, destroys other agent's work)");
+      console.log("\n" + "=".repeat(70) + "\n");
+      return null;
+    }
+
+    // Determine the reason for unclaim
+    let unclaimReason;
+    let journalType = JOURNAL_TYPES.UNCLAIMED;
+
+    if (emergency) {
+      unclaimReason = "emergency";
+      journalType = JOURNAL_TYPES.CLAIM_STOLEN;
+      console.log("\n  🚨 EMERGENCY UNCLAIM 🚨");
+      console.log(`  Justification: ${emergency}`);
+      console.log(`  Token [${claimToken}] was active ${formatDuration(staleness.activityAgeMs)} ago`);
+      console.log("  This action is logged and flagged for review.\n");
+    } else if (hasExpiredRequest) {
+      unclaimReason = "request-expired";
+      console.log(`\n  ✅ Claim request wait period expired. Taking over from [${claimToken}].\n`);
+    } else if (staleness.reason === "no-activity") {
+      unclaimReason = "stale-no-activity";
+      console.log(`\n  ℹ️  Claim was stale (no activity for ${formatDuration(staleness.activityAgeMs)})\n`);
+    } else if (staleness.reason === "exceeded-max-time") {
+      unclaimReason = "stale-max-time";
+      console.log(`\n  ℹ️  Claim exceeded max time (${formatDuration(staleness.ageMs)} total)\n`);
+    } else {
+      unclaimReason = "stale";
+    }
+
+    // Journal the unclaim
+    await addJournalEntry(docId, journalType, `Unclaimed: ${unclaimReason}`, {
+      previousToken: claimToken,
+      reason: unclaimReason,
+      emergency: emergency || null,
+      activityAgeMs: staleness.activityAgeMs,
+      totalAgeMs: staleness.ageMs,
+    });
+
+    // Log emergency action to audit trail
+    if (emergency) {
+      await db.collection("emergencyActions").add({
+        actionType: "unclaim",
+        feedbackId: docId,
+        performedBy: ADMIN_USER_ID,
+        reason: emergency,
+        timestamp: admin.firestore.FieldValue.serverTimestamp(),
+        previousClaimant: item.claimedBy || null,
+        previousClaimToken: item.claimToken || null,
+        previousSession: item.claimSession || null,
+        sessionId: SESSION_ID,
+      });
+      console.log("  📝 Emergency action logged to audit trail");
+    }
+
+    // Update session's active claims if releasing own claim
+    if (item.claimSession) {
+      db.collection("agentSessions").doc(item.claimSession).update({
+        activeClaims: admin.firestore.FieldValue.arrayRemove(docId),
+      }).catch(() => {}); // Ignore - session may not exist
+    }
+
+    // Clear claim fields
+    await docRef.update({
+      status: "new",
+      claimedAt: admin.firestore.FieldValue.delete(),
+      claimedBy: admin.firestore.FieldValue.delete(),
+      claimToken: admin.firestore.FieldValue.delete(),
+      claimSession: admin.firestore.FieldValue.delete(),
+      lastActivity: admin.firestore.FieldValue.delete(),
+      lastActivityType: admin.firestore.FieldValue.delete(),
+      claimRequestedAt: admin.firestore.FieldValue.delete(),
+      claimRequestedBy: admin.firestore.FieldValue.delete(),
+      claimRequestReason: admin.firestore.FieldValue.delete(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
+    console.log("\n" + "=".repeat(70));
+    console.log(`\n  🔓 FEEDBACK UNCLAIMED\n`);
+    console.log("─".repeat(70));
+    console.log(`  ID: ${docId}`);
+    console.log(`  Title: ${item.title || "No title"}`);
+    console.log(`  Released Token: [${claimToken}]`);
+    console.log(`  Reason: ${unclaimReason}`);
+    console.log(`  Status: new (back in queue)`);
+    console.log("\n" + "=".repeat(70) + "\n");
+
+    return { id: docId, status: "new", unclaimReason };
+  } catch (error) {
+    console.error("\n  Error unclaiming feedback:", error.message);
+    throw error;
+  }
+}
+
+/**
+ * Claim a specific feedback item by ID
+ * Uses atomicClaim for race-safe claiming
+ */
+async function claimSpecificFeedback(docId) {
+  try {
+    // First check if item exists and is claimable (quick check before transaction)
+    const docRef = db.collection("feedback").doc(docId);
+    const doc = await docRef.get();
+
+    if (!doc.exists) {
+      console.log(`\n  ❌ Feedback not found: ${docId}\n`);
+      return null;
+    }
+
+    const item = doc.data();
+
+    // Check if already claimed
+    if (item.status === "in-progress") {
+      const claimedAt = item.claimedAt?.toDate?.()
+        ? item.claimedAt.toDate().toLocaleString()
+        : "Unknown";
+      const claimToken = item.claimToken?.substring(0, 8) || "unknown";
+      console.log(`\n  ⚠️  Item already in-progress (claimed: ${claimedAt}, token: [${claimToken}])`);
+      console.log(
+        `  Use 'unclaim ${docId}' first if you want to reclaim it.\n`
+      );
+      return null;
+    }
+
+    // Secondary check: If there's a recent claimToken (within 5 seconds), block
+    // This catches the race condition where status update hasn't propagated
+    if (item.claimToken && item.claimedAt) {
+      const claimAge = item.claimedAt?.toDate?.()
+        ? Date.now() - item.claimedAt.toDate().getTime()
+        : Infinity;
+      if (claimAge < 5000) {
+        const claimToken = item.claimToken.substring(0, 8);
+        console.log(`\n  ⚠️  Item was just claimed ${Math.round(claimAge/1000)}s ago (token: [${claimToken}])`);
+        console.log(`  Wait a moment and try again, or use 'unclaim ${docId}' first.\n`);
+        return null;
+      }
+    }
+
+    // Check if in terminal state
+    if (["completed", "archived"].includes(item.status)) {
+      console.log(
+        `\n  ⚠️  Item is ${item.status}. Cannot claim completed/archived items.\n`
+      );
+      return null;
+    }
+
+    // Use atomicClaim for race-safe claiming
+    const claimedItem = await atomicClaim(docId, false);
+
+    if (!claimedItem) {
+      console.log(`\n  ❌ Failed to claim item (another agent may have claimed it first)\n`);
+      return null;
+    }
+
+    // Output the claimed item details
+    const createdAt = claimedItem.createdAt?.toDate?.()
+      ? claimedItem.createdAt.toDate().toLocaleString()
+      : "Unknown date";
+
+    console.log("\n" + "=".repeat(70));
+    console.log(`\n  🎯 CLAIMED FEEDBACK\n`);
+    console.log("─".repeat(70));
+    console.log(`  ID: ${docId}`);
+    console.log(`  Type: ${claimedItem.type || "N/A"}`);
+    console.log(`  Priority: ${claimedItem.priority || "N/A"}`);
+    console.log(
+      `  User: ${claimedItem.userDisplayName || claimedItem.userEmail || "Anonymous"}`
+    );
+    console.log(`  Created: ${createdAt}`);
+    console.log("─".repeat(70));
+    console.log(`  Title: ${claimedItem.title || "No title"}`);
+    console.log("─".repeat(70));
+    console.log(`  Description:\n`);
+    console.log(`  ${claimedItem.description || "No description"}`);
+    console.log("─".repeat(70));
+    console.log(`  Module: ${claimedItem.capturedModule || "Unknown"}`);
+    console.log(`  Tab: ${claimedItem.capturedTab || "Unknown"}`);
+
+    if (claimedItem.resolutionNotes) {
+      console.log("─".repeat(70));
+      console.log(`  Previous Notes: ${claimedItem.resolutionNotes}`);
+    }
+
+    console.log("\n" + "=".repeat(70));
+    console.log(
+      `\n  To resolve: node scripts/fetch-feedback.js ${docId} in-review "Your resolution notes"\n`
+    );
+
+    return { id: docId, ...claimedItem };
+  } catch (error) {
+    console.error("\n  Error claiming feedback:", error.message);
+    throw error;
+  }
+}
+
+/**
+ * Search feedback by keyword
+ */
+async function searchFeedback(query) {
+  try {
+    const snapshot = await db
+      .collection("feedback")
+      .orderBy("createdAt", "desc")
+      .get();
+
+    if (snapshot.empty) {
+      console.log("\n  No feedback found in the database.\n");
+      return [];
+    }
+
+    const queryLower = query.toLowerCase();
+    const matches = snapshot.docs
+      .map((doc) => ({ id: doc.id, ...doc.data() }))
+      .filter((item) => {
+        const title = (item.title || "").toLowerCase();
+        const desc = (item.description || "").toLowerCase();
+        const resolution = (item.resolutionNotes || "").toLowerCase();
+        const module = (item.capturedModule || "").toLowerCase();
+        return (
+          title.includes(queryLower) ||
+          desc.includes(queryLower) ||
+          resolution.includes(queryLower) ||
+          module.includes(queryLower)
+        );
+      });
+
+    console.log("\n" + "=".repeat(70));
+    console.log(`\n  🔍 SEARCH RESULTS for "${query}"\n`);
+    console.log("─".repeat(70));
+
+    if (matches.length === 0) {
+      console.log(`  No feedback found matching "${query}"\n`);
+    } else {
+      console.log(`  Found ${matches.length} item(s):\n`);
+
+      matches.forEach((item) => {
+        const statusIcon =
+          {
+            new: "🆕",
+            "in-progress": "🔄",
+            "in-review": "👁️",
+            completed: "✅",
+            archived: "📦",
+          }[item.status] || "❓";
+
+        const priorityIcon =
+          {
+            high: "🔴",
+            medium: "🟡",
+            low: "🟢",
+          }[item.priority] || "⚪";
+
+        const title = (item.title || "No title").substring(0, 50);
+        console.log(
+          `  ${statusIcon} ${priorityIcon} ${item.id.substring(0, 8)}... | ${title}${item.title?.length > 50 ? "..." : ""}`
+        );
+      });
+    }
+
+    console.log("\n" + "=".repeat(70) + "\n");
+    return matches;
+  } catch (error) {
+    console.error("\n  Error searching feedback:", error.message);
+    throw error;
+  }
+}
+
+/**
+ * Show queue statistics
+ */
+async function showStats() {
+  try {
+    const snapshot = await db.collection("feedback").get();
+
+    if (snapshot.empty) {
+      console.log("\n  No feedback in the database.\n");
+      return;
+    }
+
+    const items = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+
+    // Count by status
+    const byStatus = {
+      new: 0,
+      "in-progress": 0,
+      "in-review": 0,
+      completed: 0,
+      archived: 0,
+    };
+    items.forEach((item) => {
+      const status = item.status || "new";
+      if (byStatus.hasOwnProperty(status)) {
+        byStatus[status]++;
+      } else if (["resolved", "deferred"].includes(status)) {
+        byStatus.archived++;
+      } else {
+        byStatus.new++;
+      }
+    });
+
+    // Count by type
+    const byType = {};
+    items.forEach((item) => {
+      const type = item.type || "general";
+      byType[type] = (byType[type] || 0) + 1;
+    });
+
+    // Count by priority (only non-archived)
+    const activeItems = items.filter(
+      (i) =>
+        !["completed", "archived", "resolved", "deferred"].includes(i.status)
+    );
+    const byPriority = { high: 0, medium: 0, low: 0, unset: 0 };
+    activeItems.forEach((item) => {
+      const priority = item.priority || "unset";
+      if (byPriority.hasOwnProperty(priority)) {
+        byPriority[priority]++;
+      } else {
+        byPriority.unset++;
+      }
+    });
+
+    // Find stale items
+    const staleItems = items.filter((item) => {
+      if (item.status !== "in-progress") return false;
+      if (!item.claimedAt?.toDate?.()) return false;
+      return Date.now() - item.claimedAt.toDate().getTime() > STALE_CLAIM_MS;
+    });
+
+    console.log("\n" + "=".repeat(70));
+    console.log(`\n  📊 FEEDBACK QUEUE STATISTICS\n`);
+    console.log("─".repeat(70));
+
+    console.log(`\n  BY STATUS:`);
+    console.log(`    🆕 New:          ${byStatus.new.toString().padStart(3)}`);
+    console.log(
+      `    🔄 In Progress:  ${byStatus["in-progress"].toString().padStart(3)}${staleItems.length > 0 ? ` (${staleItems.length} stale)` : ""}`
+    );
+    console.log(
+      `    👁️  In Review:    ${byStatus["in-review"].toString().padStart(3)}`
+    );
+    console.log(
+      `    ✅ Completed:    ${byStatus.completed.toString().padStart(3)}`
+    );
+    console.log(
+      `    📦 Archived:     ${byStatus.archived.toString().padStart(3)}`
+    );
+    console.log(`    ─────────────────────`);
+    console.log(`    📝 Total:        ${items.length.toString().padStart(3)}`);
+
+    console.log(`\n  BY TYPE:`);
+    Object.entries(byType)
+      .sort((a, b) => b[1] - a[1])
+      .forEach(([type, count]) => {
+        console.log(`    ${type.padEnd(12)} ${count.toString().padStart(3)}`);
+      });
+
+    console.log(`\n  ACTIVE BY PRIORITY:`);
+    console.log(`    🔴 High:     ${byPriority.high.toString().padStart(3)}`);
+    console.log(`    🟡 Medium:   ${byPriority.medium.toString().padStart(3)}`);
+    console.log(`    🟢 Low:      ${byPriority.low.toString().padStart(3)}`);
+    if (byPriority.unset > 0) {
+      console.log(
+        `    ⚪ Unset:    ${byPriority.unset.toString().padStart(3)}  ← run 'prioritize' to assign`
+      );
+    }
+
+    // Actionable summary
+    console.log("\n" + "─".repeat(70));
+    const actionable = byStatus.new + byStatus["in-review"];
+    if (actionable > 0) {
+      console.log(
+        `\n  📌 ${actionable} item(s) need attention (${byStatus.new} new, ${byStatus["in-review"]} awaiting review)`
+      );
+    }
+    if (byStatus.completed > 0) {
+      console.log(`  🚀 ${byStatus.completed} item(s) ready for release`);
+    }
+    if (staleItems.length > 0) {
+      console.log(
+        `  ⚠️  ${staleItems.length} stale in-progress item(s) (claimed >2h ago)`
+      );
+    }
+
+    console.log("\n" + "=".repeat(70) + "\n");
+  } catch (error) {
+    console.error("\n  Error fetching stats:", error.message);
+    throw error;
+  }
+}
+
+/**
+ * Add feedback with flag-based syntax
+ */
+async function addFeedback(args) {
+  // Parse flags
+  const flags = {};
+  let i = 0;
+  while (i < args.length) {
+    if (args[i].startsWith("--")) {
+      const flag = args[i].substring(2);
+      if (flag === "internal-only") {
+        flags.isInternalOnly = true;
+        i++;
+      } else if (i + 1 < args.length && !args[i + 1].startsWith("--")) {
+        flags[flag] = args[i + 1];
+        i += 2;
+      } else {
+        i++;
+      }
+    } else {
+      i++;
+    }
+  }
+
+  // Validate required fields
+  if (!flags.title) {
+    console.log("\n  ❌ Missing required --title\n");
+    console.log(
+      '  Usage: node scripts/fetch-feedback.js.js add --title "Title" --description "Desc" [options]'
+    );
+    console.log(
+      "  Options: --type, --priority, --module, --tab, --internal-only, --user\n"
+    );
+    return null;
+  }
+
+  if (!flags.description) {
+    console.log("\n  ❌ Missing required --description\n");
+    return null;
+  }
+
+  // Validate type
+  const validTypes = ["bug", "feature", "enhancement", "general"];
+  const type = flags.type || "enhancement";
+  if (!validTypes.includes(type)) {
+    console.log(
+      `\n  ⚠️  Invalid type "${type}". Valid: ${validTypes.join(", ")}\n`
+    );
+    return null;
+  }
+
+  // Validate priority if provided
+  const validPriorities = ["low", "medium", "high"];
+  if (flags.priority && !validPriorities.includes(flags.priority)) {
+    console.log(
+      `\n  ⚠️  Invalid priority "${flags.priority}". Valid: ${validPriorities.join(", ")}\n`
+    );
+    return null;
+  }
+
+  // Use admin user from config
+  const feedbackData = {
+    title: flags.title,
+    description: flags.description,
+    // Preserve originals (write-once) for long-term analysis of user language
+    originalTitle: flags.title,
+    originalDescription: flags.description,
+    type,
+    status: "new",
+    source: "terminal", // Created via CLI, not app feedback form
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    userId: ADMIN_USER.userId,
+    userDisplayName: ADMIN_USER.displayName,
+    userEmail: ADMIN_USER.email,
+    userPhotoURL: ADMIN_USER.photoURL,
+  };
+
+  if (flags.priority) {
+    feedbackData.priority = flags.priority;
+  }
+  if (flags.module) {
+    feedbackData.capturedModule = flags.module;
+  }
+  if (flags.tab) {
+    feedbackData.capturedTab = flags.tab;
+  }
+  if (flags.isInternalOnly) {
+    feedbackData.isInternalOnly = true;
+  }
+
+  try {
+    const docRef = await db.collection("feedback").add(feedbackData);
+
+    console.log("\n" + "=".repeat(70));
+    console.log(`\n  ✅ FEEDBACK CREATED\n`);
+    console.log("─".repeat(70));
+    console.log(`  ID: ${docRef.id}`);
+    console.log(`  Title: ${flags.title}`);
+    console.log(`  Type: ${type}`);
+    if (flags.priority) console.log(`  Priority: ${flags.priority}`);
+    if (flags.module) console.log(`  Module: ${flags.module}`);
+    if (flags.tab) console.log(`  Tab: ${flags.tab}`);
+    if (flags.isInternalOnly) console.log(`  Internal Only: YES`);
+    console.log("\n" + "=".repeat(70) + "\n");
+
+    return { id: docRef.id, ...feedbackData };
+  } catch (error) {
+    console.error("\n  Error creating feedback:", error.message);
+    throw error;
+  }
+}
+
+/**
+ * Show only items claimed by the current user (ADMIN_USER_ID)
+ */
+async function showMyProgress() {
+  try {
+    const snapshot = await db
+      .collection("feedback")
+      .where("status", "==", "in-progress")
+      .where("claimedBy", "==", ADMIN_USER_ID)
+      .get();
+
+    if (snapshot.empty) {
+      console.log("\n" + "=".repeat(70));
+      console.log("\n  ✨ You have no items in progress\n");
+      console.log("=".repeat(70) + "\n");
+      return [];
+    }
+
+    const items = snapshot.docs
+      .map((doc) => ({ id: doc.id, ...doc.data() }))
+      .sort((a, b) => {
+        const timeA = a.claimedAt?.toDate?.()?.getTime() || 0;
+        const timeB = b.claimedAt?.toDate?.()?.getTime() || 0;
+        return timeA - timeB; // Oldest first
+      });
+
+    console.log("\n" + "=".repeat(70));
+    console.log(`\n  📋 IN-PROGRESS ITEMS (${items.length})\n`);
+    console.log("  ⚠️  NOTE: These may belong to OTHER Claude sessions.");
+    console.log("  Each session has a unique claim token (shown in brackets).");
+    console.log("  If another agent is actively working, do NOT unclaim.\n");
+    console.log("─".repeat(70));
+
+    items.forEach((item, idx) => {
+      const claimedAt = item.claimedAt?.toDate?.()
+        ? item.claimedAt.toDate().toLocaleString()
+        : "Unknown";
+      const title = (item.title || "No title").substring(0, 60);
+      const token = item.claimToken?.substring(0, 8) || "no-token";
+
+      console.log(`\n  ${idx + 1}. ${item.id.substring(0, 8)}... | ${item.type || "N/A"}`);
+      console.log(`     ${title}${item.title?.length > 60 ? "..." : ""}`);
+      console.log(`     Claimed: ${claimedAt} | Token: [${token}]`);
+    });
+
+    console.log("\n" + "=".repeat(70) + "\n");
+
+    return items;
+  } catch (error) {
+    console.error("\n  Error fetching your progress:", error.message);
+    throw error;
+  }
+}
+
+// Parse command line arguments
+const args = process.argv.slice(2);
+
+async function main() {
+  const validPriorities = ["low", "medium", "high"];
+
+  // Register session on startup (for bulletproof claim coordination)
+  // Skip for read-only commands (list, stats, help)
+  const readOnlyCommands = ["list", "stats", "help", "--help", "-h", "journal"];
+  const isReadOnly = readOnlyCommands.includes(args[0]);
+
+  if (!isReadOnly) {
+    await registerSession();
+  }
+
+  // Handle cleanup on exit
+  process.on("SIGINT", async () => {
+    await cleanupSession();
+    process.exit(0);
+  });
+
+  if (args.length === 0) {
+    // No args: claim next item
+    await claimNextFeedback();
+  } else if (args[0] === "help" || args[0] === "--help" || args[0] === "-h") {
+    // Show help
+    showHelp();
+  } else if (validPriorities.includes(args[0])) {
+    // Priority filter: claim next item with specified priority
+    await claimNextFeedback(args[0]);
+  } else if (args[0] === "list") {
+    // List all feedback
+    await listAllFeedback();
+  } else if (args[0] === "stats") {
+    // Show queue statistics
+    await showStats();
+  } else if (args[0] === "mine" || args[0] === "my-progress") {
+    // Show only your in-progress items
+    await showMyProgress();
+  } else if (args[0] === "search") {
+    // Search: search <query>
+    if (!args[1]) {
+      console.log(
+        "\n  Usage: node scripts/fetch-feedback.js.js search <query>\n"
+      );
+      console.log(
+        '  Example: node scripts/fetch-feedback.js.js search "button"\n'
+      );
+      return;
+    }
+    await searchFeedback(args.slice(1).join(" "));
+  } else if (args[0] === "claim") {
+    // Claim specific: claim <id> (supports partial IDs)
+    if (!args[1]) {
+      console.log("\n  Usage: node scripts/fetch-feedback.js claim <id>\n");
+      console.log("  Accepts full ID or partial ID (8+ characters from list output)\n");
+      return;
+    }
+    const fullId = await resolveAndValidateId(args[1]);
+    if (!fullId) return;
+    await claimSpecificFeedback(fullId);
+  } else if (args[0] === "unclaim") {
+    // Unclaim: unclaim <id> [--emergency "reason" --confirm-emergency]
+    if (!args[1]) {
+      console.log("\n  Usage: node scripts/fetch-feedback.js unclaim <id> [--emergency \"reason\" --confirm-emergency]\n");
+      console.log("  Unclaims an item, returning it to the queue.\n");
+      console.log("  Fresh claims (<45 min activity) are protected. Options:");
+      console.log("    1. Wait for claim to become stale");
+      console.log("    2. Use request-claim to start a 15-min countdown");
+      console.log("    3. Use --emergency for true emergencies (audited, requires confirmation)\n");
+      return;
+    }
+    const emergencyIdx = args.indexOf("--emergency");
+    const emergency = emergencyIdx !== -1 ? args[emergencyIdx + 1] : null;
+    const confirmEmergency = args.includes("--confirm-emergency");
+
+    if (emergencyIdx !== -1 && !emergency) {
+      console.log("\n  ❌ --emergency requires a justification string\n");
+      console.log("  Example: unclaim abc123 --emergency \"Blocking release 0.3.0\" --confirm-emergency\n");
+      return;
+    }
+
+    // Emergency requires confirmation
+    if (emergency && !confirmEmergency) {
+      console.log("\n  ⚠️  EMERGENCY UNCLAIM REQUIRES CONFIRMATION\n");
+      console.log("  This action will:");
+      console.log("    - Forcibly take another agent's claim");
+      console.log("    - Be logged to an audit trail");
+      console.log("    - Trigger a 1-hour cooldown on further emergency actions\n");
+      console.log("  To proceed, add --confirm-emergency to your command:\n");
+      console.log(`    unclaim ${args[1]} --emergency "${emergency}" --confirm-emergency\n`);
+      return;
+    }
+
+    const fullId = await resolveAndValidateId(args[1]);
+    if (!fullId) return;
+    await unclaimFeedback(fullId, { emergency, confirmEmergency });
+
+  } else if (args[0] === "heartbeat") {
+    // Heartbeat: heartbeat <id> ["optional message"]
+    if (!args[1]) {
+      console.log("\n  Usage: node scripts/fetch-feedback.js heartbeat <id> [\"message\"]\n");
+      console.log("  Signals that you're still actively working on an item.");
+      console.log("  Run every 30 minutes to prevent your claim from going stale.\n");
+      return;
+    }
+    const fullId = await resolveAndValidateId(args[1]);
+    if (!fullId) return;
+    await sendHeartbeat(fullId, args[2] || null);
+
+  } else if (args[0] === "request-claim") {
+    // Request claim: request-claim <id> "reason"
+    if (!args[1] || !args[2]) {
+      console.log("\n  Usage: node scripts/fetch-feedback.js request-claim <id> \"reason\"\n");
+      console.log("  Requests to take over an active claim. Starts a 15-minute countdown.");
+      console.log("  After the countdown, you can claim the item normally.\n");
+      return;
+    }
+    const fullId = await resolveAndValidateId(args[1]);
+    if (!fullId) return;
+    await requestClaim(fullId, args[2]);
+
+  } else if (args[0] === "journal") {
+    // Journal: journal <id> [--limit N]
+    if (!args[1]) {
+      console.log("\n  Usage: node scripts/fetch-feedback.js journal <id> [--limit N]\n");
+      console.log("  Shows the work journal (activity log) for an item.\n");
+      return;
+    }
+    const fullId = await resolveAndValidateId(args[1]);
+    if (!fullId) return;
+    const limitIdx = args.indexOf("--limit");
+    const limit = limitIdx !== -1 ? parseInt(args[limitIdx + 1]) || 20 : 20;
+    await showJournal(fullId, limit);
+
+  } else if (args[0] === "touch") {
+    // Touch: touch <id> "file/path"
+    if (!args[1] || !args[2]) {
+      console.log("\n  Usage: node scripts/fetch-feedback.js touch <id> \"file/path\"\n");
+      console.log("  Records that you're editing a file. Helps with work recovery.\n");
+      return;
+    }
+    const fullId = await resolveAndValidateId(args[1]);
+    if (!fullId) return;
+    await touchFile(fullId, args[2]);
+  } else if (args[0] === "add") {
+    // Alias for "create" with flags - kept for backwards compatibility
+    await addFeedback(args.slice(1));
+  } else if (args[0] === "delete") {
+    // Delete: delete <id>
+    if (!args[1]) {
+      console.log("\n  Usage: node scripts/fetch-feedback.js delete <id>\n");
+      return;
+    }
+    const fullId = await resolveAndValidateId(args[1]);
+    if (!fullId) return;
+    await deleteFeedback(fullId);
+  } else if (args[0] === "prioritize") {
+    // Auto-prioritize all unprioritized feedback
+    const dryRun = args.includes("--dry-run");
+    const jsonOutput = args.includes("--json");
+    await prioritizeFeedback(dryRun, jsonOutput);
+  } else if (args[0] === "create") {
+    // Create new feedback - supports BOTH styles:
+    // Positional: create "title" "description" [type] [module] [tab]
+    // Flags:      create --title "X" --description "Y" --type bug --priority high
+
+    // Detect style by checking if any arg starts with --
+    const hasFlags = args.slice(1).some(a => a.startsWith("--"));
+
+    if (hasFlags) {
+      // Use flag-based parsing (delegate to addFeedback)
+      await addFeedback(args.slice(1));
+    } else {
+      // Positional argument style
+      const title = args[1];
+      const description = args[2];
+      const type = args[3] || "enhancement";
+      const module = args[4] || "Unknown";
+      const tab = args[5] || "Unknown";
+
+      if (!title || !description) {
+        console.log("\n  Usage (two styles supported):\n");
+        console.log("  Positional:");
+        console.log('    create "title" "description" [type] [module] [tab]');
+        console.log('    Example: create "Fix trail jank" "Trails janky" bug compose playback\n');
+        console.log("  Flags:");
+        console.log('    create --title "Title" --description "Desc" [--type bug] [--priority high]');
+        console.log('    Example: create --title "Fix jank" --description "Trails janky" --type bug\n');
+        console.log("  Types: bug, feature, enhancement, general");
+        console.log("  Priorities: low, medium, high\n");
+        return;
+      }
+
+      // Use admin user from config
+      const docRef = await db.collection("feedback").add({
+        title,
+        description: description,
+        // Preserve originals (write-once) for long-term analysis of user language
+        originalTitle: title,
+        originalDescription: description,
+        type,
+        capturedModule: module,
+        capturedTab: tab,
+        status: "new",
+        source: "terminal",
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        userId: ADMIN_USER.userId,
+        userDisplayName: ADMIN_USER.displayName,
+        userEmail: ADMIN_USER.email,
+        userPhotoURL: ADMIN_USER.photoURL,
+      });
+
+      console.log("\n" + "=".repeat(70));
+      console.log("\n  ✅ FEEDBACK CREATED\n");
+      console.log("─".repeat(70));
+      console.log(`  ID: ${docRef.id}`);
+      console.log(`  Title: ${title}`);
+      console.log(`  Type: ${type}`);
+      console.log(`  Module: ${module} / ${tab}`);
+      console.log("\n" + "=".repeat(70) + "\n");
+    }
+  } else {
+    // All remaining commands use args[0] as a document ID
+    // Resolve partial ID to full ID before proceeding
+    const fullId = await resolveAndValidateId(args[0]);
+    if (!fullId) {
+      return;
+    }
+    args[0] = fullId;
+
+    if (args[1] === "defer") {
+      // Defer: <id> defer "YYYY-MM-DD" "Reason"
+      if (!args[2]) {
+        console.log(
+          '\n  Usage: node scripts/fetch-feedback.js <id> defer "YYYY-MM-DD" "Reason"\n'
+        );
+        console.log(
+          '  Example: node scripts/fetch-feedback.js abc123 defer "2026-03-15" "Revisit after Q1"\n'
+        );
+        return;
+      }
+      await deferFeedback(args[0], args[2], args[3]);
+    } else if (args[1] === "internal-only") {
+      // Internal-only: <id> internal-only true/false
+      if (!args[2]) {
+        console.log(
+          "\n  Usage: node scripts/fetch-feedback.js <id> internal-only true/false\n"
+        );
+        console.log(
+          "  Example: node scripts/fetch-feedback.js abc123 internal-only true\n"
+        );
+        return;
+      }
+      await setInternalOnly(args[0], args[2]);
+    } else if (args[1] === "title") {
+      // Update title: <id> title "new title"
+      await updateFeedbackTitle(args[0], args[2]);
+    } else if (args[1] === "description") {
+      // Update description: <id> description "new description"
+      await updateFeedbackDescription(args[0], args[2]);
+    } else if (args[1] === "priority") {
+      // Update priority: <id> priority <low|medium|high>
+      await updateFeedbackPriority(args[0], args[2]);
+    } else if (args[1] === "resolution") {
+      // Update resolution notes: <id> resolution "resolution notes"
+      await updateResolutionNotes(args[0], args[2]);
+    } else if (args[1] === "changelog") {
+      // Update changelog entry: <id> changelog "changelog text"
+      await updateChangelogEntry(args[0], args[2]);
+    } else if (args[1] === "subtask") {
+      // Subtask commands: <id> subtask <command> [args...]
+      const docId = args[0];
+      const subCommand = args[2];
+
+      if (subCommand === "add") {
+        // <id> subtask add "title" "description" [dependsOn...]
+        const title = args[3];
+        const description = args[4];
+        const dependsOn = args.slice(5); // Remaining args are dependency IDs
+        if (!title || !description) {
+          console.log(
+            '\n  Usage: node scripts/fetch-feedback.js <id> subtask add "title" "description" [dependsOn...]\n'
+          );
+          return;
+        }
+        await addSubtask(docId, title, description, dependsOn);
+      } else if (subCommand === "list") {
+        // <id> subtask list
+        await listSubtasks(docId);
+      } else if (subCommand === "delete") {
+        // <id> subtask delete <subtaskId>
+        const subtaskId = args[3];
+        if (!subtaskId) {
+          console.log(
+            "\n  Usage: node scripts/fetch-feedback.js <id> subtask delete <subtaskId>\n"
+          );
+          return;
+        }
+        await deleteSubtask(docId, subtaskId);
+      } else if (subCommand) {
+        // <id> subtask <subtaskId> <status>
+        // e.g., <id> subtask 1 completed
+        const subtaskId = subCommand;
+        const status = args[3];
+        if (!status) {
+          console.log(
+            "\n  Usage: node scripts/fetch-feedback.js <id> subtask <subtaskId> <status>\n"
+          );
+          console.log("  Valid statuses: pending, in-progress, completed\n");
+          return;
+        }
+        await updateSubtaskStatus(docId, subtaskId, status);
+      } else {
+        console.log("\n  Subtask commands:");
+        console.log(
+          '    <id> subtask add "title" "description" [dependsOn...]'
+        );
+        console.log("    <id> subtask list");
+        console.log("    <id> subtask delete <subtaskId>");
+        console.log("    <id> subtask <subtaskId> <status>\n");
+      }
+    } else if (args[1]) {
+      // Update: <id> <status> ["notes"] [--user-notes "notes"] [--changelog "changelog text"]
+      // Parse --user-notes and --changelog flags if present
+      const userNotesIndex = args.indexOf("--user-notes");
+      const changelogIndex = args.indexOf("--changelog");
+      let userFacingNotes = null;
+      let changelogEntry = null;
+      let resolutionNotes = args[2];
+
+      if (userNotesIndex !== -1 && args[userNotesIndex + 1]) {
+        userFacingNotes = args[userNotesIndex + 1];
+        // If --user-notes comes before the resolution notes, adjust
+        if (userNotesIndex === 2) {
+          resolutionNotes = null;
+        }
+      }
+
+      if (changelogIndex !== -1 && args[changelogIndex + 1]) {
+        changelogEntry = args[changelogIndex + 1];
+        // If --changelog comes before the resolution notes, adjust
+        if (changelogIndex === 2) {
+          resolutionNotes = null;
+        }
+      }
+
+      await updateFeedbackById(
+        args[0],
+        args[1],
+        resolutionNotes,
+        userFacingNotes,
+        changelogEntry
+      );
+    } else {
+      // View specific item by ID
+      await getFeedbackById(args[0]);
+    }
+  }
+}
+
+main()
+  .then(() => process.exit(0))
+  .catch(() => process.exit(1));

@@ -1,0 +1,32 @@
+{
+  "name": "@austencloud/code-quality",
+  "version": "1.1.0",
+  "description": "Zero-dependency code quality tools - monolith detection, dead code analysis, audit tracking, and evidence collection",
+  "bin": {
+    "ac-monolith": "bin/ac-monolith.cjs",
+    "ac-deadcode": "bin/ac-deadcode.cjs",
+    "ac-audit": "bin/ac-audit.cjs",
+    "ac-evidence": "bin/ac-evidence.cjs"
+  },
+  "files": [
+    "bin/"
+  ],
+  "keywords": [
+    "cli",
+    "monolith",
+    "deadcode",
+    "audit",
+    "evidence",
+    "code-quality",
+    "refactoring"
+  ],
+  "author": "Austen Cloud <austencloud@gmail.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/austencloud/shared-packages.git"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

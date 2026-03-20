@@ -1,0 +1,8 @@
+/**
+ * @austencloud/backgrounds - CSS Entry Point
+ *
+ * Master CSS bundle for the canvas background rendering system.
+ * Import this to get all background-related styles.
+ */
+
+@import './backgrounds.css';

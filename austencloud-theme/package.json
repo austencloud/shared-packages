@@ -1,0 +1,49 @@
+{
+  "name": "@austencloud/theme",
+  "version": "0.1.0",
+  "description": "Shared theming system with luminance-aware theme generation for Svelte 5 applications",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./css": "./css/index.css",
+    "./css/tokens.css": "./css/tokens.css",
+    "./css/panel-utilities.css": "./css/panel-utilities.css",
+    "./css/modal-tokens.css": "./css/modal-tokens.css",
+    "./css/keyframes.css": "./css/keyframes.css"
+  },
+  "files": [
+    "dist",
+    "css"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "check": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "svelte": "^5.0.0"
+  },
+  "devDependencies": {
+    "svelte": "^5.0.0",
+    "typescript": "^5.0.0"
+  },
+  "keywords": [
+    "svelte",
+    "theme",
+    "css-variables",
+    "luminance",
+    "glassmorphism",
+    "design-system"
+  ],
+  "author": "Austen Cloud",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/austencloud/austencloud-theme"
+  }
+}

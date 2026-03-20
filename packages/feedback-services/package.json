@@ -1,0 +1,44 @@
+{
+  "name": "@austencloud/feedback-services",
+  "version": "0.1.0",
+  "description": "Pure business logic for the AustenCloud feedback system. Repository adapter pattern — no Firebase dependency.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "clean": "rimraf dist"
+  },
+  "peerDependencies": {
+    "@austencloud/feedback-types": ">=0.1.0"
+  },
+  "devDependencies": {
+    "@austencloud/feedback-types": "^0.1.0",
+    "rimraf": "^5.0.0",
+    "typescript": "^5.0.0"
+  },
+  "keywords": [
+    "feedback",
+    "kanban",
+    "services",
+    "business-logic",
+    "repository-pattern",
+    "austencloud"
+  ],
+  "author": "Austen Cloud <austencloud@gmail.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/austencloud/shared-packages.git",
+    "directory": "packages/feedback-services"
+  }
+}

@@ -1,0 +1,52 @@
+{
+  "name": "@austencloud/chip-toggle",
+  "version": "0.1.0",
+  "description": "Svelte 5 toggle chip component with color presets, size variants, and optional icon. Shared across AustenCloud apps.",
+  "type": "module",
+  "svelte": "./src/index.ts",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "svelte": "./src/index.ts",
+      "import": "./dist/index.js"
+    },
+    "./css/*": "./css/*"
+  },
+  "files": [
+    "dist",
+    "src",
+    "css"
+  ],
+  "scripts": {
+    "build": "svelte-package -i src -o dist",
+    "dev": "svelte-package -i src -o dist --watch",
+    "check": "svelte-check --tsconfig ./tsconfig.json",
+    "clean": "rimraf dist"
+  },
+  "peerDependencies": {
+    "svelte": "^5.0.0"
+  },
+  "devDependencies": {
+    "@sveltejs/package": "^2.3.0",
+    "rimraf": "^5.0.0",
+    "svelte": "^5.0.0",
+    "svelte-check": "^4.0.0",
+    "typescript": "^5.0.0"
+  },
+  "keywords": [
+    "svelte",
+    "chip",
+    "toggle",
+    "components",
+    "austencloud"
+  ],
+  "author": "Austen Cloud <austencloud@gmail.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/austencloud/shared-packages.git",
+    "directory": "packages/chip-toggle"
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "name": "@austencloud/claude-skills",
+  "version": "1.0.0",
+  "description": "Shared Claude Code skill templates with per-project configuration",
+  "bin": {
+    "claude-skills": "./bin/sync.js"
+  },
+  "files": ["bin", "templates"],
+  "type": "module",
+  "license": "MIT",
+  "author": "Austen Cloud <austencloud@gmail.com>"
+}

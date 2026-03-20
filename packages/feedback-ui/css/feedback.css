@@ -1,0 +1,57 @@
+/*
+ * Feedback UI CSS tokens.
+ *
+ * Maps to @austencloud/theme variables with sensible fallbacks.
+ * Import this file in your app's layout to enable feedback component theming:
+ *   import '@austencloud/feedback-ui/css/feedback.css';
+ */
+
+:root {
+	/* ── Status colors ───────────────────────────────────── */
+	--fb-status-new: var(--semantic-info, #3b82f6);
+	--fb-status-in-progress: var(--semantic-warning, #f59e0b);
+	--fb-status-in-review: var(--theme-accent, #8b5cf6);
+	--fb-status-completed: var(--semantic-success, #10b981);
+	--fb-status-archived: var(--theme-text-dim, #6b7280);
+
+	/* ── Type colors ─────────────────────────────────────── */
+	--fb-type-bug: var(--semantic-error, #ef4444);
+	--fb-type-feature: var(--semantic-warning, #f59e0b);
+	--fb-type-general: var(--semantic-info, #3b82f6);
+
+	/* ── Priority colors ─────────────────────────────────── */
+	--fb-priority-low: var(--theme-text-dim, #6b7280);
+	--fb-priority-medium: var(--semantic-info, #3b82f6);
+	--fb-priority-high: var(--semantic-warning, #f59e0b);
+	--fb-priority-critical: var(--semantic-error, #ef4444);
+
+	/* ── Fluid spacing (container-query-aware) ───────────── */
+	--fb-space-2xs: clamp(4px, 1cqi, 8px);
+	--fb-space-xs: clamp(6px, 1.5cqi, 12px);
+	--fb-space-sm: clamp(10px, 2.5cqi, 16px);
+	--fb-space-md: clamp(14px, 3.5cqi, 24px);
+	--fb-space-lg: clamp(20px, 5cqi, 32px);
+
+	/* ── Fluid typography ────────────────────────────────── */
+	--fb-text-xs: clamp(0.8125rem, 2cqi, 0.875rem);
+	--fb-text-sm: clamp(0.875rem, 2.5cqi, 1rem);
+	--fb-text-base: clamp(1rem, 3cqi, 1.125rem);
+	--fb-text-lg: clamp(1.125rem, 3.5cqi, 1.25rem);
+
+	/* ── Radii ───────────────────────────────────────────── */
+	--fb-radius-sm: clamp(6px, 1.5cqi, 10px);
+	--fb-radius-md: clamp(10px, 2.5cqi, 16px);
+	--fb-radius-lg: clamp(14px, 3.5cqi, 20px);
+
+	/* ── Transitions ─────────────────────────────────────── */
+	--fb-duration-fast: 0.15s;
+	--fb-duration-normal: 0.3s;
+	--fb-duration-emphasis: 0.28s;
+	--fb-duration-dramatic: 0.35s;
+	--fb-spring: cubic-bezier(0.4, 0, 0.2, 1);
+	--fb-spring-bounce: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+	/* ── Overlay ──────────────────────────────────────────── */
+	--fb-overlay-bg: rgba(0, 0, 0, 0.6);
+	--fb-overlay-blur: 8px;
+}

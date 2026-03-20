@@ -1,0 +1,549 @@
+/* ============================================
+ * Drawer CSS - Pure CSS animations for drawer component
+ *
+ * Uses data-state and data-placement attributes for transitions.
+ * Native <dialog> element for proper semantics.
+ *
+ * All colors use --drawer-* CSS custom properties for theming.
+ * Import drawer-tokens.css for defaults, or set your own.
+ * ============================================ */
+
+/* Overlay (backdrop) */
+.drawer-overlay {
+	position: fixed;
+	inset: 0;
+	z-index: calc(var(--drawer-z-index, 200) - 1);
+	background: var(--drawer-backdrop-bg, rgba(0, 0, 0, 0.7));
+	backdrop-filter: blur(4px);
+	-webkit-backdrop-filter: blur(4px);
+	pointer-events: auto;
+	transition: opacity var(--drawer-transition-duration, 350ms) cubic-bezier(0.16, 1, 0.3, 1);
+	opacity: 0;
+}
+
+.drawer-overlay[data-state='open'] {
+	opacity: 1;
+}
+
+.drawer-overlay[data-state='closed'] {
+	opacity: 0;
+	pointer-events: none;
+}
+
+/* Desktop sidebar support: don't cover the sidebar */
+:global(.has-desktop-sidebar) .drawer-overlay {
+	left: var(--desktop-sidebar-width, 220px);
+}
+
+/* ============================================
+ * Native <dialog> Element Support
+ *
+ * We use show() not showModal() to keep our custom
+ * backdrop and inert handling working.
+ * ============================================ */
+
+dialog.drawer-content {
+	padding: 0;
+	border: none;
+	margin: 0;
+	max-width: none;
+	max-height: none;
+}
+
+dialog.drawer-content::backdrop {
+	display: none;
+}
+
+/* Drawer content container */
+.drawer-content {
+	position: fixed;
+	z-index: var(--drawer-z-index, 200);
+	display: flex;
+	flex-direction: column;
+	outline: none;
+	background: var(--drawer-bg, rgba(17, 24, 39, 0.98));
+	backdrop-filter: blur(20px);
+	-webkit-backdrop-filter: blur(20px);
+	border: 1px solid var(--drawer-border, rgba(255, 255, 255, 0.1));
+
+	transition:
+		transform var(--drawer-transition-duration, 350ms) cubic-bezier(0.16, 1, 0.3, 1),
+		opacity var(--drawer-transition-duration, 350ms) cubic-bezier(0.16, 1, 0.3, 1);
+	will-change: transform;
+
+	overscroll-behavior-y: contain;
+	touch-action: pan-y;
+	-webkit-touch-callout: none;
+	-webkit-user-select: none;
+	user-select: none;
+}
+
+/* Horizontal touch action for right/left placement */
+.drawer-content[data-placement='right'],
+.drawer-content[data-placement='left'] {
+	touch-action: pan-x;
+	overscroll-behavior-x: contain;
+}
+
+.drawer-content[data-state='closed'] {
+	pointer-events: none;
+}
+
+/* ============================================
+ * Bottom placement (mobile default)
+ * ============================================ */
+.drawer-content[data-placement='bottom'] {
+	bottom: 0;
+	left: 0;
+	right: 0;
+	width: 100%;
+	max-width: 100%;
+	max-height: 90vh;
+	margin: 0;
+	border-top-left-radius: var(--drawer-radius-lg, 20px);
+	border-top-right-radius: var(--drawer-radius-lg, 20px);
+	border-bottom: none;
+	border-left: 1px solid var(--drawer-accent-border, rgba(255, 255, 255, 0.15));
+	border-right: 1px solid var(--drawer-accent-border, rgba(255, 255, 255, 0.15));
+	border-top: 1px solid var(--drawer-accent-border, rgba(255, 255, 255, 0.15));
+	box-shadow:
+		0 -4px 20px var(--drawer-shadow, rgba(0, 0, 0, 0.6)),
+		0 -2px 10px rgba(0, 0, 0, 0.4),
+		0 0 40px var(--drawer-accent-glow, rgba(255, 255, 255, 0.08));
+}
+
+/* Extend background below drawer to prevent white flash */
+.drawer-content[data-placement='bottom']::after {
+	content: '';
+	position: absolute;
+	bottom: -100px;
+	left: 0;
+	right: 0;
+	height: 100px;
+	background: inherit;
+	pointer-events: none;
+}
+
+.drawer-content[data-placement='bottom'].has-snap-points {
+	height: 100vh;
+	height: 100dvh;
+	max-height: 100vh;
+	max-height: 100dvh;
+}
+
+.drawer-content[data-placement='bottom'][data-state='closed'] {
+	transform: translate3d(0, 100%, 0);
+}
+
+.drawer-content[data-placement='bottom'][data-state='open'] {
+	transform: translate3d(0, 0, 0);
+}
+
+/* ============================================
+ * Top placement
+ * ============================================ */
+.drawer-content[data-placement='top'] {
+	top: 0;
+	left: 0;
+	right: 0;
+	width: var(--drawer-width, min(720px, 100%));
+	margin: 0 auto;
+	border-bottom-left-radius: var(--drawer-radius-lg, 20px);
+	border-bottom-right-radius: var(--drawer-radius-lg, 20px);
+	border-top: none;
+}
+
+.drawer-content[data-placement='top'][data-state='closed'] {
+	transform: translate3d(0, -100%, 0);
+}
+
+.drawer-content[data-placement='top'][data-state='open'] {
+	transform: translate3d(0, 0, 0);
+}
+
+/* ============================================
+ * Right placement (desktop drawer)
+ * ============================================ */
+.drawer-content[data-placement='right'] {
+	top: 0;
+	right: 0;
+	bottom: 0;
+	left: auto;
+	height: 100vh;
+	height: 100dvh;
+	max-height: 100vh;
+	max-height: 100dvh;
+	width: var(--drawer-width, min(600px, 90vw));
+	border-left: 1px solid var(--drawer-accent-border, rgba(255, 255, 255, 0.15));
+	border-right: none;
+	border-top-left-radius: var(--drawer-radius-lg, 20px);
+	border-bottom-left-radius: var(--drawer-radius-lg, 20px);
+	box-shadow:
+		-4px 0 20px var(--drawer-shadow, rgba(0, 0, 0, 0.6)),
+		-2px 0 10px rgba(0, 0, 0, 0.4),
+		0 0 40px var(--drawer-accent-glow, rgba(255, 255, 255, 0.08));
+	cursor: grab;
+}
+
+.drawer-content[data-placement='right'].dragging {
+	cursor: grabbing;
+	user-select: none;
+}
+
+.drawer-content[data-placement='right'][data-state='closed'] {
+	transform: translate3d(100%, 0, 0);
+}
+
+.drawer-content[data-placement='right'][data-state='open'] {
+	transform: translate3d(0, 0, 0);
+}
+
+/* ============================================
+ * Left placement
+ * ============================================ */
+.drawer-content[data-placement='left'] {
+	top: 0;
+	left: 0;
+	bottom: 0;
+	right: auto;
+	height: 100vh;
+	max-height: 100vh;
+	width: var(--drawer-width, min(600px, 90vw));
+	border-right: 1px solid var(--drawer-accent-border, rgba(255, 255, 255, 0.15));
+	border-left: none;
+	border-top-right-radius: var(--drawer-radius-lg, 20px);
+	border-bottom-right-radius: var(--drawer-radius-lg, 20px);
+	box-shadow:
+		4px 0 20px var(--drawer-shadow, rgba(0, 0, 0, 0.6)),
+		2px 0 10px rgba(0, 0, 0, 0.4),
+		0 0 40px var(--drawer-accent-glow, rgba(255, 255, 255, 0.08));
+	cursor: grab;
+}
+
+.drawer-content[data-placement='left'].dragging {
+	cursor: grabbing;
+	user-select: none;
+}
+
+.drawer-content[data-placement='left'][data-state='closed'] {
+	transform: translate3d(-100%, 0, 0);
+}
+
+.drawer-content[data-placement='left'][data-state='open'] {
+	transform: translate3d(0, 0, 0);
+}
+
+/* ============================================
+ * Drag handle - placement-aware
+ * ============================================ */
+
+/* Default: horizontal bar (for bottom/top placement) */
+.drawer-handle {
+	position: relative;
+	width: 48px;
+	height: 4px;
+	min-height: 10px;
+	margin: 10px auto 8px;
+	border-radius: 9999px;
+	background: var(--drawer-handle-color, rgba(255, 255, 255, 0.45));
+	flex-shrink: 0;
+}
+
+/* Right placement: vertical bar on left edge */
+.drawer-content[data-placement='right'] .drawer-handle {
+	position: absolute;
+	top: 50%;
+	left: 18px;
+	width: 4px;
+	height: 48px;
+	margin: 0;
+	border-radius: 9999px;
+	transform: translateY(-50%);
+	background: var(--drawer-handle-color, rgba(255, 255, 255, 0.35));
+}
+
+/* Left placement: vertical bar on right edge */
+.drawer-content[data-placement='left'] .drawer-handle {
+	position: absolute;
+	top: 50%;
+	right: 18px;
+	width: 4px;
+	height: 48px;
+	margin: 0;
+	border-radius: 9999px;
+	transform: translateY(-50%);
+	background: var(--drawer-handle-color, rgba(255, 255, 255, 0.35));
+}
+
+/* Top placement: horizontal bar at bottom */
+.drawer-content[data-placement='top'] .drawer-handle {
+	position: relative;
+	width: 48px;
+	height: 4px;
+	min-height: 10px;
+	margin: 8px auto 10px;
+	order: 1;
+}
+
+/* Bottom placement: horizontal bar at top (default) */
+.drawer-content[data-placement='bottom'] .drawer-handle {
+	position: relative;
+	width: 48px;
+	height: 4px;
+	min-height: 10px;
+	margin: 10px auto 8px;
+}
+
+/* ============================================
+ * Inner content container
+ * ============================================ */
+.drawer-inner {
+	flex: 1;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+	overflow-y: auto;
+	overscroll-behavior-y: contain;
+}
+
+.drawer-inner::-webkit-scrollbar {
+	width: 8px;
+}
+
+.drawer-inner::-webkit-scrollbar-track {
+	background: transparent;
+}
+
+.drawer-inner::-webkit-scrollbar-thumb {
+	background: rgba(255, 255, 255, 0.15);
+	border-radius: 4px;
+}
+
+.drawer-inner::-webkit-scrollbar-thumb:hover {
+	background: rgba(255, 255, 255, 0.25);
+}
+
+/* ============================================
+ * Mobile adjustments
+ * ============================================ */
+@media (max-width: 480px) {
+	.drawer-content[data-placement='bottom'] {
+		border-top-left-radius: calc(var(--drawer-radius-lg, 20px) * 0.8);
+		border-top-right-radius: calc(var(--drawer-radius-lg, 20px) * 0.8);
+	}
+}
+
+/* ============================================
+ * High contrast mode
+ * ============================================ */
+@media (prefers-contrast: high) {
+	.drawer-content {
+		background: rgba(0, 0, 0, 0.98);
+		border: 2px solid white;
+	}
+
+	.drawer-handle {
+		background: rgba(255, 255, 255, 0.8);
+	}
+}
+
+/* ============================================
+ * Reduced Motion (WCAG 2.2 / AAA)
+ * ============================================ */
+@media (prefers-reduced-motion: reduce) {
+	.drawer-content,
+	.drawer-overlay {
+		transition: none !important;
+		animation: none !important;
+		transition-behavior: normal !important;
+	}
+
+	.drawer-content.spring-animation {
+		animation: none !important;
+	}
+
+	.drawer-overlay[data-state='open'] {
+		opacity: 1;
+	}
+
+	.drawer-overlay[data-state='closed'] {
+		opacity: 0;
+	}
+
+	.drawer-content[data-state='open'] {
+		transform: translate3d(0, 0, 0) !important;
+		opacity: 1 !important;
+	}
+
+	:global(.drawer-scale-bg) {
+		transition: none !important;
+	}
+}
+
+/* ============================================
+ * @starting-style Entry Animations (2025+)
+ *
+ * Chrome 117+, Safari 17.5+, Firefox 144+
+ * ============================================ */
+.drawer-content,
+.drawer-overlay {
+	transition-behavior: allow-discrete;
+}
+
+.drawer-content[data-placement='bottom'][data-state='open'] {
+	@starting-style {
+		transform: translate3d(0, 100%, 0);
+		opacity: 0;
+	}
+}
+
+.drawer-content[data-placement='top'][data-state='open'] {
+	@starting-style {
+		transform: translate3d(0, -100%, 0);
+		opacity: 0;
+	}
+}
+
+.drawer-content[data-placement='right'][data-state='open'] {
+	@starting-style {
+		transform: translate3d(100%, 0, 0);
+		opacity: 0;
+	}
+}
+
+.drawer-content[data-placement='left'][data-state='open'] {
+	@starting-style {
+		transform: translate3d(-100%, 0, 0);
+		opacity: 0;
+	}
+}
+
+.drawer-overlay[data-state='open'] {
+	@starting-style {
+		opacity: 0;
+	}
+}
+
+/* ============================================
+ * Spring Animation
+ * ============================================ */
+.drawer-content.spring-animation {
+	transition:
+		transform 400ms cubic-bezier(0.34, 1.56, 0.64, 1),
+		opacity var(--drawer-transition-duration, 350ms) cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.drawer-content.spring-animation[data-placement='bottom'][data-state='open'] {
+	animation: spring-slide-up var(--drawer-transition-duration, 350ms) cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+@keyframes spring-slide-up {
+	0% {
+		transform: translate3d(0, 100%, 0);
+	}
+	65% {
+		transform: translate3d(0, -2%, 0);
+	}
+	85% {
+		transform: translate3d(0, 0.5%, 0);
+	}
+	100% {
+		transform: translate3d(0, 0, 0);
+	}
+}
+
+.drawer-content.spring-animation[data-placement='top'][data-state='open'] {
+	animation: spring-slide-down var(--drawer-transition-duration, 350ms) cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+@keyframes spring-slide-down {
+	0% {
+		transform: translate3d(0, -100%, 0);
+	}
+	65% {
+		transform: translate3d(0, 2%, 0);
+	}
+	85% {
+		transform: translate3d(0, -0.5%, 0);
+	}
+	100% {
+		transform: translate3d(0, 0, 0);
+	}
+}
+
+.drawer-content.spring-animation[data-placement='right'][data-state='open'] {
+	animation: spring-slide-left var(--drawer-transition-duration, 350ms) cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+@keyframes spring-slide-left {
+	0% {
+		transform: translate3d(100%, 0, 0);
+	}
+	65% {
+		transform: translate3d(-2%, 0, 0);
+	}
+	85% {
+		transform: translate3d(0.5%, 0, 0);
+	}
+	100% {
+		transform: translate3d(0, 0, 0);
+	}
+}
+
+.drawer-content.spring-animation[data-placement='left'][data-state='open'] {
+	animation: spring-slide-right var(--drawer-transition-duration, 350ms) cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+@keyframes spring-slide-right {
+	0% {
+		transform: translate3d(-100%, 0, 0);
+	}
+	65% {
+		transform: translate3d(2%, 0, 0);
+	}
+	85% {
+		transform: translate3d(-0.5%, 0, 0);
+	}
+	100% {
+		transform: translate3d(0, 0, 0);
+	}
+}
+
+.drawer-content.spring-animation.dragging {
+	animation: none;
+	transition: none;
+}
+
+/* ============================================
+ * Background Scale Effect
+ * ============================================ */
+:global(.drawer-scale-bg) {
+	transform-origin: center center;
+	transform: scale(var(--drawer-bg-scale, 1));
+	border-radius: var(--drawer-bg-border-radius, 0px);
+	transition:
+		transform var(--drawer-transition-duration, 350ms) cubic-bezier(0.32, 0.72, 0, 1),
+		border-radius var(--drawer-transition-duration, 350ms) cubic-bezier(0.32, 0.72, 0, 1);
+	overflow: hidden;
+}
+
+:global(body.drawer-scale-bg-active .drawer-scale-bg) {
+	box-shadow:
+		0 0 0 1px rgba(0, 0, 0, 0.1),
+		0 10px 40px rgba(0, 0, 0, 0.5);
+}
+
+:global(.drawer-scale-bg::after) {
+	content: '';
+	position: absolute;
+	inset: 0;
+	background: black;
+	opacity: 0;
+	pointer-events: none;
+	transition: opacity var(--drawer-transition-duration, 350ms) cubic-bezier(0.32, 0.72, 0, 1);
+	z-index: 1;
+}
+
+:global(body.drawer-scale-bg-active .drawer-scale-bg::after) {
+	opacity: 0.15;
+}

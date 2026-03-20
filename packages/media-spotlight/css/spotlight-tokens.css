@@ -1,0 +1,125 @@
+/**
+ * Media Spotlight CSS Tokens
+ *
+ * Override these variables in your app to customize the spotlight appearance.
+ */
+
+:root {
+  /* ===== Animation Timing ===== */
+  --spotlight-duration-in: 350ms;
+  --spotlight-duration-out: 250ms;
+  --spotlight-duration-nav: 300ms;
+  --spotlight-duration-hero: 280ms;
+  --spotlight-duration-crossfade: 80ms;
+  --spotlight-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --spotlight-ease-hero: cubic-bezier(0.32, 0.72, 0, 1);
+  --spotlight-ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* ===== Gesture Thresholds ===== */
+  --spotlight-swipe-threshold: 80px;
+  --spotlight-dismiss-threshold: 150px;
+  --spotlight-fast-swipe-velocity: 0.5;
+
+  /* ===== Chrome Auto-Hide ===== */
+  --spotlight-chrome-timeout: 3000ms;
+  --spotlight-chrome-padding: 16px;
+  --spotlight-chrome-padding-mobile: 12px;
+
+  /* ===== Backdrop ===== */
+  --spotlight-backdrop: rgba(0, 0, 0, 0.95);
+  --spotlight-backdrop-blur: 0px;
+
+  /* ===== Navigation Arrows ===== */
+  --spotlight-arrow-size: 64px;
+  --spotlight-arrow-size-mobile: 80px;
+  --spotlight-arrow-bg: rgba(0, 0, 0, 0.4);
+  --spotlight-arrow-bg-hover: rgba(0, 0, 0, 0.6);
+  --spotlight-arrow-color: white;
+
+  /* ===== Close Button ===== */
+  --spotlight-close-size: 48px;
+  --spotlight-close-bg: rgba(0, 0, 0, 0.4);
+  --spotlight-close-color: white;
+
+  /* ===== Counter Badge ===== */
+  --spotlight-counter-bg: rgba(0, 0, 0, 0.4);
+  --spotlight-counter-color: white;
+
+  /* ===== Filmstrip ===== */
+  --spotlight-filmstrip-height: 80px;
+  --spotlight-filmstrip-thumb-size: 60px;
+  --spotlight-filmstrip-gap: 4px;
+  --spotlight-filmstrip-active-border: white;
+  --spotlight-filmstrip-active-scale: 1.1;
+
+  /* ===== Tag Panel ===== */
+  --spotlight-tag-panel-width: 280px;
+  --spotlight-tag-panel-bg: rgba(18, 18, 28, 0.98);
+
+  /* ===== Tag Colors ===== */
+  --spotlight-tag-flame: #f97316;
+  --spotlight-tag-gold: #eab308;
+  --spotlight-tag-royal: #8b5cf6;
+  --spotlight-tag-cyan: #06b6d4;
+  --spotlight-tag-green: #22c55e;
+  --spotlight-tag-red: #ef4444;
+  --spotlight-tag-purple: #a855f7;
+  --spotlight-tag-navy: #1e40af;
+  --spotlight-tag-teal: #0d9488;
+  --spotlight-tag-pink: #ec4899;
+  --spotlight-tag-lime: #84cc16;
+  --spotlight-tag-gray: #6b7280;
+
+  /* ===== Safe Areas (for notched devices) ===== */
+  --spotlight-safe-area-top: env(safe-area-inset-top, 0px);
+  --spotlight-safe-area-bottom: env(safe-area-inset-bottom, 0px);
+  --spotlight-safe-area-left: env(safe-area-inset-left, 0px);
+  --spotlight-safe-area-right: env(safe-area-inset-right, 0px);
+
+  /* ===== Z-Index Layers ===== */
+  --spotlight-z-backdrop: 1000;
+  --spotlight-z-content: 1001;
+  --spotlight-z-chrome: 1002;
+  --spotlight-z-filmstrip: 1003;
+  --spotlight-z-panel: 1004;
+  --spotlight-z-dialog: 1005;
+
+  /* ===== Touch Targets (WCAG AAA) ===== */
+  --spotlight-touch-min: 48px;
+
+  /* ===== Needs Editing Badge ===== */
+  --spotlight-needs-editing-bg: rgba(245, 158, 11, 0.2);
+  --spotlight-needs-editing-border: rgba(245, 158, 11, 0.4);
+  --spotlight-needs-editing-color: rgb(245, 158, 11);
+
+  /* ===== Error State ===== */
+  --spotlight-error-color: rgba(255, 255, 255, 0.8);
+  --spotlight-error-bg: rgba(0, 0, 0, 0.5);
+
+  /* ===== Video Controls ===== */
+  --spotlight-video-progress-track: rgba(255, 255, 255, 0.3);
+  --spotlight-video-progress-fill: white;
+  --spotlight-video-control-bg: transparent;
+  --spotlight-video-control-hover: rgba(255, 255, 255, 0.1);
+
+  /* ===== Keyboard Hints Bar ===== */
+  --spotlight-hints-bg: rgba(0, 0, 0, 0.6);
+  --spotlight-hints-color: rgba(255, 255, 255, 0.7);
+  --spotlight-hints-key-bg: rgba(255, 255, 255, 0.1);
+
+  /* ===== Delete Confirmation ===== */
+  --spotlight-delete-color: #ef4444;
+  --spotlight-delete-bg: rgba(239, 68, 68, 0.15);
+  --spotlight-delete-border: rgba(239, 68, 68, 0.5);
+}
+
+/* ===== Reduced Motion ===== */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --spotlight-duration-in: 0ms;
+    --spotlight-duration-out: 0ms;
+    --spotlight-duration-nav: 0ms;
+    --spotlight-duration-hero: 0ms;
+    --spotlight-duration-crossfade: 0ms;
+  }
+}

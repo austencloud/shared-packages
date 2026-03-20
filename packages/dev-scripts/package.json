@@ -1,0 +1,37 @@
+{
+  "name": "@austencloud/dev-scripts",
+  "version": "1.0.2",
+  "description": "Development tooling scripts for Austen's projects - monolith detection, dead code analysis, feedback management",
+  "type": "module",
+  "bin": {
+    "ac-monolith": "bin/ac-monolith.cjs",
+    "ac-deadcode": "bin/ac-deadcode.cjs",
+    "ac-feedback": "bin/ac-feedback.js",
+    "ac-release": "bin/ac-release.js"
+  },
+  "files": [
+    "bin/",
+    "lib/",
+    "config/"
+  ],
+  "dependencies": {
+    "firebase-admin": "^13.0.0",
+    "google-auth-library": "^9.0.0"
+  },
+  "keywords": [
+    "cli",
+    "devtools",
+    "monolith",
+    "deadcode",
+    "feedback"
+  ],
+  "author": "Austen Cloud <austencloud@gmail.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/austencloud/shared-packages.git"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

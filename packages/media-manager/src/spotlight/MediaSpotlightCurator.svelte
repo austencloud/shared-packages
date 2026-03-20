@@ -7,8 +7,6 @@
 	- Keyboard shortcuts: Enter = confirm (mark reviewed), Arrow keys = navigate, E = toggle needs editing
 -->
 <script lang="ts">
-	import { MediaSpotlight } from '@austencloud/media-spotlight';
-	import type { MediaItem as SpotlightMediaItem } from '@austencloud/media-spotlight';
 	import TagPickerPanel from '../grid/TagPickerPanel.svelte';
 	import type { MediaItem, MediaTag, CuratorProgress } from '../types.js';
 	import { getTagHex } from '../types.js';
@@ -77,20 +75,6 @@
 	let nameValue = $state('');
 	let descriptionValue = $state('');
 	let notesValue = $state('');
-
-	// Convert MediaItem to spotlight MediaItem format
-	const spotlightItems: SpotlightMediaItem[] = $derived(
-		items.map((i) => ({
-			id: i.id,
-			url: i.url,
-			type: 'image' as const,
-			thumbnailUrl: i.thumbnailUrl,
-			name: i.suggestedName || i.filename,
-			alt: i.suggestedName || i.filename,
-			needsEditing: i.needsReview,
-			tags: i.tags
-		}))
-	);
 
 	// Tag objects for current item
 	const currentItemTags = $derived(
@@ -192,20 +176,12 @@
 {#if open && item}
 	<!-- svelte-ignore a11y_no_static_element_interactions -->
 	<div class="curator-overlay" onkeydown={handleKeydown}>
-		<!-- Main spotlight area -->
+		<!-- Main image area -->
 		<div class="curator-main">
-			<MediaSpotlight
-				items={spotlightItems}
-				{currentIndex}
-				config={{
-					showFilmstrip: true,
-					showArrows: true,
-					enableSwipeNav: true,
-				}}
-				callbacks={{
-					onclose,
-					onchange,
-				}}
+			<img
+				src={item.url || item.thumbnailUrl || ''}
+				alt={item.suggestedName || item.filename}
+				class="curator-image"
 			/>
 		</div>
 
@@ -385,13 +361,23 @@
 		inset: 0;
 		z-index: 1100;
 		background: rgba(0, 0, 0, 0.95);
-		display: flex;
-		flex-direction: column;
 	}
 
 	.curator-main {
-		flex: 1;
-		min-height: 0;
+		position: absolute;
+		top: 28px;
+		left: 60px;
+		right: 310px;
+		bottom: 40px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+	}
+
+	.curator-image {
+		max-width: 100%;
+		max-height: 100%;
+		object-fit: contain;
 	}
 
 	/* Progress */
@@ -540,6 +526,7 @@
 
 	.right-panel {
 		top: 60px;
+		overflow-y: auto;
 	}
 
 	.info-panel {

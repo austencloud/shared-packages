@@ -1,0 +1,565 @@
+/**
+ * Theme Calculator
+ *
+ * Calculates theme properties (luminance, contrast, appropriate glass morphism styles)
+ * for background colors and gradients to ensure accessibility and visual consistency.
+ *
+ * ## CSS Variable Hierarchy (2 Layers)
+ *
+ * ### Layer 1: Dynamic Theme Variables (`--theme-*`)
+ * Adapt based on background luminance (light vs dark mode):
+ * - `--theme-panel-bg`, `--theme-panel-elevated-bg`
+ * - `--theme-card-bg`, `--theme-card-hover-bg`
+ * - `--theme-accent`, `--theme-accent-strong`
+ * - `--theme-stroke`, `--theme-stroke-strong`
+ * - `--theme-text`, `--theme-text-dim`
+ * - `--theme-shadow`, `--theme-panel-shadow`
+ * - `--theme-danger-bg`, `--theme-danger-hover-bg` (destructive action surfaces)
+ * - `--theme-danger-border`, `--theme-danger-hover-border`
+ * - `--theme-danger-shadow`, `--theme-danger-hover-shadow`
+ *
+ * ### Layer 2: Semantic Colors (`--semantic-*`)
+ * Status colors that stay constant regardless of background:
+ * - `--semantic-error`, `--semantic-error-dim` (red)
+ * - `--semantic-success`, `--semantic-success-dim` (green)
+ * - `--semantic-warning`, `--semantic-warning-dim` (amber)
+ * - `--semantic-info`, `--semantic-info-dim` (blue)
+ */
+
+import type {
+  ThemeMode,
+  GlassMorphismTheme,
+  MatteTheme,
+  DangerTheme,
+  ColorPalette,
+} from "./types.js";
+import { setThemeMode as setThemeModeState } from "./theme-mode-state.js";
+
+// ═══════════════════════════════════════════════════════════════════════════
+// CONFIGURATION - Project-specific settings
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** Storage key for persisting theme settings */
+let storageKey = "theme-settings";
+
+/** Registered color palettes for background types */
+const colorPalettes = new Map<string, ColorPalette>();
+
+/** Default fallback palette */
+const DEFAULT_PALETTE: ColorPalette = ["#18181b", "#6366f1", "#818cf8"];
+
+/**
+ * Configure the storage key for theme persistence
+ */
+export function setStorageKey(key: string): void {
+  storageKey = key;
+}
+
+/**
+ * Get the current storage key
+ */
+export function getStorageKey(): string {
+  return storageKey;
+}
+
+/**
+ * Register a color palette for a background type
+ * @param name - The background type identifier (e.g., "PRIDE", "SNOWFALL")
+ * @param colors - Array of colors [dark1, dark2, accent, accentLight?]
+ */
+export function setThemeColorPalette(name: string, colors: ColorPalette): void {
+  colorPalettes.set(name, colors);
+}
+
+/**
+ * Get the color palette for a background type
+ */
+export function getThemeColorPalette(name: string): ColorPalette | undefined {
+  return colorPalettes.get(name);
+}
+
+/**
+ * Get all registered color palettes
+ */
+export function getAllColorPalettes(): Map<string, ColorPalette> {
+  return new Map(colorPalettes);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LUMINANCE CALCULATIONS
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Calculate relative luminance of a color using WCAG formula
+ * https://www.w3.org/TR/WCAG20/#relativeluminancedef
+ */
+export function calculateLuminance(hex: string): number {
+  // Remove # if present
+  const color = hex.replace("#", "");
+
+  // Parse RGB components
+  const r = parseInt(color.substring(0, 2), 16) / 255;
+  const g = parseInt(color.substring(2, 4), 16) / 255;
+  const b = parseInt(color.substring(4, 6), 16) / 255;
+
+  // Apply gamma correction
+  const rLinear = r <= 0.03928 ? r / 12.92 : Math.pow((r + 0.055) / 1.055, 2.4);
+  const gLinear = g <= 0.03928 ? g / 12.92 : Math.pow((g + 0.055) / 1.055, 2.4);
+  const bLinear = b <= 0.03928 ? b / 12.92 : Math.pow((b + 0.055) / 1.055, 2.4);
+
+  // Calculate luminance
+  return 0.2126 * rLinear + 0.7152 * gLinear + 0.0722 * bLinear;
+}
+
+/**
+ * Calculate average luminance for a gradient
+ * For simplicity, we weight the first color more heavily (60%) since it's typically
+ * the dominant color in diagonal gradients
+ */
+export function calculateGradientLuminance(colors: string[]): number {
+  if (colors.length === 0) return 0;
+  if (colors.length === 1 && colors[0]) return calculateLuminance(colors[0]);
+
+  // Weight colors: first 50%, middle colors split 30%, last 20%
+  const first = colors[0] ? calculateLuminance(colors[0]) * 0.5 : 0;
+  const lastColor = colors[colors.length - 1];
+  const last = lastColor ? calculateLuminance(lastColor) * 0.2 : 0;
+
+  const middleColors = colors.slice(1, -1);
+  const middle =
+    middleColors.length > 0
+      ? middleColors.reduce(
+          (sum, color) => sum + calculateLuminance(color),
+          0
+        ) *
+        (0.3 / middleColors.length)
+      : 0;
+
+  return first + middle + last;
+}
+
+/**
+ * Determine theme mode based on luminance
+ */
+export function getThemeModeFromLuminance(luminance: number): ThemeMode {
+  // Threshold at 0.4 - colors with luminance above this are considered "light"
+  return luminance > 0.4 ? "light" : "dark";
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// THEME GENERATION
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Convert hex color to RGB string (for use in rgba())
+ */
+function hexToRgb(hex: string): string {
+  const color = hex.replace("#", "");
+  const r = parseInt(color.substring(0, 2), 16);
+  const g = parseInt(color.substring(2, 4), 16);
+  const b = parseInt(color.substring(4, 6), 16);
+  return `${r}, ${g}, ${b}`;
+}
+
+/**
+ * Get a suitable accent color from gradient colors
+ * (typically the most vibrant middle or end color)
+ */
+export function extractAccentColor(colors: string[]): string | undefined {
+  if (colors.length === 0) return undefined;
+  if (colors.length === 1) return colors[0];
+
+  // For 3-color gradients, use the middle color
+  if (colors.length === 3) return colors[1];
+
+  // For 2-color gradients, use the second color
+  return colors[1];
+}
+
+/**
+ * Generate CSS custom properties for glass morphism based on theme
+ */
+export function generateGlassMorphismTheme(
+  mode: ThemeMode,
+  accentColor?: string
+): GlassMorphismTheme {
+  if (mode === "light") {
+    // Light backgrounds need dark, semi-opaque overlays
+    return {
+      panelBg: "rgba(20, 10, 40, 0.85)",
+      panelBorder: accentColor
+        ? `rgba(${hexToRgb(accentColor)}, 0.3)`
+        : "rgba(168, 85, 247, 0.3)",
+      panelHover: "rgba(30, 15, 60, 0.9)",
+      cardBg: "rgba(25, 15, 45, 0.88)",
+      cardBorder: accentColor
+        ? `rgba(${hexToRgb(accentColor)}, 0.35)`
+        : "rgba(168, 85, 247, 0.35)",
+      cardHover: "rgba(35, 20, 65, 0.92)",
+      textPrimary: "#ffffff",
+      textSecondary: "rgba(255, 255, 255, 0.85)",
+      inputBg: "rgba(30, 20, 50, 0.75)",
+      inputBorder: accentColor
+        ? `rgba(${hexToRgb(accentColor)}, 0.4)`
+        : "rgba(168, 85, 247, 0.4)",
+      inputFocus: "rgba(40, 25, 70, 0.85)",
+      buttonActive: "rgba(88, 28, 135, 0.75)",
+      backdropBlur: "blur(20px)",
+    };
+  } else {
+    // Dark backgrounds use standard light glass morphism
+    return {
+      panelBg: "rgba(255, 255, 255, 0.05)",
+      panelBorder: "rgba(255, 255, 255, 0.1)",
+      panelHover: "rgba(255, 255, 255, 0.08)",
+      cardBg: "rgba(255, 255, 255, 0.05)",
+      cardBorder: "rgba(255, 255, 255, 0.1)",
+      cardHover: "rgba(255, 255, 255, 0.08)",
+      textPrimary: "#ffffff",
+      textSecondary: "rgba(255, 255, 255, 0.75)", // WCAG AAA compliant
+      inputBg: "rgba(255, 255, 255, 0.05)",
+      inputBorder: "rgba(255, 255, 255, 0.1)",
+      inputFocus: "rgba(255, 255, 255, 0.08)",
+      buttonActive: "rgba(255, 255, 255, 0.15)",
+      backdropBlur: "blur(20px)",
+    };
+  }
+}
+
+/**
+ * Detect if viewport is mobile-sized
+ */
+function isMobile(): boolean {
+  if (typeof window === "undefined") return false;
+  return window.innerWidth < 768;
+}
+
+function fallbackAccent(mode: ThemeMode, accentColor?: string): string {
+  if (accentColor) return accentColor;
+  return mode === "light" ? "#2563eb" : "#38bdf8";
+}
+
+/**
+ * Generate matte (non-glass) theme tokens for 2026 bento style
+ */
+export function generateMatteTheme(
+  mode: ThemeMode,
+  accentColor?: string
+): MatteTheme {
+  const accent = fallbackAccent(mode, accentColor);
+  const mobile = isMobile();
+
+  if (mode === "light") {
+    // Softened light mode - no pure whites to reduce eye strain
+    // Pure white (#fff) is reserved for print mode only
+    return {
+      panelBg: "#d0d0ca", // Warm medium gray
+      panelElevatedBg: "#d8d8d2", // Slightly lighter for elevation
+      cardBg: "#d8d8d2", // Matches pictograph background
+      cardHoverBg: "#c8c8c2", // Darker on hover
+      accent,
+      accentStrong: accent,
+      stroke: "rgba(15, 23, 42, 0.15)", // More visible strokes on darker bg
+      strokeStrong: "rgba(15, 23, 42, 0.22)",
+      text: "#0f172a",
+      textDim: "rgba(15, 23, 42, 0.75)",
+      shadow: "0 12px 28px rgba(15, 23, 42, 0.18)",
+      panelShadow: "0 12px 28px rgba(15, 23, 42, 0.18)",
+    };
+  }
+
+  // On mobile, increase opacity for better readability
+  // Desktop: 0.75/0.5, Mobile: 0.88/0.7
+  return {
+    panelBg: mobile ? "rgba(0, 0, 0, 0.88)" : "rgba(0, 0, 0, 0.75)",
+    panelElevatedBg: mobile ? "rgba(0, 0, 0, 0.7)" : "rgba(0, 0, 0, 0.5)",
+    cardBg: mobile ? "rgba(0, 0, 0, 0.88)" : "rgba(0, 0, 0, 0.75)",
+    cardHoverBg: mobile ? "rgba(0, 0, 0, 0.7)" : "rgba(0, 0, 0, 0.55)",
+    accent,
+    accentStrong: accent, // Use same accent for strong variant
+    stroke: "rgba(255, 255, 255, 0.08)",
+    strokeStrong: "rgba(255, 255, 255, 0.14)",
+    text: "#ffffff",
+    textDim: "rgba(255, 255, 255, 0.75)", // WCAG AAA: 7:1 contrast minimum
+    shadow: "0 14px 36px rgba(0, 0, 0, 0.4)",
+    panelShadow: "0 12px 28px rgba(0, 0, 0, 0.35)",
+  };
+}
+
+/**
+ * Generate danger zone theme based on background luminance.
+ * Both modes use opaque dark surfaces - the difference is the base color tint.
+ * Light mode: darker, more opaque for contrast against bright backgrounds
+ * Dark mode: slightly less opaque, works well against dark solid backgrounds
+ */
+export function generateDangerTheme(mode: ThemeMode): DangerTheme {
+  if (mode === "light") {
+    // Light/colorful backgrounds (Aurora, etc.) - very opaque dark red surface
+    return {
+      bg: "linear-gradient(135deg, rgba(60, 12, 18, 0.95) 0%, rgba(75, 18, 25, 0.92) 100%)",
+      hoverBg:
+        "linear-gradient(135deg, rgba(75, 15, 22, 0.96) 0%, rgba(90, 22, 30, 0.94) 100%)",
+      border: "rgba(239, 68, 68, 0.6)",
+      hoverBorder: "rgba(239, 68, 68, 0.75)",
+      shadow:
+        "inset 0 1px 0 rgba(239, 68, 68, 0.2), 0 4px 20px rgba(0, 0, 0, 0.4)",
+      hoverShadow:
+        "inset 0 1px 0 rgba(239, 68, 68, 0.25), 0 8px 32px rgba(0, 0, 0, 0.5), 0 0 24px rgba(239, 68, 68, 0.25)",
+    };
+  }
+
+  // Dark backgrounds - opaque dark red (matches other card opacity but red-tinted)
+  return {
+    bg: "linear-gradient(135deg, rgba(45, 10, 15, 0.92) 0%, rgba(55, 15, 20, 0.88) 100%)",
+    hoverBg:
+      "linear-gradient(135deg, rgba(55, 12, 18, 0.94) 0%, rgba(65, 18, 25, 0.9) 100%)",
+    border: "rgba(239, 68, 68, 0.45)",
+    hoverBorder: "rgba(239, 68, 68, 0.6)",
+    shadow:
+      "inset 0 1px 0 rgba(239, 68, 68, 0.15), 0 4px 16px rgba(0, 0, 0, 0.3)",
+    hoverShadow:
+      "inset 0 1px 0 rgba(239, 68, 68, 0.2), 0 8px 28px rgba(0, 0, 0, 0.4), 0 0 20px rgba(239, 68, 68, 0.18)",
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// THEME APPLICATION
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Apply theme CSS variables to document root based on colors
+ * Can be called with solid color OR gradient/theme colors
+ */
+export function applyThemeFromColors(
+  solidColor?: string,
+  gradientColors?: string[]
+): void {
+  if (typeof document === "undefined") return;
+
+  // Calculate luminance
+  const luminance = solidColor
+    ? calculateLuminance(solidColor)
+    : gradientColors
+      ? calculateGradientLuminance(gradientColors)
+      : 0;
+
+  // Determine theme mode
+  const mode = getThemeModeFromLuminance(luminance);
+
+  // Update the reactive theme mode state
+  setThemeModeState(mode);
+
+  // Extract accent color
+  const accentColor = gradientColors
+    ? extractAccentColor(gradientColors)
+    : solidColor;
+
+  // Generate themes
+  const theme = generateGlassMorphismTheme(mode, accentColor);
+  const matteTheme = generateMatteTheme(mode, accentColor);
+  const dangerTheme = generateDangerTheme(mode);
+
+  // Apply to document root
+  const root = document.documentElement;
+
+  // Set data attribute for CSS-based background luminance awareness
+  // "bright" = luminous backgrounds (Aurora, etc.) - cards need deeper colors to pop
+  // "dim" = darker backgrounds (Night Sky, etc.) - standard vibrant colors work well
+  const luminanceClass = mode === "light" ? "bright" : "dim";
+  root.setAttribute("data-theme-luminance", luminanceClass);
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // LEGACY VARIABLES - Still used by 30+ components. DO NOT REMOVE.
+  // Migration to --theme-* variables is ongoing.
+  // ═══════════════════════════════════════════════════════════════════════════
+  root.style.setProperty("--panel-bg-current", theme.panelBg);
+  root.style.setProperty("--panel-border-current", theme.panelBorder);
+  root.style.setProperty("--panel-hover-current", theme.panelHover);
+  root.style.setProperty("--card-bg-current", theme.cardBg);
+  root.style.setProperty("--card-border-current", theme.cardBorder);
+  root.style.setProperty("--card-hover-current", theme.cardHover);
+  root.style.setProperty("--text-primary-current", theme.textPrimary);
+  root.style.setProperty("--text-secondary-current", theme.textSecondary);
+  root.style.setProperty("--input-bg-current", theme.inputBg);
+  root.style.setProperty("--input-border-current", theme.inputBorder);
+  root.style.setProperty("--input-focus-current", theme.inputFocus);
+  root.style.setProperty("--button-active-current", theme.buttonActive);
+  root.style.setProperty("--glass-backdrop", theme.backdropBlur);
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // LAYER 1: Dynamic Theme Variables (--theme-*)
+  // Adapt based on background luminance. Use these for new components.
+  // ═══════════════════════════════════════════════════════════════════════════
+  root.style.setProperty("--theme-panel-bg", matteTheme.panelBg);
+  root.style.setProperty(
+    "--theme-panel-elevated-bg",
+    matteTheme.panelElevatedBg
+  );
+  root.style.setProperty("--theme-card-bg", matteTheme.cardBg);
+  root.style.setProperty("--theme-card-hover-bg", matteTheme.cardHoverBg);
+  root.style.setProperty("--theme-accent", matteTheme.accent);
+  root.style.setProperty("--theme-accent-strong", matteTheme.accentStrong);
+  root.style.setProperty("--theme-stroke", matteTheme.stroke);
+  root.style.setProperty("--theme-stroke-strong", matteTheme.strokeStrong);
+  root.style.setProperty("--theme-text", matteTheme.text);
+  root.style.setProperty("--theme-text-dim", matteTheme.textDim);
+  root.style.setProperty("--theme-shadow", matteTheme.shadow);
+  root.style.setProperty("--theme-panel-shadow", matteTheme.panelShadow);
+
+  // Additional convenience tokens (derived from base tokens)
+  root.style.setProperty(
+    "--theme-accent-bg",
+    `color-mix(in srgb, ${matteTheme.accent} 15%, transparent)`
+  );
+  root.style.setProperty(
+    "--theme-accent-glow",
+    `color-mix(in srgb, ${matteTheme.accent} 40%, transparent)`
+  );
+  root.style.setProperty(
+    "--theme-accent-hover",
+    `color-mix(in srgb, ${matteTheme.accent} 80%, white)`
+  );
+  root.style.setProperty("--theme-accent-border", matteTheme.stroke);
+  root.style.setProperty("--theme-accent-text", matteTheme.accent);
+  root.style.setProperty("--theme-input-bg", matteTheme.cardBg);
+  root.style.setProperty("--theme-hover-bg", matteTheme.cardHoverBg);
+  root.style.setProperty(
+    "--theme-text-tertiary",
+    `color-mix(in srgb, ${matteTheme.textDim} 70%, transparent)`
+  );
+  root.style.setProperty("--theme-transition", "150ms ease-out");
+
+  // Danger zone theme variables (for destructive actions)
+  root.style.setProperty("--theme-danger-bg", dangerTheme.bg);
+  root.style.setProperty("--theme-danger-hover-bg", dangerTheme.hoverBg);
+  root.style.setProperty("--theme-danger-border", dangerTheme.border);
+  root.style.setProperty(
+    "--theme-danger-hover-border",
+    dangerTheme.hoverBorder
+  );
+  root.style.setProperty("--theme-danger-shadow", dangerTheme.shadow);
+  root.style.setProperty(
+    "--theme-danger-hover-shadow",
+    dangerTheme.hoverShadow
+  );
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // LAYER 2: Semantic Colors (--semantic-*)
+  // Constant colors that do NOT change with background.
+  // Use for status indicators, errors, successes.
+  // ═══════════════════════════════════════════════════════════════════════════
+  root.style.setProperty("--semantic-error", "#ef4444");
+  root.style.setProperty("--semantic-error-dim", "rgba(239, 68, 68, 0.15)");
+  root.style.setProperty("--semantic-success", "#22c55e");
+  root.style.setProperty("--semantic-success-dim", "rgba(34, 197, 94, 0.15)");
+  root.style.setProperty("--semantic-warning", "#f59e0b");
+  root.style.setProperty("--semantic-warning-dim", "rgba(245, 158, 11, 0.15)");
+  root.style.setProperty("--semantic-warning-bg", "rgba(245, 158, 11, 0.1)");
+  root.style.setProperty(
+    "--semantic-warning-border",
+    "rgba(245, 158, 11, 0.3)"
+  );
+  root.style.setProperty("--semantic-warning-text", "#fbbf24");
+  root.style.setProperty("--semantic-warning-glow", "rgba(245, 158, 11, 0.4)");
+  root.style.setProperty("--semantic-warning-text-vivid", "#fcd34d");
+  root.style.setProperty("--semantic-info", "#3b82f6");
+  root.style.setProperty("--semantic-info-dim", "rgba(59, 130, 246, 0.15)");
+  root.style.setProperty("--semantic-info-bg", "rgba(59, 130, 246, 0.1)");
+  root.style.setProperty("--semantic-info-border", "rgba(59, 130, 246, 0.3)");
+  root.style.setProperty("--semantic-info-text", "#60a5fa");
+
+  // Feature accent colors (constant) - for branding different app areas
+  root.style.setProperty("--feature-edit", "#8b5cf6"); // Purple - editing contexts
+  root.style.setProperty("--feature-edit-dim", "rgba(139, 92, 246, 0.15)");
+  root.style.setProperty("--feature-view", "#06b6d4"); // Teal - viewing/export contexts
+  root.style.setProperty("--feature-view-dim", "rgba(6, 182, 212, 0.15)");
+  root.style.setProperty("--feature-generate", "#f97316"); // Orange - generation contexts
+  root.style.setProperty("--feature-generate-dim", "rgba(249, 115, 22, 0.15)");
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // SCROLLBAR THEME VARIABLES
+  // Adapt based on background luminance for consistent scrollbar styling.
+  // ═══════════════════════════════════════════════════════════════════════════
+  root.style.setProperty(
+    "--scrollbar-thumb",
+    mode === "light" ? "rgba(15, 23, 42, 0.25)" : "rgba(255, 255, 255, 0.2)"
+  );
+  root.style.setProperty(
+    "--scrollbar-thumb-hover",
+    mode === "light" ? "rgba(15, 23, 42, 0.4)" : "rgba(255, 255, 255, 0.35)"
+  );
+  root.style.setProperty(
+    "--scrollbar-track",
+    mode === "light" ? "rgba(15, 23, 42, 0.05)" : "transparent"
+  );
+  root.style.setProperty(
+    "--scrollbar-accent",
+    `color-mix(in srgb, ${matteTheme.accent} 30%, transparent)`
+  );
+  root.style.setProperty(
+    "--scrollbar-accent-hover",
+    `color-mix(in srgb, ${matteTheme.accent} 50%, transparent)`
+  );
+}
+
+/**
+ * Apply theme based on a registered background type name
+ * Convenience function that looks up theme colors and applies them
+ */
+export function applyThemeForBackground(backgroundTypeName: string): void {
+  const themeColors = colorPalettes.get(backgroundTypeName) ?? DEFAULT_PALETTE;
+  applyThemeFromColors(undefined, themeColors);
+}
+
+/**
+ * Ensure theme CSS variables are applied based on localStorage settings.
+ * Call this when CSS variables may have been cleared (HMR, remount, etc.)
+ * This ALWAYS applies - no "skip if same" optimization.
+ *
+ * @param options.backgroundTypeKey - The key in stored settings for background type
+ * @param options.solidColorKey - The key in stored settings for solid color
+ * @param options.gradientColorsKey - The key in stored settings for gradient colors
+ * @param options.defaultBackground - Default background type name if nothing in storage
+ */
+export function ensureThemeApplied(options?: {
+  backgroundTypeKey?: string;
+  solidColorKey?: string;
+  gradientColorsKey?: string;
+  defaultBackground?: string;
+}): void {
+  if (typeof localStorage === "undefined" || typeof document === "undefined") return;
+
+  const {
+    backgroundTypeKey = "backgroundType",
+    solidColorKey = "backgroundColor",
+    gradientColorsKey = "gradientColors",
+    defaultBackground = "SOLID_COLOR",
+  } = options ?? {};
+
+  try {
+    const stored = localStorage.getItem(storageKey);
+    if (!stored) {
+      // No settings - apply default dark theme
+      applyThemeForBackground(defaultBackground);
+      return;
+    }
+
+    const settings = JSON.parse(stored);
+    const bgType = settings[backgroundTypeKey] as string | undefined;
+
+    if (bgType === "SOLID_COLOR" && settings[solidColorKey]) {
+      applyThemeFromColors(settings[solidColorKey]);
+    } else if (bgType === "LINEAR_GRADIENT" && settings[gradientColorsKey]) {
+      applyThemeFromColors(undefined, settings[gradientColorsKey]);
+    } else if (bgType) {
+      applyThemeForBackground(bgType);
+    } else {
+      // Fallback to solid color default
+      applyThemeForBackground(defaultBackground);
+    }
+  } catch (e) {
+    console.warn("[Theme] Failed to ensure theme applied:", e);
+    // On error, apply default theme
+    applyThemeForBackground(defaultBackground);
+  }
+}

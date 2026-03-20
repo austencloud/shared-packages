@@ -1,0 +1,42 @@
+{
+  "name": "@austencloud/image-loader",
+  "version": "2.0.0",
+  "description": "Framework-agnostic image loading with multi-tier caching, priority queuing, and lazy loading. Pure TypeScript, zero runtime dependencies.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "clean": "rimraf dist"
+  },
+  "devDependencies": {
+    "rimraf": "^5.0.0",
+    "typescript": "^5.0.0"
+  },
+  "keywords": [
+    "image",
+    "lazy-loading",
+    "caching",
+    "indexeddb",
+    "priority-queue",
+    "intersection-observer",
+    "performance",
+    "framework-agnostic"
+  ],
+  "author": "Austen Cloud <austencloud@gmail.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/austencloud/shared-packages.git",
+    "directory": "packages/image-loader"
+  }
+}

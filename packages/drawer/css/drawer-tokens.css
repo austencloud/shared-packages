@@ -1,0 +1,21 @@
+/*
+ * Default drawer CSS custom property values.
+ * Import this file in your app to get sensible defaults,
+ * then override any variable in your own CSS.
+ *
+ * Usage:
+ *   @import '@austencloud/drawer/css/drawer-tokens.css';
+ */
+:root {
+  --drawer-z-index: 200;
+  --drawer-backdrop-bg: rgba(0, 0, 0, 0.7);
+  --drawer-bg: rgba(17, 24, 39, 0.98);
+  --drawer-border: rgba(255, 255, 255, 0.1);
+  --drawer-accent-border: rgba(255, 255, 255, 0.15);
+  --drawer-width: min(600px, 90vw);
+  --drawer-handle-color: rgba(255, 255, 255, 0.45);
+  --drawer-shadow: rgba(0, 0, 0, 0.6);
+  --drawer-accent-glow: rgba(255, 255, 255, 0.08);
+  --drawer-radius-lg: 20px;
+  --drawer-transition-duration: 350ms;
+}

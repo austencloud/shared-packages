@@ -1,0 +1,32 @@
+{
+  "name": "@austencloud/packages",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Austencloud shared packages monorepo",
+  "scripts": {
+    "build": "pnpm -r build",
+    "dev": "pnpm -r --parallel dev",
+    "check": "pnpm -r check",
+    "clean": "pnpm -r clean",
+    "format": "prettier --write .",
+    "lint": "eslint packages/*/src/**/*.{ts,svelte}"
+  },
+  "devDependencies": {
+    "@sveltejs/package": "^2.3.0",
+    "@typescript-eslint/eslint-plugin": "^8.0.0",
+    "@typescript-eslint/parser": "^8.0.0",
+    "eslint": "^9.0.0",
+    "eslint-plugin-svelte": "^2.0.0",
+    "prettier": "^3.0.0",
+    "prettier-plugin-svelte": "^3.0.0",
+    "svelte": "^5.0.0",
+    "typescript": "^5.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "pnpm": ">=8.0.0"
+  },
+  "packageManager": "pnpm@9.0.0",
+  "author": "Austen Cloud <austencloud@gmail.com>",
+  "license": "MIT"
+}

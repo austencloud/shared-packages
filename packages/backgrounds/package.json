@@ -1,0 +1,48 @@
+{
+  "name": "@austencloud/backgrounds",
+  "version": "0.1.0",
+  "description": "Animated canvas backgrounds - snowfall, night sky, deep ocean, firefly forest, and more",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./css": "./css/index.css",
+    "./css/backgrounds.css": "./css/backgrounds.css"
+  },
+  "files": [
+    "dist",
+    "css"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc --watch",
+    "clean": "rimraf dist"
+  },
+  "keywords": [
+    "canvas",
+    "animation",
+    "backgrounds",
+    "particles",
+    "svelte",
+    "typescript"
+  ],
+  "author": "Austen Cloud",
+  "license": "MIT",
+  "devDependencies": {
+    "rimraf": "^5.0.0",
+    "svelte": "^5.0.0",
+    "typescript": "^5.0.0"
+  },
+  "peerDependencies": {
+    "svelte": "^5.0.0"
+  },
+  "peerDependenciesMeta": {
+    "svelte": {
+      "optional": true
+    }
+  }
+}
