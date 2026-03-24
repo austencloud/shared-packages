@@ -140,6 +140,15 @@
 	{:else}
 		<div class="card-top">
 			<span class="type-label">{typeConfig.label}</span>
+			{#if item.userDisplayName || item.userPhotoURL}
+				<span class="card-avatar" title={item.userDisplayName ?? ''}>
+					{#if item.userPhotoURL}
+						<img src={item.userPhotoURL} alt="" class="avatar-img" />
+					{:else}
+						{(item.userDisplayName ?? '?')[0].toUpperCase()}
+					{/if}
+				</span>
+			{/if}
 			{#if showClaimIndicators && claimHealth !== 'none'}
 				<span
 					class="claim-indicator"
@@ -165,6 +174,11 @@
 					{priorityConfig.label}
 				</span>
 			{/if}
+			{#if item.imageUrls?.length}
+				<span class="image-badge" title="{item.imageUrls.length} screenshot(s)">
+					📎 {item.imageUrls.length}
+				</span>
+			{/if}
 			<DateDisplay date={item.createdAt} />
 		</div>
 	{/if}
@@ -180,7 +194,7 @@
 		border: 1px solid var(--theme-stroke, rgba(255, 255, 255, 0.08));
 		background: linear-gradient(
 			135deg,
-			color-mix(in srgb, var(--type-color) 6%, var(--theme-card-bg, rgba(30, 30, 40, 0.95))),
+			color-mix(in srgb, var(--type-color) 8%, var(--theme-card-bg, rgba(30, 30, 40, 0.95))),
 			var(--theme-card-bg, rgba(30, 30, 40, 0.95))
 		);
 		cursor: grab;
@@ -214,7 +228,7 @@
 		transform: translateY(-2px);
 		background: linear-gradient(
 			135deg,
-			color-mix(in srgb, var(--type-color) 10%, var(--theme-card-bg, rgba(30, 30, 40, 0.95))),
+			color-mix(in srgb, var(--type-color) 14%, var(--theme-card-bg, rgba(30, 30, 40, 0.95))),
 			var(--theme-card-bg, rgba(30, 30, 40, 0.95))
 		);
 	}
@@ -328,6 +342,36 @@
 	@keyframes critical-pulse {
 		0%, 100% { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--priority-color) 15%, transparent); }
 		50% { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--priority-color) 15%, transparent), 0 0 12px color-mix(in srgb, var(--priority-color) 20%, transparent); }
+	}
+
+	.card-avatar {
+		width: 22px;
+		height: 22px;
+		border-radius: 50%;
+		background: color-mix(in srgb, var(--type-color) 25%, var(--theme-card-bg, rgba(30, 30, 40, 0.95)));
+		color: var(--type-color);
+		font-size: 0.7rem;
+		font-weight: 700;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		flex-shrink: 0;
+		border: 1.5px solid color-mix(in srgb, var(--type-color) 30%, transparent);
+	}
+
+	.avatar-img {
+		width: 100%;
+		height: 100%;
+		border-radius: 50%;
+		object-fit: cover;
+	}
+
+	.image-badge {
+		font-size: 0.7rem;
+		color: var(--theme-text-dim, rgba(148, 163, 184, 0.9));
+		display: flex;
+		align-items: center;
+		gap: 2px;
 	}
 
 	@media (prefers-reduced-motion: reduce) {

@@ -12,6 +12,14 @@
 		showWipWarnings?: boolean;
 	} = $props();
 
+	const STATUS_COLORS: Record<string, string> = {
+		'new': '#3b82f6',
+		'in-progress': '#f59e0b',
+		'in-review': '#8b5cf6',
+		'completed': '#10b981',
+		'archived': '#6b7280',
+	};
+
 	const config = $derived(STATUS_DISPLAY[status]);
 	const wipLimit = $derived(WIP_LIMITS[status] ?? 0);
 	const isAtLimit = $derived(showWipWarnings && wipLimit > 0 && count >= wipLimit);
@@ -20,9 +28,11 @@
 
 <div class="column-header" style:--col-color={config.color}>
 	<div class="header-left">
+		<span class="status-dot" style:--dot-color={STATUS_COLORS[status] ?? config.color}></span>
 		<span class="status-label">{config.label}</span>
 		<span
-			class="item-count"
+			class="count-badge"
+			style:--dot-color={STATUS_COLORS[status] ?? config.color}
 			class:at-limit={isAtLimit && !isOverLimit}
 			class:over-limit={isOverLimit}
 		>
@@ -52,27 +62,38 @@
 		gap: 8px;
 	}
 
+	.status-dot {
+		width: 10px;
+		height: 10px;
+		border-radius: 50%;
+		background: var(--dot-color);
+		box-shadow: 0 0 6px color-mix(in srgb, var(--dot-color) 40%, transparent);
+		flex-shrink: 0;
+	}
+
 	.status-label {
 		font-size: var(--fb-text-sm, 0.875rem);
 		font-weight: 700;
 		color: var(--col-color);
 	}
 
-	.item-count {
-		font-size: var(--fb-text-xs, 0.8125rem);
-		font-weight: 600;
-		color: var(--theme-text-dim, rgba(148, 163, 184, 0.9));
-		padding: 1px 6px;
+	.count-badge {
+		font-size: 0.75rem;
+		font-weight: 700;
+		padding: 1px 8px;
 		border-radius: 100px;
-		background: color-mix(in srgb, var(--col-color) 10%, transparent);
+		min-width: 24px;
+		text-align: center;
+		color: var(--dot-color);
+		background: color-mix(in srgb, var(--dot-color) 15%, transparent);
 	}
 
-	.item-count.at-limit {
+	.count-badge.at-limit {
 		color: var(--semantic-warning, #f59e0b);
 		background: color-mix(in srgb, var(--semantic-warning, #f59e0b) 12%, transparent);
 	}
 
-	.item-count.over-limit {
+	.count-badge.over-limit {
 		color: var(--semantic-error, #ef4444);
 		background: color-mix(in srgb, var(--semantic-error, #ef4444) 12%, transparent);
 		animation: warning-pulse 2s ease-in-out infinite;
@@ -84,7 +105,7 @@
 	}
 
 	@media (prefers-reduced-motion: reduce) {
-		.item-count.over-limit {
+		.count-badge.over-limit {
 			animation: none;
 		}
 	}
