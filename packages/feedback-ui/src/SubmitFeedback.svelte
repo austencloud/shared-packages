@@ -4,25 +4,56 @@
 	import TypeSelector from './submit/TypeSelector.svelte';
 	import PriorityPills from './submit/PriorityPills.svelte';
 	import SubmitButton from './submit/SubmitButton.svelte';
+	import { saveDraft, loadDraft, clearDraft } from './utils/draft-persistence.js';
+
+	const DEFAULT_PLACEHOLDERS: Record<FeedbackType, string> = {
+		bug: "What went wrong? Describe what happened and what you expected...",
+		feature: "Describe the feature you'd like and how it would help...",
+		general: "Share your thoughts, suggestions, or observations...",
+	};
+
+	const DEFAULT_ENCOURAGEMENTS: Record<FeedbackType, string> = {
+		bug: "Include steps to reproduce and any error messages you saw.",
+		feature: "Describe exactly what you'd love to see and how it would help you.",
+		general: "Share your thoughts on what's working and what could be better.",
+	};
 
 	const {
 		user,
 		onSubmit,
+		capturedRoute,
 		defaultType = 'general',
 		defaultPriority,
 		successMessage = 'Thank you for your feedback!',
 		extraFieldsSnippet,
+		placeholderConfig,
+		encouragementConfig,
+		enableDraftPersistence = false,
 	}: SubmitFeedbackProps = $props();
 
-	let type = $state<FeedbackType>(defaultType);
-	let title = $state('');
-	let description = $state('');
-	let priority = $state<FeedbackPriority | undefined>(defaultPriority);
+	const placeholders = $derived({ ...DEFAULT_PLACEHOLDERS, ...placeholderConfig });
+	const encouragements = $derived({ ...DEFAULT_ENCOURAGEMENTS, ...encouragementConfig });
+	const draftKey = $derived(
+		typeof enableDraftPersistence === 'string' ? enableDraftPersistence : 'feedback-form-draft'
+	);
+
+	const draft = enableDraftPersistence ? loadDraft(draftKey) : null;
+
+	let type = $state<FeedbackType>((draft?.type as FeedbackType) ?? defaultType);
+	let title = $state(draft?.title ?? '');
+	let description = $state(draft?.description ?? '');
+	let priority = $state<FeedbackPriority | undefined>((draft?.priority as FeedbackPriority) ?? defaultPriority);
 	let isSubmitting = $state(false);
 	let submitStatus = $state<'idle' | 'success' | 'error'>('idle');
 	let errorMessage = $state('');
 
 	const isValid = $derived(description.trim().length >= 10);
+
+	$effect(() => {
+		if (enableDraftPersistence && submitStatus === 'idle') {
+			saveDraft({ type, title, description, priority }, draftKey);
+		}
+	});
 
 	async function handleSubmit(e: SubmitEvent) {
 		e.preventDefault();
@@ -39,6 +70,7 @@
 				priority,
 			};
 			await onSubmit(formData);
+			if (enableDraftPersistence) clearDraft(draftKey);
 			submitStatus = 'success';
 		} catch (err) {
 			errorMessage = err instanceof Error ? err.message : 'Submission failed';
@@ -55,6 +87,7 @@
 		priority = defaultPriority;
 		submitStatus = 'idle';
 		errorMessage = '';
+		if (enableDraftPersistence) clearDraft(draftKey);
 	}
 </script>
 
@@ -96,10 +129,11 @@
 				<textarea
 					id="fb-description"
 					class="text-input textarea"
-					placeholder="Describe in detail..."
+					placeholder={placeholders[type]}
 					bind:value={description}
 					rows="4"
 				></textarea>
+				<p class="encouragement-text">{encouragements[type]}</p>
 			</div>
 
 			<div class="form-section">
@@ -190,6 +224,14 @@
 		resize: vertical;
 		min-height: 100px;
 		line-height: 1.5;
+	}
+
+	.encouragement-text {
+		font-size: var(--fb-text-xs, 0.8125rem);
+		color: var(--theme-text-dim, rgba(148, 163, 184, 0.9));
+		font-style: italic;
+		margin: 0;
+		line-height: 1.4;
 	}
 
 	.error-banner {

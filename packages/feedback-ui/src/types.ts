@@ -24,6 +24,12 @@ export interface SubmitFeedbackProps {
 	successMessage?: string;
 	/** Snippet for extra fields after description (e.g., image upload) */
 	extraFieldsSnippet?: Snippet;
+	/** Type-specific placeholder text for the description textarea */
+	placeholderConfig?: Record<FeedbackType, string>;
+	/** Type-specific encouragement text shown below the description */
+	encouragementConfig?: Record<FeedbackType, string>;
+	/** Enable auto-save to localStorage. Provide a string key or true for default key. */
+	enableDraftPersistence?: boolean | string;
 }
 
 // ── MyFeedback ─────────────────────────────────────────────────────
