@@ -1,32 +1,24 @@
 {
   "name": "@austencloud/code-quality",
-  "version": "1.1.0",
-  "description": "Zero-dependency code quality tools - monolith detection, dead code analysis, audit tracking, and evidence collection",
+  "version": "1.0.0",
+  "description": "Code quality tooling: monolith detection, dead code analysis, audit tracking, evidence collection, CSS audits",
   "bin": {
-    "ac-monolith": "bin/ac-monolith.cjs",
-    "ac-deadcode": "bin/ac-deadcode.cjs",
-    "ac-audit": "bin/ac-audit.cjs",
-    "ac-evidence": "bin/ac-evidence.cjs"
+    "ac-monolith": "./bin/ac-monolith.js",
+    "ac-deadcode": "./bin/ac-deadcode.js",
+    "ac-audit": "./bin/ac-audit.js",
+    "ac-evidence": "./bin/ac-evidence.js",
+    "ac-audit-css-rtl": "./bin/ac-audit-css-rtl.js",
+    "ac-audit-reduced-motion": "./bin/ac-audit-reduced-motion.js",
+    "ac-audit-transitions": "./bin/ac-audit-transitions.js",
+    "ac-audit-durations": "./bin/ac-audit-durations.js",
+    "ac-validate-i18n": "./bin/ac-validate-i18n.js",
+    "ac-check-env": "./bin/ac-check-env.js"
   },
-  "files": [
-    "bin/"
-  ],
-  "keywords": [
-    "cli",
-    "monolith",
-    "deadcode",
-    "audit",
-    "evidence",
-    "code-quality",
-    "refactoring"
-  ],
-  "author": "Austen Cloud <austencloud@gmail.com>",
+  "files": ["bin", "src"],
+  "type": "commonjs",
   "license": "MIT",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/austencloud/shared-packages.git"
-  },
+  "author": "Austen Cloud <austencloud@gmail.com>",
   "engines": {
-    "node": ">=18"
+    "node": ">=18.0.0"
   }
 }

@@ -1,35 +1,22 @@
 {
   "name": "@austencloud/feedback-cli",
   "version": "1.0.0",
-  "description": "Firebase-powered feedback queue and release management CLI",
-  "type": "module",
+  "description": "Feedback queue CLI: fetch, submit, and release feedback items via Firebase",
   "bin": {
-    "ac-feedback": "bin/ac-feedback.js",
-    "ac-release": "bin/ac-release.js"
+    "ac-feedback": "./bin/ac-feedback.js",
+    "ac-submit-feedback": "./bin/ac-submit-feedback.js",
+    "ac-release": "./bin/ac-release.js"
   },
-  "files": [
-    "bin/",
-    "lib/",
-    "config/"
-  ],
-  "dependencies": {
-    "@austencloud/feedback-types": "^0.1.0",
-    "firebase-admin": "^13.0.0",
-    "google-auth-library": "^9.0.0"
-  },
-  "keywords": [
-    "cli",
-    "feedback",
-    "release",
-    "firebase"
-  ],
-  "author": "Austen Cloud <austencloud@gmail.com>",
+  "files": ["bin", "src"],
+  "type": "module",
   "license": "MIT",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/austencloud/shared-packages.git"
-  },
+  "author": "Austen Cloud <austencloud@gmail.com>",
   "engines": {
-    "node": ">=18"
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "@austencloud/feedback-services": "workspace:*",
+    "firebase-admin": "^13.6.0",
+    "google-auth-library": "^9.0.0"
   }
 }

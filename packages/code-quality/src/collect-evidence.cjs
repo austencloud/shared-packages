@@ -6,140 +6,45 @@
  * Scans source files using fs + RegExp (no LLM) and produces structured JSON
  * with per-dimension findings. Each finding includes file, line, and preview.
  *
- * Configuration:
- *   Place a .claude/skills.config.json in your project root with:
- *   { "srcFeatures": "src/lib/features", "srcShared": "src/lib/shared" }
- *
- *   Or pass CLI flags: --src-features <path> --src-shared <path>
- *   Falls back to src/lib if no config exists.
- *
  * Usage:
- *   ac-evidence <scope> [--out <path>]
+ *   node scripts/collect-evidence.cjs <scope> [--out <path>]
  *
  * Examples:
- *   ac-evidence "features/compose"
- *   ac-evidence "features/compose" --out .audit-evidence.json
- *   ac-evidence "shared/pictograph" --out evidence.json
+ *   node scripts/collect-evidence.cjs "features/compose"
+ *   node scripts/collect-evidence.cjs "features/compose" --out .audit-evidence.json
+ *   node scripts/collect-evidence.cjs "shared/pictograph" --out evidence.json
  *
  * Output: JSON to stdout (or file if --out specified) with per-dimension findings.
  */
 
 const fs = require("fs");
 const path = require("path");
-
-// ---------------------------------------------------------------------------
-// Path configuration
-// ---------------------------------------------------------------------------
-
-const PROJECT_ROOT = process.cwd();
-
-/**
- * Load path configuration from .claude/skills.config.json or CLI flags
- */
-function loadConfig() {
-  const args = process.argv.slice(2);
-
-  // CLI flag overrides
-  const srcFeaturesIdx = args.indexOf("--src-features");
-  const srcSharedIdx = args.indexOf("--src-shared");
-  const cliFeaturesPath = srcFeaturesIdx !== -1 ? args[srcFeaturesIdx + 1] : null;
-  const cliSharedPath = srcSharedIdx !== -1 ? args[srcSharedIdx + 1] : null;
-
-  // Try .claude/skills.config.json
-  let configFeatures = null;
-  let configShared = null;
-  const configPath = path.join(PROJECT_ROOT, ".claude", "skills.config.json");
-  try {
-    if (fs.existsSync(configPath)) {
-      const config = JSON.parse(fs.readFileSync(configPath, "utf-8"));
-      configFeatures = config.srcFeatures || null;
-      configShared = config.srcShared || null;
-    }
-  } catch {
-    // Config not readable, use defaults
-  }
-
-  // Priority: CLI flags > config file > defaults
-  const featuresRel = cliFeaturesPath || configFeatures || "src/lib";
-  const sharedRel = cliSharedPath || configShared || "src/lib";
-
-  return {
-    srcRoot: path.isAbsolute(featuresRel)
-      ? path.dirname(featuresRel)
-      : path.join(PROJECT_ROOT, path.dirname(featuresRel)),
-    featuresDir: path.isAbsolute(featuresRel)
-      ? featuresRel
-      : path.join(PROJECT_ROOT, featuresRel),
-    sharedDir: path.isAbsolute(sharedRel)
-      ? sharedRel
-      : path.join(PROJECT_ROOT, sharedRel),
-  };
-}
-
-const config = loadConfig();
+const { execSync } = require("child_process");
 
 // ---------------------------------------------------------------------------
 // CLI
 // ---------------------------------------------------------------------------
 
-const allArgs = process.argv.slice(2);
-
-// Filter out config flags to get clean args
-function getCleanArgs() {
-  const clean = [];
-  for (let i = 0; i < allArgs.length; i++) {
-    if (allArgs[i] === "--src-features" || allArgs[i] === "--src-shared") {
-      i++; // skip the value too
-      continue;
-    }
-    clean.push(allArgs[i]);
-  }
-  return clean;
-}
-
-const cleanArgs = getCleanArgs();
-const scope = cleanArgs.find((a) => !a.startsWith("--"));
-const outIdx = cleanArgs.indexOf("--out");
-const outPath = outIdx !== -1 ? cleanArgs[outIdx + 1] : null;
+const args = process.argv.slice(2);
+const scope = args.find((a) => !a.startsWith("--"));
+const outIdx = args.indexOf("--out");
+const outPath = outIdx !== -1 ? args[outIdx + 1] : null;
 
 if (!scope) {
-  console.error("Usage: ac-evidence <scope> [--out <path>]");
-  console.error('Example: ac-evidence "features/compose"');
+  console.error("Usage: node scripts/collect-evidence.cjs <scope> [--out <path>]");
+  console.error('Example: node scripts/collect-evidence.cjs "features/compose"');
   process.exit(1);
 }
 
-// The scope is relative — resolve it against the srcRoot (parent of features/shared dirs)
-// Try features dir first, then shared dir, then src root
-function resolveScopeDir() {
-  // Try as relative to the features parent (e.g., "features/compose" -> srcRoot/../features/compose)
-  // The scope itself specifies "features/X" or "shared/X", so we resolve from the parent of those dirs
-  const srcRoot = config.srcRoot;
-  const candidate1 = path.join(srcRoot, scope);
-  if (fs.existsSync(candidate1)) return { dir: candidate1, root: srcRoot };
+// Use cwd() so this works when run via npx from any project
+const PROJECT_ROOT = process.cwd();
+const SRC_ROOT = path.join(PROJECT_ROOT, "src", "lib");
+const scopeDir = path.join(SRC_ROOT, scope);
 
-  // Try directly from PROJECT_ROOT
-  const candidate2 = path.join(PROJECT_ROOT, scope);
-  if (fs.existsSync(candidate2)) return { dir: candidate2, root: PROJECT_ROOT };
-
-  // Try from PROJECT_ROOT/src/lib (common SvelteKit layout)
-  const candidate3 = path.join(PROJECT_ROOT, "src", "lib", scope);
-  if (fs.existsSync(candidate3)) return { dir: candidate3, root: path.join(PROJECT_ROOT, "src", "lib") };
-
-  return null;
-}
-
-const resolved = resolveScopeDir();
-if (!resolved) {
-  console.error(`Scope directory not found: ${scope}`);
-  console.error(`Looked in:`);
-  console.error(`  - ${path.join(config.srcRoot, scope)}`);
-  console.error(`  - ${path.join(PROJECT_ROOT, scope)}`);
-  console.error(`  - ${path.join(PROJECT_ROOT, "src", "lib", scope)}`);
+if (!fs.existsSync(scopeDir)) {
+  console.error(`Scope directory not found: ${scopeDir}`);
   process.exit(1);
 }
-
-const scopeDir = resolved.dir;
-const SRC_ROOT = resolved.root;
 
 // ---------------------------------------------------------------------------
 // File discovery
@@ -176,7 +81,7 @@ const svelteAndCss = [...svelteFiles, ...cssFiles];
 // Helpers
 // ---------------------------------------------------------------------------
 
-/** Return path relative to SRC_ROOT for display */
+/** Return path relative to src/lib/ for display */
 function rel(absPath) {
   return path.relative(SRC_ROOT, absPath).replace(/\\/g, "/");
 }
@@ -226,6 +131,26 @@ function fileContains(filePath, regex) {
 }
 
 // ---------------------------------------------------------------------------
+// Shell out to existing audit scripts (with --scope support)
+// ---------------------------------------------------------------------------
+
+function runExternalAudit(scriptName, scopePath) {
+  try {
+    const result = execSync(
+      `node "${path.join(__dirname, scriptName)}" --json --scope "${scopePath}"`,
+      {
+        encoding: "utf-8",
+        cwd: PROJECT_ROOT,
+        timeout: 30000,
+      }
+    );
+    return JSON.parse(result);
+  } catch {
+    return null;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Dimension: Architecture
 // ---------------------------------------------------------------------------
 
@@ -252,15 +177,17 @@ function collectArchitecture() {
       findings.utilsOrHooks.push({
         file: relPath,
         line: 0,
-        preview: `File in ${relPath.includes("/utils/") ? "utils" : "hooks"} directory`,
+        preview: `File in ${relPath.includes("/utils/") ? "utils" : "hooks"} directory (should be a DI service)`,
       });
     }
   }
 
   // Missing DI: classes not registered in containers
+  // Heuristic: .ts files with class exports that aren't in a contracts/ dir
+  // Cross-references container files to eliminate false positives
   findings.potentialDiGaps = [];
 
-  // Try to find DI container files (project-specific path)
+  // Read all DI container files once for cross-referencing
   const containersDir = path.join(SRC_ROOT, "shared", "di", "containers");
   let containerContents = "";
   try {
@@ -269,7 +196,7 @@ function collectArchitecture() {
       .map((f) => fs.readFileSync(path.join(containersDir, f), "utf-8"))
       .join("\n");
   } catch {
-    // containers dir not found
+    // containers dir not found — flag everything as before
   }
 
   for (const f of tsFiles) {
@@ -281,6 +208,7 @@ function collectArchitecture() {
         const classMatch = content.match(/export\s+class\s+(\w+)/);
         if (classMatch) {
           const className = classMatch[1];
+          // Skip if the class name appears in any container file (imported or instantiated)
           if (containerContents && containerContents.includes(className)) continue;
           findings.potentialDiGaps.push({
             file: relPath,
@@ -304,16 +232,23 @@ function collectArchitecture() {
 function collectCodeQuality() {
   const findings = {};
 
+  // `: any` type annotations
   findings.anyType = scanAll(allFiles, /:\s*any\b/, { skipInComment: true });
+
+  // `as any` type assertions
   findings.asAny = scanAll(allFiles, /as\s+any\b/, { skipInComment: true });
+
+  // `as unknown as` double assertions
   findings.asUnknownAs = scanAll(allFiles, /as\s+unknown\s+as\b/, { skipInComment: true });
 
+  // Missing return types on exported functions (heuristic)
   findings.missingReturnType = scanAll(
     tsFiles,
     /export\s+(async\s+)?function\s+\w+\([^)]*\)\s*\{/,
     { skipInComment: true }
   );
 
+  // "Service" suffix in imports (naming convention violation)
   findings.serviceNaming = scanAll(
     allFiles,
     /import.*Service['";\s}]/,
@@ -330,26 +265,31 @@ function collectCodeQuality() {
 function collectSvelte5() {
   const findings = {};
 
+  // Legacy store imports
   findings.storeImports = scanAll(
     allFiles,
     /from\s+['"]svelte\/store['"]/
   );
 
+  // writable() / readable() usage
   findings.writableReadable = scanAll(
     allFiles,
     /\b(writable|readable)\s*\(/
   );
 
+  // $: reactive statements (legacy)
   findings.dollarColon = scanAll(
     svelteFiles,
     /^\s*\$:\s/
   );
 
+  // export let (legacy Svelte 4 props)
   findings.exportLet = scanAll(
     svelteFiles,
     /^\s*export\s+let\s/
   );
 
+  // createEventDispatcher (legacy event pattern)
   findings.createEventDispatcher = scanAll(
     svelteFiles,
     /createEventDispatcher/
@@ -365,8 +305,15 @@ function collectSvelte5() {
 function collectAccessibility() {
   const findings = {};
 
-  // No external audit scripts — these are project-specific
-  findings.reducedMotion = [];
+  // Run scoped reduced-motion audit
+  const motionResult = runExternalAudit("audit-reduced-motion.cjs", scope);
+  findings.reducedMotion = motionResult
+    ? (motionResult.files || []).map((f) => ({
+        file: f.path,
+        line: 0,
+        preview: `Missing prefers-reduced-motion: keyframes [${(f.keyframes || []).join(", ")}]`,
+      }))
+    : [];
 
   // Font sizes below 12px in CSS
   findings.smallFontSize = scanAll(
@@ -407,12 +354,15 @@ function collectAccessibility() {
       for (let i = 0; i < lines.length; i++) {
         const line = lines[i];
         if (/<button\b/.test(line) && !/aria-label/.test(line) && !/>.*<\/button>/.test(line)) {
+          // Check subsequent lines until closing > for aria-label on a different line
           let hasAriaOnNextLines = false;
           for (let j = i + 1; j < Math.min(i + 15, lines.length); j++) {
             if (/aria-label/.test(lines[j])) {
               hasAriaOnNextLines = true;
               break;
             }
+            // Stop looking if we hit a line that closes the opening tag
+            // (line is just ">" or "/>" optionally with whitespace)
             if (/^\s*\/?>$/.test(lines[j].trim())) break;
           }
           if (!hasAriaOnNextLines) {
@@ -439,6 +389,7 @@ function collectAccessibility() {
 function collectUxStates() {
   const findings = {};
 
+  // Presence of loading state handling
   findings.hasLoadingState = false;
   findings.hasErrorState = false;
   findings.hasEmptyState = false;
@@ -460,17 +411,20 @@ function collectUxStates() {
     }
   }
 
+  // Bare catch blocks (swallowing errors)
   findings.bareCatch = scanAll(
     allFiles,
     /catch\s*\([^)]*\)\s*\{\s*\}/
   );
 
+  // Also find catch(() => {}) pattern
   const bareCatchArrow = scanAll(
     allFiles,
     /\.catch\s*\(\s*\(\s*\)\s*=>\s*\{\s*\}\s*\)/
   );
   findings.bareCatch.push(...bareCatchArrow);
 
+  // console.error without user feedback
   findings.consoleErrorOnly = scanAll(
     allFiles,
     /console\.error\(/,
@@ -487,8 +441,18 @@ function collectUxStates() {
 function collectUiConsistency() {
   const findings = {};
 
-  // No external audit scripts — these are project-specific
-  findings.hardcodedDurations = { count: 0, files: [] };
+  // Run scoped duration audit
+  const durationResult = runExternalAudit("audit-durations.cjs", scope);
+  findings.hardcodedDurations = durationResult
+    ? {
+        count: durationResult.totalOccurrences || 0,
+        files: (durationResult.files || []).map((f) => ({
+          file: f.path,
+          line: 0,
+          preview: `${f.count} hardcoded duration(s)`,
+        })),
+      }
+    : { count: 0, files: [] };
 
   // Hardcoded colors: #hex or rgba() not inside var()
   findings.hardcodedColors = [];
@@ -502,11 +466,19 @@ function collectUiConsistency() {
         if (/<style/.test(line)) inStyle = true;
         if (/<\/style>/.test(line)) inStyle = false;
 
+        // Only check inside <style> blocks or .css files
         if (!inStyle && !f.endsWith(".css")) continue;
+
+        // Skip comments
         if (/^\s*\/[/*]/.test(line)) continue;
+
+        // Skip lines with var() wrapping
         if (/var\(/.test(line)) continue;
+
+        // Skip CSS variable definitions (--custom-prop: #fff)
         if (/^\s*--[\w-]+\s*:/.test(line)) continue;
 
+        // Find hardcoded hex colors
         if (/#[0-9a-fA-F]{3,8}\b/.test(line)) {
           findings.hardcodedColors.push({
             file: rel(f),
@@ -515,6 +487,7 @@ function collectUiConsistency() {
           });
         }
 
+        // Find hardcoded rgba/rgb
         if (/rgba?\s*\(/.test(line)) {
           findings.hardcodedColors.push({
             file: rel(f),
@@ -550,8 +523,18 @@ function collectUiConsistency() {
 function collectPerformance() {
   const findings = {};
 
-  // No external audit scripts — these are project-specific
-  findings.directTransitionImports = { count: 0, files: [] };
+  // Run scoped transition audit
+  const transitionResult = runExternalAudit("audit-transitions.cjs", scope);
+  findings.directTransitionImports = transitionResult
+    ? {
+        count: transitionResult.total || 0,
+        files: (transitionResult.files || []).map((f) => ({
+          file: f.path,
+          line: 0,
+          preview: `Direct svelte/transition import: [${(f.transitions || []).join(", ")}]`,
+        })),
+      }
+    : { count: 0, files: [] };
 
   // Barrel imports (also in architecture, but perf-relevant)
   findings.barrelImports = scanAll(
@@ -586,6 +569,7 @@ function collectPerformance() {
           if (/return\s/.test(line)) hasReturn = true;
 
           if (braceDepth <= 0 && i > effectStart) {
+            // Check if this effect sets up listeners/timers that need cleanup
             const effectBlock = lines.slice(effectStart, i + 1).join("\n");
             const needsCleanup =
               /addEventListener|setInterval|setTimeout|subscribe/.test(effectBlock);
@@ -718,7 +702,7 @@ function main() {
   if (outPath) {
     const resolvedOut = path.isAbsolute(outPath)
       ? outPath
-      : path.join(PROJECT_ROOT, outPath);
+      : path.join(process.cwd(), outPath);
     fs.writeFileSync(resolvedOut, json);
     console.log(`Evidence written to ${resolvedOut}`);
     console.log(`Scope: ${scope} (${allFiles.length} files scanned in ${evidence.meta.durationMs}ms)`);
