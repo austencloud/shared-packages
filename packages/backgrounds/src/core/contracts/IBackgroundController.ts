@@ -25,7 +25,7 @@
  */
 
 import type { BackgroundType } from "../domain/enums.js";
-import type { QualityLevel } from "../domain/types.js";
+import type { QualityLevel, BackgroundEvent } from "../domain/types.js";
 
 /**
  * Options for customizing background appearance.
@@ -119,4 +119,17 @@ export interface IBackgroundController {
    * Useful for debugging or manual recovery from edge cases.
    */
   forceRefresh(): void;
+
+  /**
+   * Enable or disable adaptive quality.
+   * When enabled (default), quality auto-adjusts based on FPS.
+   * When disabled, quality stays at the last set level.
+   */
+  setAdaptiveQuality(enabled: boolean): void;
+
+  /**
+   * Register a callback for background events.
+   * Events include quality changes, errors, and performance reports.
+   */
+  onEvent(callback: (event: BackgroundEvent) => void): void;
 }

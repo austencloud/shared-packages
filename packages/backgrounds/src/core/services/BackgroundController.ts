@@ -13,6 +13,11 @@ import type { BackgroundSystem } from "../domain/models.js";
 import { BackgroundType } from "../domain/enums.js";
 import type { QualityLevel } from "../domain/types.js";
 import { BackgroundFactory } from "./BackgroundFactory.js";
+import { AdaptiveQualityManager } from "./AdaptiveQualityManager.js";
+import { getBackgroundConfigurationService } from "./BackgroundConfigurationService.js";
+
+/** Duration of the CSS crossfade transition in milliseconds. Must match backgrounds.css. */
+const CROSSFADE_DURATION_MS = 800;
 
 /**
  * BackgroundController implementation
@@ -52,6 +57,10 @@ export class BackgroundController implements IBackgroundController {
   // Resize observer
   private resizeObserver: ResizeObserver | null = null;
 
+  // Adaptive quality
+  private adaptiveQualityManager: AdaptiveQualityManager | null = null;
+  private onEventCallback: ((event: import("../domain/types.js").BackgroundEvent) => void) | null = null;
+
   /**
    * Mount the controller to a container element.
    * Creates canvas elements and sets up observers.
@@ -71,6 +80,7 @@ export class BackgroundController implements IBackgroundController {
     this.container = container;
     this.createCanvases();
     this.setupResizeObserver();
+    this.setupAdaptiveQuality();
     this.mounted = true;
 
     // If we have a stored background type, initialize it
@@ -93,6 +103,10 @@ export class BackgroundController implements IBackgroundController {
     this.systemB?.cleanup();
     this.systemA = null;
     this.systemB = null;
+
+    // Dispose adaptive quality manager
+    this.adaptiveQualityManager?.dispose();
+    this.adaptiveQualityManager = null;
 
     // Disconnect resize observer
     this.resizeObserver?.disconnect();
@@ -127,12 +141,12 @@ export class BackgroundController implements IBackgroundController {
       return;
     }
 
-    // If same type, already initialized, and canvas has content → no-op
-    if (
-      this.currentType === type &&
-      this.initialized &&
-      !this.isActiveCanvasBlank()
-    ) {
+    // If same type and already initialized → no-op
+    // Note: We no longer pixel-read the canvas here. The isActiveCanvasBlank()
+    // check was racy: the animation loop calls clearRect() before draw(), and
+    // if setBackground() reads the pixel between those two calls, it sees a
+    // blank canvas and destroys the running system. Trust the initialized flag.
+    if (this.currentType === type && this.initialized) {
       return;
     }
 
@@ -143,8 +157,8 @@ export class BackgroundController implements IBackgroundController {
       return;
     }
 
-    // First initialization or recovery from blank canvas
-    if (!this.initialized || this.isActiveCanvasBlank()) {
+    // First initialization
+    if (!this.initialized) {
       // Prevent concurrent initialization calls
       if (this.initializationInProgress) {
         this.pendingType = type;
@@ -179,7 +193,7 @@ export class BackgroundController implements IBackgroundController {
    * Check if ready.
    */
   isReady(): boolean {
-    return this.mounted && this.initialized && !this.isActiveCanvasBlank();
+    return this.mounted && this.initialized;
   }
 
   /**
@@ -190,6 +204,22 @@ export class BackgroundController implements IBackgroundController {
       this.initialized = false;
       void this.initializeBackground(this.currentType, this.currentOptions);
     }
+  }
+
+  /**
+   * Enable or disable adaptive quality.
+   * When enabled, quality adjusts automatically based on FPS.
+   * When disabled, quality stays at whatever level was last set.
+   */
+  setAdaptiveQuality(enabled: boolean): void {
+    this.adaptiveQualityManager?.setEnabled(enabled);
+  }
+
+  /**
+   * Register a callback for background events (qualityChanged, etc.).
+   */
+  onEvent(callback: (event: import("../domain/types.js").BackgroundEvent) => void): void {
+    this.onEventCallback = callback;
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -289,19 +319,38 @@ export class BackgroundController implements IBackgroundController {
     }
   }
 
-  private isActiveCanvasBlank(): boolean {
-    const canvas = this.activeCanvas === 'A' ? this.canvasA : this.canvasB;
-    if (!canvas) return true;
+  // ═══════════════════════════════════════════════════════════════════════════
+  // PRIVATE METHODS - Adaptive Quality
+  // ═══════════════════════════════════════════════════════════════════════════
 
-    const ctx = canvas.getContext('2d', { willReadFrequently: true });
-    if (!ctx) return true;
+  private setupAdaptiveQuality(): void {
+    // Don't recreate if already set up (e.g., re-mount to same container)
+    if (this.adaptiveQualityManager) return;
 
-    try {
-      const pixel = ctx.getImageData(0, 0, 1, 1).data;
-      return pixel[3] === 0;
-    } catch {
-      return true;
+    // Use device-detected quality as the ceiling
+    const configService = getBackgroundConfigurationService();
+    const ceiling = configService.detectAppropriateQuality();
+
+    // Start at the ceiling (best the device can handle) and let it adapt down
+    this.adaptiveQualityManager = new AdaptiveQualityManager(ceiling);
+    this.adaptiveQualityManager.setQualityCeiling(ceiling);
+
+    // Respect prefers-reduced-motion: cap at 'low'
+    if (typeof window !== 'undefined') {
+      const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      if (reducedMotion) {
+        this.adaptiveQualityManager.setQualityCeiling('low');
+      }
     }
+
+    // Listen for quality changes and apply them
+    this.adaptiveQualityManager.onQualityChange((newQuality, oldQuality) => {
+      this.setQuality(newQuality);
+      this.onEventCallback?.({ type: 'qualityChanged', quality: newQuality });
+    });
+
+    // Apply the initial quality from the ceiling detection
+    this.quality = ceiling;
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -431,8 +480,8 @@ export class BackgroundController implements IBackgroundController {
     this.activeCanvas = incomingCanvas;
     this.updateActiveCanvasClass();
 
-    // Wait for CSS transition (500ms)
-    await this.delay(500);
+    // Wait for CSS transition to complete
+    await this.delay(CROSSFADE_DURATION_MS);
 
     // Cleanup the old system
     const oldCanvas = incomingCanvas === 'A' ? 'B' : 'A';
@@ -450,6 +499,10 @@ export class BackgroundController implements IBackgroundController {
     // Update state
     this.currentType = newType;
     this.isTransitioning = false;
+
+    // Reset adaptive quality tracking so stale FPS data from the old
+    // background doesn't trigger adjustments for the new one
+    this.adaptiveQualityManager?.reset();
 
     // Process any pending request
     if (this.pendingType && this.pendingType !== newType) {
@@ -496,6 +549,11 @@ export class BackgroundController implements IBackgroundController {
     const animate = (timestamp: number): void => {
       const currentSystem = which === 'A' ? this.systemA : this.systemB;
       if (!currentSystem || !canvas) return;
+
+      // Feed timestamp to adaptive quality manager (only on the active canvas loop)
+      if (which === this.activeCanvas) {
+        this.adaptiveQualityManager?.tick(timestamp);
+      }
 
       const rawDelta = lastTimestamp === 0 ? 16.67 : timestamp - lastTimestamp;
       lastTimestamp = timestamp;

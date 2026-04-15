@@ -124,8 +124,49 @@ export { EmberGlowBackgroundSystem } from "./backgrounds/ember-glow/services/Emb
 export { CherryBlossomBackgroundSystem } from "./backgrounds/cherry-blossom/services/CherryBlossomBackgroundSystem.js";
 
 export { FireflyForestBackgroundSystem } from "./backgrounds/firefly-forest/services/FireflyForestBackgroundSystem.js";
+export type { FireflyForestLayers } from "./backgrounds/firefly-forest/services/FireflyForestBackgroundSystem.js";
+
+export type {
+  TreeTypeVisibility,
+  EcologicalPattern,
+  RenderedTree,
+} from "./backgrounds/firefly-forest/domain/models/tree-silhouette-models.js";
+
+export {
+  ECOLOGICAL_PATTERNS,
+} from "./backgrounds/firefly-forest/domain/constants/tree-silhouette-constants.js";
 
 export { AutumnDriftBackgroundSystem } from "./backgrounds/autumn-drift/services/AutumnDriftBackgroundSystem.js";
 
 export { SimpleBackgroundSystem } from "./backgrounds/simple/services/SimpleBackgroundSystem.js";
 export type { SimpleBackgroundConfig } from "./backgrounds/simple/services/SimpleBackgroundSystem.js";
+
+// ─── Cherry Blossom System Types ────────────────────────────────────────────
+
+export type { CherryBlossomLayers } from "./backgrounds/cherry-blossom/services/CherryBlossomBackgroundSystem.js";
+export type { TimeOfDay } from "./backgrounds/cherry-blossom/domain/constants/time-of-day-presets.js";
+export { getTimeOfDayPreset } from "./backgrounds/cherry-blossom/domain/constants/time-of-day-presets.js";
+
+// ─── Ember Glow System Types ────────────────────────────────────────────────
+
+export type { HeatIntensity, DensityPreset } from "./backgrounds/ember-glow/domain/constants/ember-constants.js";
+
+// ─── Deep Ocean System Types ────────────────────────────────────────────────
+
+export type { FishMarineLife, FishSpecies, FinState, TailState, FishColorPalette } from "./backgrounds/deep-ocean/domain/models/DeepOceanModels.js";
+export type { FishMood, FishPersonality } from "./backgrounds/deep-ocean/domain/types/fish-personality-types.js";
+export type { DeepOceanLayers } from "./backgrounds/deep-ocean/services/DeepOceanBackgroundOrchestrator.js";
+export { fishDebugConfig } from "./backgrounds/deep-ocean/domain/debug-config.js";
+
+// ─── Night Sky System Types ─────────────────────────────────────────────────
+
+export type { UFOMood, WobbleType } from "./backgrounds/night-sky/services/UFOSystem.js";
+
+// ─── Rainbow/Pride System Types ─────────────────────────────────────────────
+
+export { PRIDE_PALETTES } from "./backgrounds/rainbow/domain/constants/rainbow-constants.js";
+export type { PridePalette } from "./backgrounds/rainbow/domain/constants/rainbow-constants.js";
+
+// ─── Firefly Forest Additional Types ────────────────────────────────────────
+
+export type { TreeCategory } from "./backgrounds/firefly-forest/services/TreeSilhouetteImageLoader.js";

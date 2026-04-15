@@ -41,12 +41,12 @@
    BackgroundController swaps these classes during transitions.
    ============================================================================ */
 
-.background-canvas-active {
+.background-canvas.active {
   opacity: 1;
   transition: opacity 0.8s ease-in-out;
 }
 
-.background-canvas-inactive {
+.background-canvas:not(.active) {
   opacity: 0;
   transition: opacity 0.8s ease-in-out;
 }
@@ -56,8 +56,8 @@
    ============================================================================ */
 
 @media (prefers-reduced-motion: reduce) {
-  .background-canvas-active,
-  .background-canvas-inactive {
+  .background-canvas.active,
+  .background-canvas:not(.active) {
     transition: none;
   }
 }
