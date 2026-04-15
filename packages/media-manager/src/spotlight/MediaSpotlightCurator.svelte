@@ -46,8 +46,8 @@
 
 	const {
 		item,
-		items,
-		currentIndex,
+		items: _items,
+		currentIndex: _currentIndex,
 		tags,
 		progress,
 		open,
@@ -58,7 +58,7 @@
 		onclose,
 		onnext,
 		onprev,
-		onchange,
+		onchange: _onchange,
 		ontagtoggle,
 		onneedsreview,
 		onrename,
