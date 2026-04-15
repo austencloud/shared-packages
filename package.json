@@ -4,14 +4,21 @@
   "private": true,
   "description": "Austencloud shared packages monorepo",
   "scripts": {
-    "build": "pnpm -r build",
-    "dev": "pnpm -r --parallel dev",
-    "check": "pnpm -r check",
-    "clean": "pnpm -r clean",
+    "build": "pnpm -r --if-present build",
+    "dev": "pnpm -r --parallel --if-present dev",
+    "check": "pnpm -r --if-present check",
+    "clean": "pnpm -r --if-present clean",
     "format": "prettier --write .",
-    "lint": "eslint packages/*/src/**/*.{ts,svelte}"
+    "lint": "eslint packages/*/src/**/*.{ts,svelte}",
+    "check:publish": "pnpm -r --filter=\"./packages/*\" --workspace-concurrency=1 exec publint",
+    "check:types": "pnpm -r --filter=\"./packages/*\" --workspace-concurrency=1 exec attw --pack . --profile esm-only",
+    "changeset": "changeset",
+    "version-packages": "changeset version",
+    "release": "pnpm build && pnpm check:publish && changeset publish"
   },
   "devDependencies": {
+    "@arethetypeswrong/cli": "^0.18.2",
+    "@changesets/cli": "^2.30.0",
     "@sveltejs/package": "^2.3.0",
     "@typescript-eslint/eslint-plugin": "^8.0.0",
     "@typescript-eslint/parser": "^8.0.0",
@@ -19,6 +26,7 @@
     "eslint-plugin-svelte": "^2.0.0",
     "prettier": "^3.0.0",
     "prettier-plugin-svelte": "^3.0.0",
+    "publint": "^0.3.18",
     "svelte": "^5.0.0",
     "typescript": "^5.0.0"
   },

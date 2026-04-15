@@ -2,8 +2,9 @@
   "name": "@austencloud/feedback-services",
   "version": "1.0.0",
   "description": "Shared feedback infrastructure: config, cloud functions client, Firebase integration",
-  "main": "src/feedback.config.js",
+  "main": "./src/feedback.config.js",
   "exports": {
+    ".": "./src/feedback.config.js",
     "./config": "./src/feedback.config.js",
     "./cloud-functions-client": "./src/cloud-functions-client.js"
   },
