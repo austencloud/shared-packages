@@ -187,7 +187,9 @@ function collectArchitecture() {
   // Cross-references container files to eliminate false positives
   findings.potentialDiGaps = [];
 
-  // Read all DI container files once for cross-referencing
+  // Check for classes in implementations/ that aren't wired up.
+  // Post DI-dissolution: look for module singleton getters (get*() functions)
+  // that instantiate the class, OR old-style container registrations.
   const containersDir = path.join(SRC_ROOT, "shared", "di", "containers");
   let containerContents = "";
   try {
@@ -196,7 +198,21 @@ function collectArchitecture() {
       .map((f) => fs.readFileSync(path.join(containersDir, f), "utf-8"))
       .join("\n");
   } catch {
-    // containers dir not found — flag everything as before
+    // containers dir not found — expected post-dissolution
+  }
+
+  // Also scan for module singleton getter files (get*.ts pattern)
+  // These are the post-dissolution DI pattern: export function getFoo() { return instance; }
+  let getterContents = "";
+  try {
+    const getterFiles = collectFiles(SRC_ROOT, [".ts"]).filter(
+      (f) => /[/\\]get[A-Z]\w+\.ts$/.test(f)
+    );
+    getterContents = getterFiles
+      .map((f) => { try { return fs.readFileSync(f, "utf-8"); } catch { return ""; } })
+      .join("\n");
+  } catch {
+    // skip
   }
 
   for (const f of tsFiles) {
@@ -208,8 +224,8 @@ function collectArchitecture() {
         const classMatch = content.match(/export\s+class\s+(\w+)/);
         if (classMatch) {
           const className = classMatch[1];
-          // Skip if the class name appears in any container file (imported or instantiated)
           if (containerContents && containerContents.includes(className)) continue;
+          if (getterContents && getterContents.includes(className)) continue;
           findings.potentialDiGaps.push({
             file: relPath,
             line: 0,
@@ -316,9 +332,10 @@ function collectAccessibility() {
     : [];
 
   // Font sizes below 12px in CSS
+  // Match px values 0-11, and rem values below 0.75 (which equals 12px at default root)
   findings.smallFontSize = scanAll(
     svelteAndCss,
-    /font-size\s*:\s*(([0-9]|1[01])(\.\d+)?px|0\.\d+rem)/
+    /font-size\s*:\s*(([0-9]|1[01])(\.\d+)?px|0\.([0-6]\d*|7[0-4]\d*)rem)/
   );
 
   // {@html} usage (potential XSS + a11y risk)
@@ -425,11 +442,41 @@ function collectUxStates() {
   findings.bareCatch.push(...bareCatchArrow);
 
   // console.error without user feedback
-  findings.consoleErrorOnly = scanAll(
-    allFiles,
-    /console\.error\(/,
-    { skipInComment: true }
-  );
+  // Only flag if no error state assignment exists within ±3 lines
+  findings.consoleErrorOnly = [];
+  for (const f of allFiles) {
+    try {
+      const content = fs.readFileSync(f, "utf-8");
+      const lines = content.split("\n");
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        if (/^\s*\/\//.test(line)) continue;
+        if (!/console\.error\(/.test(line)) continue;
+
+        // Check ±3 lines for error state being set or intentional suppression comment
+        let hasErrorFeedback = false;
+        const errorPatterns = /\b(error|actionError|initError|saveError|saveStatus)\s*=\s*($|[^=])|\.error\s*=\s*($|[^=])|setState.*error/i;
+        const suppressionComment = /\/\/.*don't set error|\/\/.*non-critical|\/\/.*optional|\/\/.*not.*error/i;
+        for (let j = Math.max(0, i - 3); j < Math.min(lines.length, i + 4); j++) {
+          if (j === i) continue;
+          if (errorPatterns.test(lines[j]) || suppressionComment.test(lines[j])) {
+            hasErrorFeedback = true;
+            break;
+          }
+        }
+
+        if (!hasErrorFeedback) {
+          findings.consoleErrorOnly.push({
+            file: rel(f),
+            line: i + 1,
+            preview: line.trim().substring(0, 120),
+          });
+        }
+      }
+    } catch {
+      // skip
+    }
+  }
 
   return findings;
 }
@@ -590,11 +637,33 @@ function collectPerformance() {
   }
 
   // setInterval/setTimeout without cleanup in .svelte files
-  findings.timerWithoutCleanup = scanAll(
-    svelteFiles,
-    /\b(setInterval|setTimeout)\s*\(/,
-    { skipInComment: true }
-  );
+  // Only flag if the file has no onDestroy/cleanup that calls clearTimeout/clearInterval
+  findings.timerWithoutCleanup = [];
+  for (const f of svelteFiles) {
+    try {
+      const content = fs.readFileSync(f, "utf-8");
+      const hasCleanup = /onDestroy\s*\(/.test(content) && /clear(Timeout|Interval)\s*\(/.test(content);
+      // Also check for $effect cleanup that clears timers
+      const hasEffectCleanup = /\$effect\s*\(/.test(content) && /return\s*\(\)\s*=>[\s\S]*?clear(Timeout|Interval)/.test(content);
+
+      if (hasCleanup || hasEffectCleanup) continue;
+
+      const lines = content.split("\n");
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        if (/^\s*\/\//.test(line)) continue;
+        if (/\b(setInterval|setTimeout)\s*\(/.test(line)) {
+          findings.timerWithoutCleanup.push({
+            file: rel(f),
+            line: i + 1,
+            preview: line.trim().substring(0, 120),
+          });
+        }
+      }
+    } catch {
+      // skip
+    }
+  }
 
   return findings;
 }
