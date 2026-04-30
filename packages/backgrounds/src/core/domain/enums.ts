@@ -8,7 +8,7 @@ export enum BackgroundType {
   PRIDE = "pride",
   DEEP_OCEAN = "deepOcean",
   EMBER_GLOW = "emberGlow",
-  SAKURA_DRIFT = "sakuraDrift",
+  CHERRY_BLOSSOM = "cherryBlossom",
   FIREFLY_FOREST = "fireflyForest",
   AUTUMN_DRIFT = "autumnDrift",
 

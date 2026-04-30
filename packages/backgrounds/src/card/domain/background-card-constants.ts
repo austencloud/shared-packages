@@ -99,7 +99,7 @@ export const BACKGROUND_CARD_REGISTRY: ReadonlyArray<BackgroundCardMetadata> = [
     themeColors: ["#8b1c1c", "#8b4513", "#6b6b00", "#004d1a", "#1a2d5c", "#4a1a5c"],
   },
   {
-    type: "sakuraDrift",
+    type: "cherryBlossom",
     label: "Cherry Blossom",
     gradient: "linear-gradient(135deg, #831843, #db2777, #f9a8d4)",
     accentColor: "#f9a8d4",

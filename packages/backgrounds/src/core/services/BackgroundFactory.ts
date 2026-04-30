@@ -99,7 +99,7 @@ export class BackgroundFactory {
         backgroundSystem = new EmberGlowBackgroundSystem();
         break;
       }
-      case BackgroundType.SAKURA_DRIFT: {
+      case BackgroundType.CHERRY_BLOSSOM: {
         const { CherryBlossomBackgroundSystem } = await backgroundLoaders.cherryBlossom();
         backgroundSystem = new CherryBlossomBackgroundSystem();
         break;
@@ -174,7 +174,7 @@ export class BackgroundFactory {
       case BackgroundType.PRIDE:
       case BackgroundType.DEEP_OCEAN:
       case BackgroundType.EMBER_GLOW:
-      case BackgroundType.SAKURA_DRIFT:
+      case BackgroundType.CHERRY_BLOSSOM:
       case BackgroundType.FIREFLY_FOREST:
       case BackgroundType.AUTUMN_DRIFT:
       case BackgroundType.SOLID_COLOR:
@@ -192,7 +192,7 @@ export class BackgroundFactory {
       BackgroundType.PRIDE,
       BackgroundType.DEEP_OCEAN,
       BackgroundType.EMBER_GLOW,
-      BackgroundType.SAKURA_DRIFT,
+      BackgroundType.CHERRY_BLOSSOM,
       BackgroundType.FIREFLY_FOREST,
       BackgroundType.AUTUMN_DRIFT,
       BackgroundType.SOLID_COLOR,
