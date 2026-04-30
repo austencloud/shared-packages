@@ -63,3 +63,5 @@ export const PROP_COLORS = {
 } as const;
 
 export type PropColor = 'blue' | 'red';
+
+export type MotionPlane = 'wall' | 'wheel' | 'floor';
