@@ -1,6 +1,5 @@
 <script lang="ts">
   import { T } from '@threlte/core';
-  import type { Vector3 } from 'three';
   import type { AvatarProps } from '../domain/types.js';
 
   let {

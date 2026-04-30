@@ -20,10 +20,10 @@
   const ambientColor = $derived(lighting.ambientColor ?? '#ffffff');
   const mainLightIntensity = $derived(lighting.mainLightIntensity ?? 0.8);
   const mainLightColor = $derived(lighting.mainLightColor ?? '#ffffff');
-  const mainLightPos = $derived(lighting.mainLightPosition ?? [5, 10, 5]);
+  const mainLightPos = $derived<[number, number, number]>(lighting.mainLightPosition ?? [5, 10, 5]);
 
-  const cameraPos = $derived(camera.position ?? [0, 1.5, 4]);
-  const cameraTarget = $derived(camera.target ?? [0, 1, 0]);
+  const cameraPos = $derived<[number, number, number]>(camera.position ?? [0, 1.5, 4]);
+  const cameraTarget = $derived<[number, number, number]>(camera.target ?? [0, 1, 0]);
   const fov = $derived(camera.fov ?? 50);
   const near = $derived(camera.near ?? 0.1);
   const far = $derived(camera.far ?? 100);

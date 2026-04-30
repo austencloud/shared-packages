@@ -1,6 +1,5 @@
 <script lang="ts">
   import { T, useTask } from '@threlte/core';
-  import type { Vector3 } from 'three';
   import { createAvatarServices } from '../services/AvatarServicesFactory.js';
   import IKFigure3D from './IKFigure3D.svelte';
   import type { AvatarProps } from '../domain/types.js';
@@ -9,9 +8,6 @@
     avatarModelUrl,
     leftHandTarget = null,
     rightHandTarget = null,
-    leftGripType,
-    rightGripType,
-    enableLocomotion = false,
     visible = true,
   }: AvatarProps = $props();
 
@@ -20,7 +16,7 @@
   });
 
   let modelLoaded = $state(false);
-  let useFallback = $state(!avatarModelUrl);
+  let useFallback = $state(true);
 
   $effect(() => {
     if (!avatarModelUrl) {
