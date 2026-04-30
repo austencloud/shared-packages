@@ -53,19 +53,24 @@
   useTask((delta) => {
     const posAttr = geometry.attributes['position'] as THREE.BufferAttribute;
     const pos = posAttr.array as Float32Array;
+    const vel = velocities;
 
     for (let i = 0; i < config.count; i++) {
       const i3 = i * 3;
-      pos[i3] += velocities[i3] * delta;
-      pos[i3 + 1] += velocities[i3 + 1] * delta;
-      pos[i3 + 2] += velocities[i3 + 2] * delta;
+      const x = i3;
+      const y = i3 + 1;
+      const z = i3 + 2;
 
-      if (pos[i3 + 1] > halfArea[1]) pos[i3 + 1] = -halfArea[1];
-      if (pos[i3 + 1] < -halfArea[1]) pos[i3 + 1] = halfArea[1];
-      if (pos[i3] > halfArea[0]) pos[i3] = -halfArea[0];
-      if (pos[i3] < -halfArea[0]) pos[i3] = halfArea[0];
-      if (pos[i3 + 2] > halfArea[2]) pos[i3 + 2] = -halfArea[2];
-      if (pos[i3 + 2] < -halfArea[2]) pos[i3 + 2] = halfArea[2];
+      pos[x] = (pos[x] as number) + (vel[x] as number) * delta;
+      pos[y] = (pos[y] as number) + (vel[y] as number) * delta;
+      pos[z] = (pos[z] as number) + (vel[z] as number) * delta;
+
+      if ((pos[y] as number) > halfArea[1]) pos[y] = -halfArea[1];
+      if ((pos[y] as number) < -halfArea[1]) pos[y] = halfArea[1];
+      if ((pos[x] as number) > halfArea[0]) pos[x] = -halfArea[0];
+      if ((pos[x] as number) < -halfArea[0]) pos[x] = halfArea[0];
+      if ((pos[z] as number) > halfArea[2]) pos[z] = -halfArea[2];
+      if ((pos[z] as number) < -halfArea[2]) pos[z] = halfArea[2];
     }
 
     posAttr.needsUpdate = true;
