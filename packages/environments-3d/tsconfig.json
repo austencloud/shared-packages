@@ -3,7 +3,11 @@
   "compilerOptions": {
     "outDir": "./dist",
     "rootDir": "./src",
-    "types": ["svelte"]
+    "types": ["svelte"],
+    "exactOptionalPropertyTypes": false,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    "allowJs": true
   },
   "include": ["src/**/*", "src/**/*.svelte"],
   "exclude": ["node_modules", "dist", "**/*.test.ts"]
