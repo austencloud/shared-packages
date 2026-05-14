@@ -1,6 +1,6 @@
 {
   "name": "@austencloud/scene-3d",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "description": "Shared 3D scene infrastructure — avatar, IK, props, scene shell. Threlte + Three.js.",
   "type": "module",
   "svelte": "./src/index.ts",
