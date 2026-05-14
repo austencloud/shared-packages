@@ -99,12 +99,10 @@ export class FishEffectRenderer implements IFishEffectRenderer {
     ctx.arc(centerX, centerY, innerRadius, 0, Math.PI * 2);
     ctx.fill();
 
-    // Layer 3: Edge glow along body outline
+    // Layer 3: Edge glow along body outline (radial gradient instead of shadowBlur)
     ctx.save();
-    ctx.shadowColor = fish.colors.accent;
-    ctx.shadowBlur = 15 * pulseIntensity;
     ctx.strokeStyle = this.colorCalc.adjustAlpha(fish.colors.accent, pulseIntensity * 0.5);
-    ctx.lineWidth = 3;
+    ctx.lineWidth = 4;
     this.bodyOutlineCalculator.drawBodyPath(ctx, outline);
     ctx.stroke();
     ctx.restore();

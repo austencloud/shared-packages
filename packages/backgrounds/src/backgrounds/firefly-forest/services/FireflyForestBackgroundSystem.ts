@@ -49,6 +49,7 @@ interface GrassBlade {
   swayOffset: number; // Phase offset for sway animation
   swaySpeed: number; // How fast it sways
   color: string;
+  tipColor: string; // Pre-computed lightened color for gradient tip
   layer: 0 | 1 | 2; // Depth layer matching tree layers (0=far, 1=mid, 2=near)
 }
 
@@ -73,6 +74,7 @@ export class FireflyForestBackgroundSystem implements IBackgroundSystem {
   private fireflies: Firefly[] = [];
   private stars: Star[] = [];
   private grassBlades: GrassBlade[] = [];
+  private grassByLayer: [GrassBlade[], GrassBlade[], GrassBlade[]] = [[], [], []];
   private shootingStar: ShootingStar | null = null;
   private framesSinceLastShootingStar = 0;
   private animationTime = 0;
@@ -253,6 +255,7 @@ export class FireflyForestBackgroundSystem implements IBackgroundSystem {
         const height = config.heightMin + Math.random() * (config.heightMax - config.heightMin);
         const width = 1.5 + (height / 45) * 2.5;
 
+        const color = config.colors[Math.floor(Math.random() * config.colors.length)]!;
         blades.push({
           x,
           baseY,
@@ -260,7 +263,8 @@ export class FireflyForestBackgroundSystem implements IBackgroundSystem {
           width,
           swayOffset: Math.random() * Math.PI * 2,
           swaySpeed: 0.25 + Math.random() * 0.35,
-          color: config.colors[Math.floor(Math.random() * config.colors.length)]!,
+          color,
+          tipColor: this.lightenColor(color, 0.15),
           layer: config.layer,
         });
       }
@@ -276,6 +280,7 @@ export class FireflyForestBackgroundSystem implements IBackgroundSystem {
     this.stars = this.generateStars(dimensions, quality);
     this.moonRenderer.initialize(dimensions.width, dimensions.height);
     this.grassBlades = this.generateGrass(dimensions, quality);
+    this.rebucketGrass();
     this.treeSystem.initialize(dimensions);
     this.ambientParticleSystem.initialize(dimensions, quality);
     this.campfireSystem.initialize(dimensions, quality);
@@ -571,8 +576,15 @@ export class FireflyForestBackgroundSystem implements IBackgroundSystem {
     ctx.fillRect(0, groundStartY, dimensions.width, groundHeight);
   }
 
+  private rebucketGrass(): void {
+    this.grassByLayer = [[], [], []];
+    for (const blade of this.grassBlades) {
+      this.grassByLayer[blade.layer].push(blade);
+    }
+  }
+
   private drawGrassLayer(ctx: CanvasRenderingContext2D, layer: 0 | 1 | 2): void {
-    const bladesToDraw = this.grassBlades.filter((b) => b.layer === layer);
+    const bladesToDraw = this.grassByLayer[layer];
     const parallax = this.getParallaxOffset(this.getGrassLayerParallax(layer));
 
     for (const blade of bladesToDraw) {
@@ -613,10 +625,10 @@ export class FireflyForestBackgroundSystem implements IBackgroundSystem {
 
       ctx.closePath();
 
-      // Fill with subtle gradient for depth
+      // Fill with subtle gradient for depth (tipColor pre-computed at generation)
       const gradient = ctx.createLinearGradient(x, baseY, tipX, tipY);
       gradient.addColorStop(0, color);
-      gradient.addColorStop(1, this.lightenColor(color, 0.15));
+      gradient.addColorStop(1, blade.tipColor);
       ctx.fillStyle = gradient;
       ctx.fill();
     }
@@ -646,6 +658,7 @@ export class FireflyForestBackgroundSystem implements IBackgroundSystem {
       );
       this.stars = this.generateStars(this.dimensions, quality);
       this.grassBlades = this.generateGrass(this.dimensions, quality);
+      this.rebucketGrass();
       this.ambientParticleSystem.setQuality(quality, this.dimensions);
       this.campfireSystem.setQuality(quality, this.dimensions);
     }
@@ -671,6 +684,7 @@ export class FireflyForestBackgroundSystem implements IBackgroundSystem {
     this.stars = this.generateStars(newDimensions, this.quality);
     this.moonRenderer.resize(newDimensions.width, newDimensions.height);
     this.grassBlades = this.generateGrass(newDimensions, this.quality);
+    this.rebucketGrass();
     this.treeSystem.handleResize(oldDimensions, newDimensions);
   }
 
@@ -871,6 +885,7 @@ export class FireflyForestBackgroundSystem implements IBackgroundSystem {
     this.stars = [];
     this.moonRenderer.cleanup();
     this.grassBlades = [];
+    this.grassByLayer = [[], [], []];
     this.shootingStar = null;
     this.framesSinceLastShootingStar = 0;
     this.animationTime = 0;

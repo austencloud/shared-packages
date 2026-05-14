@@ -1,7 +1,5 @@
 export interface TipEffectAssignment {
-	effectType: string;
-	color?: string;
-	intensity?: number;
+	effect: string;
 }
 
 export type TipEffectMap = Record<string, TipEffectAssignment>;

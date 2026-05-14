@@ -23,7 +23,7 @@
     createDefaultForestAutumnConfig,
   } from "../domain/models/scene-configs";
   import { onMount } from "svelte";
-  import { userProportionsState } from "@austencloud/scene-3d";
+  import { userProportionsState } from "@austencloud/scene-3d/state";
   import VolumetricFireComponent from "../effects/volumetric-fire/VolumetricFireComponent.svelte";
   import { Vector3, FogExp2, Color } from "three";
   import { getSceneFeatureContext } from "../context/scene-feature-context";

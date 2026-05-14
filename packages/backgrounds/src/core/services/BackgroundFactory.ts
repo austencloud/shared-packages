@@ -114,6 +114,15 @@ export class BackgroundFactory {
         backgroundSystem = new AutumnDriftBackgroundSystem();
         break;
       }
+      case BackgroundType.CELESTIAL: {
+        // Celestial is 3D-only — fall through to simple dark background for 2D contexts
+        const { SimpleBackgroundSystem } = await backgroundLoaders.simple();
+        backgroundSystem = new SimpleBackgroundSystem({
+          type: "solid",
+          color: "#0a1a4a",
+        });
+        break;
+      }
       case BackgroundType.SOLID_COLOR: {
         const { SimpleBackgroundSystem } = await backgroundLoaders.simple();
         backgroundSystem = new SimpleBackgroundSystem({
@@ -177,6 +186,7 @@ export class BackgroundFactory {
       case BackgroundType.CHERRY_BLOSSOM:
       case BackgroundType.FIREFLY_FOREST:
       case BackgroundType.AUTUMN_DRIFT:
+      case BackgroundType.CELESTIAL:
       case BackgroundType.SOLID_COLOR:
       case BackgroundType.LINEAR_GRADIENT:
         return true;
@@ -195,6 +205,7 @@ export class BackgroundFactory {
       BackgroundType.CHERRY_BLOSSOM,
       BackgroundType.FIREFLY_FOREST,
       BackgroundType.AUTUMN_DRIFT,
+      BackgroundType.CELESTIAL,
       BackgroundType.SOLID_COLOR,
       BackgroundType.LINEAR_GRADIENT,
     ];

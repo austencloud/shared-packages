@@ -1,6 +1,6 @@
 {
   "name": "@austencloud/backgrounds",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Animated canvas backgrounds - snowfall, night sky, deep ocean, firefly forest, and more",
   "type": "module",
   "main": "./dist/index.js",

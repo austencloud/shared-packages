@@ -1,7 +1,7 @@
 {
-  "name": "@austencloud/scene-3d",
+  "name": "@austencloud/camera-3d",
   "version": "0.1.0",
-  "description": "Shared 3D scene infrastructure — avatar, IK, props, scene shell. Threlte + Three.js.",
+  "description": "Unified 3D camera controller with orbit, third-person, and first-person modes. Threlte + Three.js.",
   "type": "module",
   "svelte": "./src/index.ts",
   "main": "./dist/index.js",
@@ -11,10 +11,6 @@
       "types": "./dist/index.d.ts",
       "svelte": "./src/index.ts",
       "import": "./dist/index.js"
-    },
-    "./state": {
-      "svelte": "./src/lib/state/user-proportions-state.svelte.ts",
-      "import": "./dist/state/user-proportions-state.svelte.js"
     }
   },
   "files": ["dist", "src"],
@@ -22,8 +18,7 @@
     "build": "svelte-package -i src -o dist",
     "dev": "svelte-package -i src -o dist --watch",
     "check": "svelte-check --tsconfig ./tsconfig.json",
-    "clean": "rimraf dist",
-    "test": "vitest run"
+    "clean": "rimraf dist"
   },
   "peerDependencies": {
     "three": ">=0.170.0",
@@ -42,7 +37,7 @@
     "@threlte/core": "^8.0.0",
     "@threlte/extras": "^9.0.0",
     "typescript": "^5.0.0",
-    "vitest": "^3.0.0"
+    "vite": "^6.0.0"
   },
   "author": "Austen Cloud <austencloud@gmail.com>",
   "license": "MIT"

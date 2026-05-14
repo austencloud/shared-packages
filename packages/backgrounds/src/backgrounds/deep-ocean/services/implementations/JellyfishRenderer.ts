@@ -629,12 +629,10 @@ export class JellyfishRenderer implements IJellyfishRenderer {
     const lastPoint = pathPoints[pathPoints.length - 1];
     if (!firstPoint || !lastPoint) return;
 
-    // Outer glow
+    // Outer glow (wider semi-transparent stroke, no shadowBlur)
     ctx.save();
-    ctx.shadowColor = this.rgba(accentColor, 0.5);
-    ctx.shadowBlur = 6;
-    ctx.strokeStyle = this.rgba(accentColor, 0.25);
-    ctx.lineWidth = tentacle.thickness * 1.8;
+    ctx.strokeStyle = this.rgba(accentColor, 0.15);
+    ctx.lineWidth = tentacle.thickness * 3;
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
 

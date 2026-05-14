@@ -31,9 +31,13 @@ export interface GrassBlade {
   baseY: number;
   tipX: number;
   tipY: number;
-  controlX: number; // Bezier control point
+  controlX: number;
   controlY: number;
   thickness: number;
+  hueShift: number;
+  brightness: number;
+  tipGlow: boolean;
+  layer: "carpet" | "mid" | "accent";
 }
 
 export interface GrassTuft {
@@ -86,11 +90,11 @@ const DEFAULT_CONFIG: GroundLayerConfig = {
   bushMaxSize: 80,
   bushNoiseScale: 0.08,
   bushNoiseAmplitude: 12,
-  grassTuftCount: 40,
-  bladesPerTuft: 8,
-  grassMinHeight: 15,
-  grassMaxHeight: 40,
-  grassCurvature: 0.4,
+  grassTuftCount: 150,
+  bladesPerTuft: 12,
+  grassMinHeight: 8,
+  grassMaxHeight: 45,
+  grassCurvature: 0.45,
   fernCount: 10,
   fernMinSize: 20,
   fernMaxSize: 50,
@@ -269,31 +273,49 @@ export class GroundLayerSystem {
 
     const groundY = height * groundLineY;
 
-    // Position
     const x = this.noise.noise2D(index * 0.7 + layerIndex * 200, depth * 20);
     const tuftX = (x * 0.5 + 0.5) * width;
     const yVariation = this.noise.noise2D(tuftX * 0.01, layerIndex * 30) * 15;
     const tuftY = groundY + yVariation - (1 - depth) * 20;
 
-    // Generate blades
     const blades: GrassBlade[] = [];
-    const tuftWidth = 20 + Math.random() * 30;
+    const tuftWidth = 25 + Math.random() * 35;
     let maxHeight = 0;
 
+    // --- Carpet layer: dense short strokes forming ground cover ---
+    const carpetCount = Math.ceil(bladesPerTuft * 1.5);
+    for (let b = 0; b < carpetCount; b++) {
+      const bladeX = tuftX - tuftWidth / 2 + Math.random() * tuftWidth;
+      const carpetHeight = grassMinHeight + Math.random() * (grassMinHeight * 0.8);
+      const lean = (Math.random() - 0.5) * grassCurvature * carpetHeight * 0.3;
+
+      blades.push({
+        baseX: bladeX,
+        baseY: tuftY + Math.random() * 3,
+        tipX: bladeX + lean,
+        tipY: tuftY - carpetHeight,
+        controlX: bladeX + lean * 0.5,
+        controlY: tuftY - carpetHeight * 0.5,
+        thickness: 0.5 + Math.random() * 0.8,
+        hueShift: (this.noise.noise2D(bladeX * 0.05, b * 0.3) * 15),
+        brightness: 0.3 + depth * 0.15 + Math.random() * 0.1,
+        tipGlow: false,
+        layer: "carpet",
+      });
+    }
+
+    // --- Mid layer: main visible blades with curvature ---
     for (let b = 0; b < bladesPerTuft; b++) {
       const bladeT = b / (bladesPerTuft - 1 || 1);
       const bladeX = tuftX - tuftWidth / 2 + bladeT * tuftWidth;
 
-      // Height variation
       const heightNoise = (this.noise.noise2D(bladeX * 0.1, b) + 1) / 2;
-      const bladeHeight = grassMinHeight + heightNoise * (grassMaxHeight - grassMinHeight);
+      const bladeHeight = grassMinHeight * 1.5 + heightNoise * (grassMaxHeight * 0.7 - grassMinHeight);
       maxHeight = Math.max(maxHeight, bladeHeight);
 
-      // Curvature - lean outward from center
-      const leanDirection = (bladeT - 0.5) * 2; // -1 to 1
+      const leanDirection = (bladeT - 0.5) * 2;
       const curvatureAmount = grassCurvature * leanDirection * bladeHeight * 0.5;
 
-      // Control point for bezier
       const controlX = bladeX + curvatureAmount;
       const controlY = tuftY - bladeHeight * 0.6;
 
@@ -304,7 +326,36 @@ export class GroundLayerSystem {
         tipY: tuftY - bladeHeight,
         controlX,
         controlY,
-        thickness: 1 + Math.random() * 1.5,
+        thickness: 1.2 + Math.random() * 1.3,
+        hueShift: this.noise.noise2D(bladeX * 0.03, b * 0.5 + layerIndex) * 20,
+        brightness: 0.4 + depth * 0.2 + Math.random() * 0.15,
+        tipGlow: Math.random() < 0.12,
+        layer: "mid",
+      });
+    }
+
+    // --- Accent layer: sparse tall blades that catch light ---
+    const accentCount = Math.max(2, Math.ceil(bladesPerTuft * 0.3));
+    for (let b = 0; b < accentCount; b++) {
+      const bladeX = tuftX - tuftWidth * 0.3 + Math.random() * tuftWidth * 0.6;
+      const bladeHeight = grassMaxHeight * (0.8 + Math.random() * 0.4);
+      maxHeight = Math.max(maxHeight, bladeHeight);
+
+      const leanDirection = (Math.random() - 0.5) * 2;
+      const curvatureAmount = grassCurvature * leanDirection * bladeHeight * 0.6;
+
+      blades.push({
+        baseX: bladeX,
+        baseY: tuftY,
+        tipX: bladeX + curvatureAmount * 1.3,
+        tipY: tuftY - bladeHeight,
+        controlX: bladeX + curvatureAmount * 0.7,
+        controlY: tuftY - bladeHeight * 0.55,
+        thickness: 1.0 + Math.random() * 0.8,
+        hueShift: this.noise.noise2D(bladeX * 0.04, b + 100) * 12,
+        brightness: 0.55 + depth * 0.25 + Math.random() * 0.1,
+        tipGlow: Math.random() < 0.35,
+        layer: "accent",
       });
     }
 

@@ -19,6 +19,10 @@ import { getBackgroundConfigurationService } from "./BackgroundConfigurationServ
 /** Duration of the CSS crossfade transition in milliseconds. Must match backgrounds.css. */
 const CROSSFADE_DURATION_MS = 800;
 
+/** Cap internal canvas resolution — decorative background doesn't need full resolution. */
+const MAX_CANVAS_WIDTH = 960;
+const MAX_CANVAS_HEIGHT = 540;
+
 /**
  * BackgroundController implementation
  */
@@ -283,8 +287,12 @@ export class BackgroundController implements IBackgroundController {
     if (!this.canvasA || !this.canvasB || !this.container) return;
 
     const rect = this.container.getBoundingClientRect();
-    const width = Math.max(1, Math.floor(rect.width));
-    const height = Math.max(1, Math.floor(rect.height));
+    const cssWidth = Math.max(1, Math.floor(rect.width));
+    const cssHeight = Math.max(1, Math.floor(rect.height));
+
+    const scale = Math.min(1, MAX_CANVAS_WIDTH / cssWidth, MAX_CANVAS_HEIGHT / cssHeight);
+    const width = Math.max(1, Math.floor(cssWidth * scale));
+    const height = Math.max(1, Math.floor(cssHeight * scale));
 
     this.canvasA.width = width;
     this.canvasA.height = height;

@@ -32,8 +32,8 @@ export { RotationDirection } from "./domain/enums/RotationDirection";
 
 // Domain models & types
 export type { PropState3D, PropState2D, PropStates3D, InterpolationResult3D } from "./domain/models/PropState3D";
-export type { GripPose } from "./domain/models/GripPose";
-export { GripType } from "./domain/models/GripPose";
+export type { GripPose, FingerBoneName } from "./domain/models/GripPose";
+export { GripType, FINGER_BONES } from "./domain/models/GripPose";
 export type { AvatarInstanceState, BeatPlaneOverride } from "./domain/types/AvatarInstanceState";
 export type { TipEffectMap, TipEffectAssignment } from "./domain/types/TipEffectTypes";
 export type { CameraStateSnapshot } from "./domain/types/CameraStateSnapshot";
@@ -43,6 +43,10 @@ export type { GridMode } from "./domain/constants/grid-layout";
 export { PLANE_MODE_CONFIGS, GRID_OFFSETS } from "./domain/constants/plane-mode-configs";
 export type { PlaneModeConfig } from "./domain/constants/plane-mode-configs";
 
+// Performer positions
+export { getDefaultPositions, getPerformerPosition, WALL_OFFSET, MAX_PERFORMERS, PERFORMER_GRID_SPACING } from "./domain/constants/performer-positions";
+export type { PerformerPosition } from "./domain/constants/performer-positions";
+
 // Domain utilities
 export { derivePlaneModeFromHands } from "./domain/utils/plane-mode-utils";
 
@@ -51,14 +55,15 @@ export { calculateFacingAngle } from "./domain/formation";
 export type { FormationPreset } from "./domain/formation";
 
 // Camera choreography
-export type { CameraChoreography, CameraKeyframe } from "./domain/camera-choreography";
+export type { CameraChoreography, CameraKeyframe, CameraState, CameraPosition, CameraInterpolation } from "./domain/camera-choreography";
+export { createCameraChoreography, createDefaultCameraState, easingFunctions, lerpCameraPosition, lerpCameraState } from "./domain/camera-choreography";
 
 // Config
 export { AVATAR_DEFINITIONS, DEFAULT_AVATAR_ID, getAvatarModelPath } from "./config/avatar-definitions";
 export type { AvatarId, AvatarDefinition } from "./config/avatar-definitions";
-export { cmToUnits, deriveSceneProportions } from "./config/avatar-proportions";
-export { DEFAULT_SCENE_DIMENSIONS } from "./config/user-proportions";
-export { PRESET_VALID_COUNTS, createFormationFromPreset } from "./config/formation-presets";
+export { cmToUnits, deriveSceneProportions, AUSTEN_STAFF } from "./config/avatar-proportions";
+export { DEFAULT_SCENE_DIMENSIONS, inchesToCm, COMMON_HEIGHTS, COMMON_STAFF_LENGTHS } from "./config/user-proportions";
+export { PRESET_VALID_COUNTS, createFormationFromPreset, FORMATION_PRESET_INFO } from "./config/formation-presets";
 
 // Scale & layers
 export { SCALE, STAGE, WORLDS } from "./scale/scale-constants";
@@ -86,18 +91,18 @@ export type { IClavicleRaiser } from "./services/contracts/IClavicleRaiser";
 export type { ISpineTwister } from "./services/contracts/ISpineTwister";
 export type { IElbowPoleComputer } from "./services/contracts/IElbowPoleComputer";
 export type { IAngleMathCalculator } from "./services/contracts/IAngleMathCalculator";
-export type { ICollisionDetector } from "./services/contracts/ICollisionDetector";
-export type { ICameraChoreographer } from "./services/contracts/ICameraChoreographer";
+export type { ICollisionDetector, CollisionEvent, BodySnapshot, PropSegment } from "./services/contracts/ICollisionDetector";
+export type { ICameraChoreographer, PerformerPositionProvider } from "./services/contracts/ICameraChoreographer";
 export type { IFormationManager } from "./services/contracts/IFormationManager";
 export type { IContactCurveCache } from "./services/contracts/IContactCurveCache";
 export type { ILegAnimator } from "./services/contracts/ILegAnimator";
-export type { ILegIKSolver } from "./services/contracts/ILegIKSolver";
+export type { ILegIKSolver, LegIKInput } from "./services/contracts/ILegIKSolver";
 export type { ITurnAnimator, TurnRequest } from "./services/contracts/ITurnAnimator";
-export type { IAvatarCustomizer } from "./services/contracts/IAvatarCustomizer";
+export type { IAvatarCustomizer, BodyType } from "./services/contracts/IAvatarCustomizer";
 export type { IPerformerSynchronizer } from "./services/contracts/IPerformerSynchronizer";
 export type { ISceneOrchestrator } from "./services/contracts/ISceneOrchestrator";
 export type { IViewer3DEffectPlugin } from "./services/contracts/IViewer3DEffectPlugin";
-export type { IViewer3DUndoManager } from "./services/contracts/IViewer3DUndoManager";
+export type { IViewer3DUndoManager, PerformerSnapshot, ViewerSnapshot, ViewerOperationType } from "./services/contracts/IViewer3DUndoManager";
 
 // Services - implementations
 export { createAvatarServices } from "./services/implementations/AvatarServicesFactory";
@@ -126,7 +131,8 @@ export { solveCylinderGrasp } from "./services/implementations/CylinderGraspSolv
 export type { GraspResult } from "./services/implementations/CylinderGraspSolver";
 export { createPerformerSynchronizer } from "./services/implementations/PerformerSynchronizer";
 export { Viewer3DUndoManager } from "./services/implementations/Viewer3DUndoManager";
-export { SeatedAudienceLoader } from "./services/implementations/SeatedAudienceLoader";
+export { SeatedAudienceLoader, seatedAudienceLoader } from "./services/implementations/SeatedAudienceLoader";
+export type { PreparedFigure } from "./services/implementations/SeatedAudienceLoader";
 
 // Utilities
 export { getAngleMath3D } from "./getAngleMath3D";
@@ -138,6 +144,10 @@ export { installMocapDebugHooks } from "./debug/mocap-debug";
 
 // Prop utilities
 export { PROP_MODEL_REGISTRY } from "./components/props/prop-model-registry";
+
+// Prop types
+export type { Prop3DProps } from "./components/props/Prop3DProps";
+export { PROP_COLORS, METAL_COLORS } from "./components/props/Prop3DProps";
 
 // Data
 export { STAFF_GRIP_POSES } from "./data/grip-poses/staff-grip-poses";

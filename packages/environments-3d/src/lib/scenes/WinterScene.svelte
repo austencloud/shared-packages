@@ -32,7 +32,7 @@
     type WinterSceneConfig,
     createDefaultWinterConfig,
   } from "../domain/models/scene-configs";
-  import { userProportionsState } from "@austencloud/scene-3d";
+  import { userProportionsState } from "@austencloud/scene-3d/state";
   import VolumetricFireComponent from "../effects/volumetric-fire/VolumetricFireComponent.svelte";
   import { getSceneFeatureContext } from "../context/scene-feature-context";
 

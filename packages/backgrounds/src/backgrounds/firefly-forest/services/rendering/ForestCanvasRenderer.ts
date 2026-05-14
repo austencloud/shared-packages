@@ -16,7 +16,7 @@ import type {
 } from "../ProceduralForestSystem.js";
 import type { MoonRenderer } from "../../../../core/services/MoonRenderer.js";
 import type { ForestTreeInstance } from "../composition/ParallaxForestComposer.js";
-import type { GroundElement, GrassTuft } from "../ground/GroundLayerSystem.js";
+import type { GroundElement, GrassTuft, GrassBlade } from "../ground/GroundLayerSystem.js";
 import type { FogPatch, GroundFogData, MistLayerData } from "../atmosphere/AtmosphericFogSystem.js";
 import type { OwlSilhouette, Bat, ShootingStar } from "../ambient/EasterEggSystem.js";
 import type { GeneratedTree } from "../trees/SpaceColonizationTree.js";
@@ -30,6 +30,9 @@ export interface ForestRendererConfig {
   farTreeColor: string;
   groundColor: string;
   grassColor: string;
+  grassBaseHue: number;
+  grassBaseSaturation: number;
+  grassTipGlowColor: string;
 
   // Effects
   renderShadows: boolean;
@@ -47,6 +50,9 @@ const DEFAULT_CONFIG: ForestRendererConfig = {
   farTreeColor: "#1a2535",
   groundColor: "#0a0f14",
   grassColor: "#0d1218",
+  grassBaseHue: 120,
+  grassBaseSaturation: 30,
+  grassTipGlowColor: "rgba(180, 220, 140, 0.6)",
   renderShadows: true,
   renderGlow: false,
   glowIntensity: 0.3,
@@ -312,30 +318,60 @@ export class ForestCanvasRenderer {
     forest: ProceduralForestSystem,
     renderData: ForestRenderData
   ): void {
-    ctx.strokeStyle = this.config.grassColor;
     ctx.lineCap = "round";
+    const { grassBaseHue, grassBaseSaturation, grassTipGlowColor } = this.config;
 
-    for (const tuft of renderData.grassTufts) {
-      for (const blade of tuft.blades) {
-        // Get wind displacement for this blade
-        const heightRatio =
-          Math.abs(blade.tipY - blade.baseY) /
-          (Math.abs(blade.tipY - blade.baseY) + 1);
-        const wind = forest.getGrassWindDisplacement(blade.baseX, heightRatio);
+    const layers: Array<GrassBlade["layer"]> = ["carpet", "mid", "accent"];
 
-        ctx.beginPath();
-        ctx.moveTo(blade.baseX, blade.baseY);
+    for (const layerName of layers) {
+      for (const tuft of renderData.grassTufts) {
+        for (const blade of tuft.blades) {
+          if (blade.layer !== layerName) continue;
 
-        // Quadratic bezier with wind offset
-        ctx.quadraticCurveTo(
-          blade.controlX + wind.x * 0.5,
-          blade.controlY + wind.y * 0.5,
-          blade.tipX + wind.x,
-          blade.tipY + wind.y
-        );
+          const bladeHeight = Math.abs(blade.tipY - blade.baseY);
+          const heightRatio = bladeHeight / (bladeHeight + 1);
+          const wind = forest.getGrassWindDisplacement(blade.baseX, heightRatio);
 
-        ctx.lineWidth = blade.thickness;
-        ctx.stroke();
+          const hue = grassBaseHue + blade.hueShift;
+          const sat = grassBaseSaturation + (blade.layer === "accent" ? 8 : 0);
+          const lightness = Math.round(blade.brightness * 100);
+          const alpha = blade.layer === "carpet"
+            ? 0.3 + tuft.depth * 0.2
+            : 0.5 + tuft.depth * 0.4;
+
+          ctx.strokeStyle = `hsla(${hue}, ${sat}%, ${lightness}%, ${alpha})`;
+
+          const tipX = blade.tipX + wind.x;
+          const tipY = blade.tipY + wind.y;
+          const ctrlX = blade.controlX + wind.x * 0.5;
+          const ctrlY = blade.controlY + wind.y * 0.5;
+
+          ctx.beginPath();
+          ctx.moveTo(blade.baseX, blade.baseY);
+          ctx.quadraticCurveTo(ctrlX, ctrlY, tipX, tipY);
+
+          ctx.lineWidth = blade.layer === "carpet"
+            ? blade.thickness
+            : blade.thickness * 1.2;
+          ctx.stroke();
+
+          if (blade.tipGlow && blade.layer !== "carpet") {
+            ctx.save();
+            ctx.strokeStyle = grassTipGlowColor;
+            ctx.lineWidth = blade.thickness * 0.6;
+            ctx.globalAlpha = 0.4 + Math.random() * 0.2;
+
+            const glowStartT = 0.65;
+            const glowStartX = blade.baseX + glowStartT * (2 * (ctrlX - blade.baseX)) + glowStartT * glowStartT * (tipX - 2 * ctrlX + blade.baseX);
+            const glowStartY = blade.baseY + glowStartT * (2 * (ctrlY - blade.baseY)) + glowStartT * glowStartT * (tipY - 2 * ctrlY + blade.baseY);
+
+            ctx.beginPath();
+            ctx.moveTo(glowStartX, glowStartY);
+            ctx.lineTo(tipX, tipY);
+            ctx.stroke();
+            ctx.restore();
+          }
+        }
       }
     }
   }

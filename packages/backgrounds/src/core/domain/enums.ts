@@ -11,6 +11,7 @@ export enum BackgroundType {
   CHERRY_BLOSSOM = "cherryBlossom",
   FIREFLY_FOREST = "fireflyForest",
   AUTUMN_DRIFT = "autumnDrift",
+  CELESTIAL = "celestial",
 
   // Simple backgrounds
   SOLID_COLOR = "solidColor",
