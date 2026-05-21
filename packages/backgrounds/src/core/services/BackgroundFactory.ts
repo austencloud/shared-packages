@@ -27,14 +27,15 @@ export interface BackgroundFactoryParams {
 // Lazy loaders for background systems
 const backgroundLoaders = {
   pride: () => import("../../backgrounds/rainbow/services/RainbowBackgroundSystem.js"),
-  snowfall: () => import("../../backgrounds/snowfall/services/SnowfallBackgroundSystem.js"),
-  nightSky: () => import("../../backgrounds/night-sky/services/NightSkyBackgroundSystem.js"),
-  deepOcean: () => import("../../backgrounds/deep-ocean/services/DeepOceanBackgroundOrchestrator.js"),
-  emberGlow: () => import("../../backgrounds/ember-glow/services/EmberGlowBackgroundSystem.js"),
-  cherryBlossom: () => import("../../backgrounds/cherry-blossom/services/CherryBlossomBackgroundSystem.js"),
-  fireflyForest: () => import("../../backgrounds/firefly-forest/services/FireflyForestBackgroundSystem.js"),
-  autumnDrift: () => import("../../backgrounds/autumn-drift/services/AutumnDriftBackgroundSystem.js"),
-  simple: () => import("../../backgrounds/simple/services/SimpleBackgroundSystem.js"),
+  winter: () => import("../../backgrounds/winter/services/WinterBackgroundSystem.js"),
+  cosmic: () => import("../../backgrounds/cosmic/services/CosmicBackgroundSystem.js"),
+  ocean: () => import("../../backgrounds/ocean/services/OceanBackgroundOrchestrator.js"),
+  ember: () => import("../../backgrounds/ember/services/EmberBackgroundSystem.js"),
+  blossom: () => import("../../backgrounds/blossom/services/BlossomBackgroundSystem.js"),
+  forest: () => import("../../backgrounds/forest/services/ForestBackgroundSystem.js"),
+  autumn: () => import("../../backgrounds/autumn/services/AutumnBackgroundSystem.js"),
+  celestial: () => import("../../backgrounds/celestial/services/CelestialBackgroundSystem.js"),
+  void: () => import("../../backgrounds/void/services/VoidBackgroundSystem.js"),
 };
 
 export class BackgroundFactory {
@@ -79,65 +80,49 @@ export class BackgroundFactory {
         backgroundSystem = new RainbowBackgroundSystem();
         break;
       }
-      case BackgroundType.SNOWFALL: {
-        const { SnowfallBackgroundSystem } = await backgroundLoaders.snowfall();
-        backgroundSystem = new SnowfallBackgroundSystem();
+      case BackgroundType.WINTER: {
+        const { WinterBackgroundSystem } = await backgroundLoaders.winter();
+        backgroundSystem = new WinterBackgroundSystem();
         break;
       }
-      case BackgroundType.NIGHT_SKY: {
-        const { NightSkyBackgroundSystem } = await backgroundLoaders.nightSky();
-        backgroundSystem = NightSkyBackgroundSystem.create();
+      case BackgroundType.COSMIC: {
+        const { CosmicBackgroundSystem } = await backgroundLoaders.cosmic();
+        backgroundSystem = CosmicBackgroundSystem.create();
         break;
       }
-      case BackgroundType.DEEP_OCEAN: {
-        const { DeepOceanBackgroundOrchestrator } = await backgroundLoaders.deepOcean();
-        backgroundSystem = DeepOceanBackgroundOrchestrator.create();
+      case BackgroundType.OCEAN: {
+        const { OceanBackgroundOrchestrator } = await backgroundLoaders.ocean();
+        backgroundSystem = OceanBackgroundOrchestrator.create();
         break;
       }
-      case BackgroundType.EMBER_GLOW: {
-        const { EmberGlowBackgroundSystem } = await backgroundLoaders.emberGlow();
-        backgroundSystem = new EmberGlowBackgroundSystem();
+      case BackgroundType.EMBER: {
+        const { EmberBackgroundSystem } = await backgroundLoaders.ember();
+        backgroundSystem = new EmberBackgroundSystem();
         break;
       }
-      case BackgroundType.CHERRY_BLOSSOM: {
-        const { CherryBlossomBackgroundSystem } = await backgroundLoaders.cherryBlossom();
-        backgroundSystem = new CherryBlossomBackgroundSystem();
+      case BackgroundType.BLOSSOM: {
+        const { BlossomBackgroundSystem } = await backgroundLoaders.blossom();
+        backgroundSystem = new BlossomBackgroundSystem();
         break;
       }
-      case BackgroundType.FIREFLY_FOREST: {
-        const { FireflyForestBackgroundSystem } = await backgroundLoaders.fireflyForest();
-        backgroundSystem = new FireflyForestBackgroundSystem();
+      case BackgroundType.FOREST: {
+        const { ForestBackgroundSystem } = await backgroundLoaders.forest();
+        backgroundSystem = new ForestBackgroundSystem();
         break;
       }
-      case BackgroundType.AUTUMN_DRIFT: {
-        const { AutumnDriftBackgroundSystem } = await backgroundLoaders.autumnDrift();
-        backgroundSystem = new AutumnDriftBackgroundSystem();
+      case BackgroundType.AUTUMN: {
+        const { AutumnBackgroundSystem } = await backgroundLoaders.autumn();
+        backgroundSystem = new AutumnBackgroundSystem();
         break;
       }
       case BackgroundType.CELESTIAL: {
-        // Celestial is 3D-only — fall through to simple dark background for 2D contexts
-        const { SimpleBackgroundSystem } = await backgroundLoaders.simple();
-        backgroundSystem = new SimpleBackgroundSystem({
-          type: "solid",
-          color: "#0a1a4a",
-        });
+        const { CelestialBackgroundSystem } = await backgroundLoaders.celestial();
+        backgroundSystem = new CelestialBackgroundSystem();
         break;
       }
-      case BackgroundType.SOLID_COLOR: {
-        const { SimpleBackgroundSystem } = await backgroundLoaders.simple();
-        backgroundSystem = new SimpleBackgroundSystem({
-          type: "solid",
-          color: options.backgroundColor ?? "#1a1a2e",
-        });
-        break;
-      }
-      case BackgroundType.LINEAR_GRADIENT: {
-        const { SimpleBackgroundSystem } = await backgroundLoaders.simple();
-        backgroundSystem = new SimpleBackgroundSystem({
-          type: "gradient",
-          colors: options.gradientColors ?? ["#667eea", "#764ba2"],
-          direction: options.gradientDirection ?? 135,
-        });
+      case BackgroundType.VOID: {
+        const { VoidBackgroundSystem } = await backgroundLoaders.void();
+        backgroundSystem = new VoidBackgroundSystem();
         break;
       }
       default: {
@@ -178,17 +163,16 @@ export class BackgroundFactory {
 
   public static isBackgroundSupported(type: BackgroundType): boolean {
     switch (type) {
-      case BackgroundType.SNOWFALL:
-      case BackgroundType.NIGHT_SKY:
+      case BackgroundType.WINTER:
+      case BackgroundType.COSMIC:
       case BackgroundType.PRIDE:
-      case BackgroundType.DEEP_OCEAN:
-      case BackgroundType.EMBER_GLOW:
-      case BackgroundType.CHERRY_BLOSSOM:
-      case BackgroundType.FIREFLY_FOREST:
-      case BackgroundType.AUTUMN_DRIFT:
+      case BackgroundType.OCEAN:
+      case BackgroundType.EMBER:
+      case BackgroundType.BLOSSOM:
+      case BackgroundType.FOREST:
+      case BackgroundType.AUTUMN:
       case BackgroundType.CELESTIAL:
-      case BackgroundType.SOLID_COLOR:
-      case BackgroundType.LINEAR_GRADIENT:
+      case BackgroundType.VOID:
         return true;
       default:
         return false;
@@ -197,17 +181,16 @@ export class BackgroundFactory {
 
   public static getSupportedBackgroundTypes(): BackgroundType[] {
     return [
-      BackgroundType.NIGHT_SKY,
-      BackgroundType.SNOWFALL,
+      BackgroundType.COSMIC,
+      BackgroundType.WINTER,
       BackgroundType.PRIDE,
-      BackgroundType.DEEP_OCEAN,
-      BackgroundType.EMBER_GLOW,
-      BackgroundType.CHERRY_BLOSSOM,
-      BackgroundType.FIREFLY_FOREST,
-      BackgroundType.AUTUMN_DRIFT,
+      BackgroundType.OCEAN,
+      BackgroundType.EMBER,
+      BackgroundType.BLOSSOM,
+      BackgroundType.FOREST,
+      BackgroundType.AUTUMN,
       BackgroundType.CELESTIAL,
-      BackgroundType.SOLID_COLOR,
-      BackgroundType.LINEAR_GRADIENT,
+      BackgroundType.VOID,
     ];
   }
 }

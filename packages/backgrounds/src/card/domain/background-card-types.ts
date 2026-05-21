@@ -3,9 +3,9 @@
  */
 
 export interface BackgroundCardMetadata {
-  /** BackgroundType enum value (e.g. "emberGlow", "nightSky") */
+  /** BackgroundType enum value (e.g. "ember", "cosmic") */
   type: string;
-  /** Human-readable label (e.g. "Ember Glow") */
+  /** Human-readable label (e.g. "Ember") */
   label: string;
   /** CSS linear-gradient for the card preview fill */
   gradient: string;

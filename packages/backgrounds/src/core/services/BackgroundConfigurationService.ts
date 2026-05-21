@@ -7,7 +7,7 @@
 import type { IBackgroundConfigurationService } from "../contracts/IBackgroundConfigurationService.js";
 import type { QualityLevel, QualityConfig, QualitySettings } from "../domain/types.js";
 import { CoreBackgroundConfig, QUALITY_CONFIGS } from "../domain/constants.js";
-import { NightSkyConfig } from "../../backgrounds/night-sky/constants.js";
+import { CosmicConfig } from "../../backgrounds/cosmic/constants.js";
 
 export class BackgroundConfigurationService implements IBackgroundConfigurationService {
   /**
@@ -109,7 +109,7 @@ export class BackgroundConfigurationService implements IBackgroundConfigurationS
   getOptimizedConfig(quality: QualityLevel): {
     config: {
       core: { background: typeof CoreBackgroundConfig };
-      nightSky: typeof NightSkyConfig;
+      cosmic: typeof CosmicConfig;
     };
     qualitySettings: QualitySettings;
   } {
@@ -120,7 +120,7 @@ export class BackgroundConfigurationService implements IBackgroundConfigurationS
         core: {
           background: CoreBackgroundConfig,
         },
-        nightSky: NightSkyConfig,
+        cosmic: CosmicConfig,
       },
       qualitySettings: {
         ...qualitySettings,

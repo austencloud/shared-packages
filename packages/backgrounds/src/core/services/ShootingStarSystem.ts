@@ -4,7 +4,7 @@
  * Creates and animates shooting stars across the canvas.
  */
 
-import { SnowfallConfig } from "../domain/constants.js";
+import { WinterConfig } from "../domain/constants.js";
 import type { Dimensions } from "../domain/types.js";
 
 // Shooting star types
@@ -39,7 +39,7 @@ export interface ShootingStarState {
 }
 
 export const createShootingStarSystem = () => {
-  const config = SnowfallConfig.shootingStar;
+  const config = WinterConfig.shootingStar;
 
   function getRandomInterval(): number {
     return (

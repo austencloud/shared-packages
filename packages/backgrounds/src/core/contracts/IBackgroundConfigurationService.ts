@@ -21,7 +21,7 @@ export interface IBackgroundConfigurationService {
   getOptimizedConfig(quality: QualityLevel): {
     config: {
       core: { background: { gradientStops: ReadonlyArray<{ position: number; color: string }> } };
-      nightSky: unknown;
+      cosmic: unknown;
     };
     qualitySettings: QualitySettings;
   };

@@ -40,6 +40,9 @@ const FA_SPA =
 const FA_LEAF =
   '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="currentColor"><path d="M272 96c-78.6 0-145.1 51.5-167.7 122.5c33.6-17 71.5-26.5 111.7-26.5l88 0c8.8 0 16 7.2 16 16s-7.2 16-16 16l-16 0-72 0s0 0 0 0c-16.6 0-32.7 1.9-48.3 5.4c-25.9 5.9-49.9 16.4-71.4 30.7c0 0 0 0 0 0C38.3 298.8 0 364.9 0 440l0 16c0 13.3 10.7 24 24 24s24-10.7 24-24l0-16c0-48.7 20.7-92.5 53.8-123.2C121.6 392.3 190.3 448 272 448l1 0c132.1-.7 239-130.9 239-291.4c0-42.6-7.5-83.1-21.1-119.5c-2.6-6.9-12.7-6.6-16.2-.1C455.9 72.1 418.7 96 376 96L272 96z"/></svg>';
 
+const FA_SUN =
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="currentColor"><path d="M361.5 1.2c5 2.1 8.6 6.6 9.6 11.9L391 121l107.9 19.8c5.3 1 9.8 4.6 11.9 9.6s1.5 10.7-1.6 15.2L446.9 256l62.3 90.3c3.1 4.5 3.7 10.2 1.6 15.2s-6.6 8.6-11.9 9.6L391 391 371.1 498.9c-1 5.3-4.6 9.8-9.6 11.9s-10.7 1.5-15.2-1.6L256 446.9l-90.3 62.3c-4.5 3.1-10.2 3.7-15.2 1.6s-8.6-6.6-9.6-11.9L121 391 13.1 371.1c-5.3-1-9.8-4.6-11.9-9.6s-1.5-10.7 1.6-15.2L65.1 256 2.8 165.7c-3.1-4.5-3.7-10.2-1.6-15.2s6.6-8.6 11.9-9.6L121 121 140.9 13.1c1-5.3 4.6-9.8 9.6-11.9s10.7-1.5 15.2 1.6L256 65.1 346.3 2.8c4.5-3.1 10.2-3.7 15.2-1.6zM256 160a96 96 0 1 0 0 192 96 96 0 1 0 0-192z"/></svg>';
+
 const FA_CIRCLE =
   '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="currentColor"><path d="M256 512A256 256 0 1 0 256 0a256 256 0 1 0 0 512z"/></svg>';
 
@@ -50,40 +53,40 @@ const FA_SQUARE =
 
 export const BACKGROUND_CARD_REGISTRY: ReadonlyArray<BackgroundCardMetadata> = [
   {
-    type: "emberGlow",
-    label: "Ember Glow",
+    type: "ember",
+    label: "Ember",
     gradient: "linear-gradient(135deg, #1a0a00, #7c2d12, #ea580c)",
     accentColor: "#fb923c",
     iconSvg: FA_FIRE,
     themeColors: ["#7c2d12", "#ea580c", "#fb923c"],
   },
   {
-    type: "nightSky",
-    label: "Night Sky",
+    type: "cosmic",
+    label: "Cosmic",
     gradient: "linear-gradient(135deg, #1e1b4b, #4338ca, #818cf8)",
     accentColor: "#818cf8",
     iconSvg: FA_MOON,
     themeColors: ["#1e1b4b", "#4338ca", "#818cf8"],
   },
   {
-    type: "deepOcean",
-    label: "Deep Ocean",
+    type: "ocean",
+    label: "Ocean",
     gradient: "linear-gradient(135deg, #0c4a6e, #0891b2, #22d3ee)",
     accentColor: "#22d3ee",
     iconSvg: FA_WATER,
     themeColors: ["#0c4a6e", "#0891b2", "#22d3ee"],
   },
   {
-    type: "fireflyForest",
-    label: "Firefly Forest",
+    type: "forest",
+    label: "Forest",
     gradient: "linear-gradient(135deg, #0d3320, #166534, #4ade80)",
     accentColor: "#4ade80",
     iconSvg: FA_TREE,
     themeColors: ["#0d3320", "#166534", "#22c55e", "#bef264"],
   },
   {
-    type: "snowfall",
-    label: "Snowfall",
+    type: "winter",
+    label: "Winter",
     gradient: "linear-gradient(135deg, #1e3a5f, #475569, #94a3b8)",
     accentColor: "#94a3b8",
     iconSvg: FA_SNOWFLAKE,
@@ -99,36 +102,36 @@ export const BACKGROUND_CARD_REGISTRY: ReadonlyArray<BackgroundCardMetadata> = [
     themeColors: ["#8b1c1c", "#8b4513", "#6b6b00", "#004d1a", "#1a2d5c", "#4a1a5c"],
   },
   {
-    type: "cherryBlossom",
-    label: "Cherry Blossom",
+    type: "blossom",
+    label: "Blossom",
     gradient: "linear-gradient(135deg, #831843, #db2777, #f9a8d4)",
     accentColor: "#f9a8d4",
     iconSvg: FA_SPA,
     themeColors: ["#831843", "#db2777", "#f9a8d4"],
   },
   {
-    type: "autumnDrift",
-    label: "Autumn Drift",
+    type: "autumn",
+    label: "Autumn",
     gradient: "linear-gradient(135deg, #78350f, #b45309, #dc2626)",
     accentColor: "#f59e0b",
     iconSvg: FA_LEAF,
     themeColors: ["#92400e", "#d97706", "#dc2626", "#78350f"],
   },
   {
-    type: "solidColor",
-    label: "Pure Black",
-    gradient: "linear-gradient(135deg, #18181b, #27272a, #3f3f46)",
-    accentColor: "#71717a",
-    iconSvg: FA_CIRCLE,
-    themeColors: ["#18181b", "#3f3f46", "#71717a"],
+    type: "celestial",
+    label: "Celestial",
+    gradient: "linear-gradient(135deg, #0a1a4a, #b89050, #ffd080)",
+    accentColor: "#ffd080",
+    iconSvg: FA_SUN,
+    themeColors: ["#0a1a4a", "#b89050", "#ffd080"],
   },
   {
-    type: "linearGradient",
-    label: "Modern",
-    gradient: "linear-gradient(135deg, #0d1117, #161b22, #21262d)",
-    accentColor: "#71717a",
+    type: "void",
+    label: "Void",
+    gradient: "linear-gradient(135deg, #000000, #0a0a0a, #141414)",
+    accentColor: "#525252",
     iconSvg: FA_SQUARE,
-    themeColors: ["#0d1117", "#161b22", "#21262d"],
+    themeColors: ["#000000", "#0a0a0a", "#141414"],
   },
 ];
 

@@ -5,9 +5,9 @@
 import type { QualityConfig } from "./types.js";
 
 /**
- * Snowfall configuration
+ * Winter configuration
  */
-export const SnowfallConfig = {
+export const WinterConfig = {
   snowflake: {
     colors: [
       "#ffffff", // Pure crystalline white

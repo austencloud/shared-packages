@@ -538,18 +538,6 @@ export class BackgroundController implements IBackgroundController {
     const ctx = canvas.getContext('2d', { willReadFrequently: false });
     if (!ctx) return;
 
-    // Check if this is a static background (no animation needed)
-    const isStatic =
-      type === BackgroundType.SOLID_COLOR ||
-      type === BackgroundType.LINEAR_GRADIENT;
-
-    if (isStatic) {
-      // Render once and exit
-      const dimensions = { width: canvas.width, height: canvas.height };
-      system.draw(ctx, dimensions);
-      return;
-    }
-
     // Animated background - start the loop
     let lastTimestamp = 0;
     const MAX_DELTA_MS = 100;

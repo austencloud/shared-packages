@@ -1,7 +1,7 @@
 {
   "name": "@austencloud/backgrounds",
-  "version": "0.3.0",
-  "description": "Animated canvas backgrounds - snowfall, night sky, deep ocean, firefly forest, and more",
+  "version": "0.5.5",
+  "description": "Animated canvas backgrounds - winter, cosmic, ocean, forest, and more",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -34,12 +34,12 @@
     "backgrounds",
     "particles",
     "typescript",
-    "snowfall",
-    "night-sky",
-    "deep-ocean",
-    "firefly",
+    "winter",
+    "cosmic",
+    "ocean",
+    "forest",
     "ember",
-    "cherry-blossom"
+    "blossom"
   ],
   "author": "Austen Cloud",
   "license": "MIT",

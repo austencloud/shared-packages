@@ -2,20 +2,16 @@
  * Background type enumeration
  */
 export enum BackgroundType {
-  // Animated backgrounds
-  SNOWFALL = "snowfall",
-  NIGHT_SKY = "nightSky",
+  WINTER = "winter",
+  COSMIC = "cosmic",
   PRIDE = "pride",
-  DEEP_OCEAN = "deepOcean",
-  EMBER_GLOW = "emberGlow",
-  CHERRY_BLOSSOM = "cherryBlossom",
-  FIREFLY_FOREST = "fireflyForest",
-  AUTUMN_DRIFT = "autumnDrift",
+  OCEAN = "ocean",
+  EMBER = "ember",
+  BLOSSOM = "blossom",
+  FOREST = "forest",
+  AUTUMN = "autumn",
   CELESTIAL = "celestial",
-
-  // Simple backgrounds
-  SOLID_COLOR = "solidColor",
-  LINEAR_GRADIENT = "linearGradient",
+  VOID = "void",
 }
 
 /**
@@ -23,5 +19,4 @@ export enum BackgroundType {
  */
 export enum BackgroundCategory {
   ANIMATED = "animated",
-  SIMPLE = "simple",
 }

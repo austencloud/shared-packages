@@ -34,7 +34,7 @@ export type {
 // ─── Constants ───────────────────────────────────────────────────────────────
 
 export {
-  SnowfallConfig,
+  WinterConfig,
   CoreBackgroundConfig,
   QUALITY_CONFIGS,
 } from "./core/domain/constants.js";
@@ -113,60 +113,66 @@ export type {
 
 export { RainbowBackgroundSystem } from "./backgrounds/rainbow/services/RainbowBackgroundSystem.js";
 
-export { SnowfallBackgroundSystem } from "./backgrounds/snowfall/services/SnowfallBackgroundSystem.js";
+export { WinterBackgroundSystem } from "./backgrounds/winter/services/WinterBackgroundSystem.js";
 
-export { NightSkyBackgroundSystem } from "./backgrounds/night-sky/services/NightSkyBackgroundSystem.js";
+export { CosmicBackgroundSystem } from "./backgrounds/cosmic/services/CosmicBackgroundSystem.js";
 
-export { DeepOceanBackgroundOrchestrator } from "./backgrounds/deep-ocean/services/DeepOceanBackgroundOrchestrator.js";
+export { OceanBackgroundOrchestrator } from "./backgrounds/ocean/services/OceanBackgroundOrchestrator.js";
 
-export { EmberGlowBackgroundSystem } from "./backgrounds/ember-glow/services/EmberGlowBackgroundSystem.js";
+export { EmberBackgroundSystem } from "./backgrounds/ember/services/EmberBackgroundSystem.js";
 
-export { CherryBlossomBackgroundSystem } from "./backgrounds/cherry-blossom/services/CherryBlossomBackgroundSystem.js";
+export { BlossomBackgroundSystem } from "./backgrounds/blossom/services/BlossomBackgroundSystem.js";
 
-export { FireflyForestBackgroundSystem } from "./backgrounds/firefly-forest/services/FireflyForestBackgroundSystem.js";
-export type { FireflyForestLayers } from "./backgrounds/firefly-forest/services/FireflyForestBackgroundSystem.js";
+export { ForestBackgroundSystem } from "./backgrounds/forest/services/ForestBackgroundSystem.js";
+export type { ForestLayers } from "./backgrounds/forest/services/ForestBackgroundSystem.js";
 
 export type {
   TreeTypeVisibility,
   EcologicalPattern,
   RenderedTree,
-} from "./backgrounds/firefly-forest/domain/models/tree-silhouette-models.js";
+} from "./backgrounds/forest/domain/models/tree-silhouette-models.js";
 
 export {
   ECOLOGICAL_PATTERNS,
-} from "./backgrounds/firefly-forest/domain/constants/tree-silhouette-constants.js";
+} from "./backgrounds/forest/domain/constants/tree-silhouette-constants.js";
 
-export { AutumnDriftBackgroundSystem } from "./backgrounds/autumn-drift/services/AutumnDriftBackgroundSystem.js";
+export { AutumnBackgroundSystem } from "./backgrounds/autumn/services/AutumnBackgroundSystem.js";
+
+export { CelestialBackgroundSystem } from "./backgrounds/celestial/services/CelestialBackgroundSystem.js";
+export type { CelestialLayers } from "./backgrounds/celestial/services/CelestialBackgroundSystem.js";
+
+export { VoidBackgroundSystem } from "./backgrounds/void/services/VoidBackgroundSystem.js";
+export type { VoidLayers, VoidConfig } from "./backgrounds/void/services/VoidBackgroundSystem.js";
 
 export { SimpleBackgroundSystem } from "./backgrounds/simple/services/SimpleBackgroundSystem.js";
 export type { SimpleBackgroundConfig } from "./backgrounds/simple/services/SimpleBackgroundSystem.js";
 
-// ─── Cherry Blossom System Types ────────────────────────────────────────────
+// ─── Blossom System Types ───────────────────────────────────────────────────
 
-export type { CherryBlossomLayers } from "./backgrounds/cherry-blossom/services/CherryBlossomBackgroundSystem.js";
-export type { TimeOfDay } from "./backgrounds/cherry-blossom/domain/constants/time-of-day-presets.js";
-export { getTimeOfDayPreset } from "./backgrounds/cherry-blossom/domain/constants/time-of-day-presets.js";
+export type { BlossomLayers } from "./backgrounds/blossom/services/BlossomBackgroundSystem.js";
+export type { TimeOfDay } from "./backgrounds/blossom/domain/constants/time-of-day-presets.js";
+export { getTimeOfDayPreset } from "./backgrounds/blossom/domain/constants/time-of-day-presets.js";
 
-// ─── Ember Glow System Types ────────────────────────────────────────────────
+// ─── Ember System Types ────────────────────────────────────────────────────
 
-export type { HeatIntensity, DensityPreset } from "./backgrounds/ember-glow/domain/constants/ember-constants.js";
+export type { HeatIntensity, DensityPreset } from "./backgrounds/ember/domain/constants/ember-constants.js";
 
-// ─── Deep Ocean System Types ────────────────────────────────────────────────
+// ─── Ocean System Types ─────────────────────────────────────────────────────
 
-export type { FishMarineLife, FishSpecies, FinState, TailState, FishColorPalette } from "./backgrounds/deep-ocean/domain/models/DeepOceanModels.js";
-export type { FishMood, FishPersonality } from "./backgrounds/deep-ocean/domain/types/fish-personality-types.js";
-export type { DeepOceanLayers } from "./backgrounds/deep-ocean/services/DeepOceanBackgroundOrchestrator.js";
-export { fishDebugConfig } from "./backgrounds/deep-ocean/domain/debug-config.js";
+export type { FishMarineLife, FishSpecies, FinState, TailState, FishColorPalette } from "./backgrounds/ocean/domain/models/OceanModels.js";
+export type { FishMood, FishPersonality } from "./backgrounds/ocean/domain/types/fish-personality-types.js";
+export type { OceanLayers } from "./backgrounds/ocean/services/OceanBackgroundOrchestrator.js";
+export { fishDebugConfig } from "./backgrounds/ocean/domain/debug-config.js";
 
-// ─── Night Sky System Types ─────────────────────────────────────────────────
+// ─── Cosmic System Types ────────────────────────────────────────────────────
 
-export type { UFOMood, WobbleType } from "./backgrounds/night-sky/services/UFOSystem.js";
+export type { UFOMood, WobbleType } from "./backgrounds/cosmic/services/UFOSystem.js";
 
 // ─── Rainbow/Pride System Types ─────────────────────────────────────────────
 
 export { PRIDE_PALETTES } from "./backgrounds/rainbow/domain/constants/rainbow-constants.js";
 export type { PridePalette } from "./backgrounds/rainbow/domain/constants/rainbow-constants.js";
 
-// ─── Firefly Forest Additional Types ────────────────────────────────────────
+// ─── Forest Additional Types ────────────────────────────────────────────────
 
-export type { TreeCategory } from "./backgrounds/firefly-forest/services/TreeSilhouetteImageLoader.js";
+export type { TreeCategory } from "./backgrounds/forest/services/TreeSilhouetteImageLoader.js";

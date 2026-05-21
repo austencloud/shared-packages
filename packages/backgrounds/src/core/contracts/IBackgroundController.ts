@@ -56,10 +56,10 @@ export interface BackgroundOptions {
  * controller.mount(document.getElementById('background-container'));
  *
  * // Set the background
- * await controller.setBackground(BackgroundType.DEEP_OCEAN);
+ * await controller.setBackground(BackgroundType.OCEAN);
  *
  * // Change background with crossfade
- * await controller.setBackground(BackgroundType.FIREFLY_FOREST);
+ * await controller.setBackground(BackgroundType.FOREST);
  *
  * // Cleanup when done
  * controller.unmount();
