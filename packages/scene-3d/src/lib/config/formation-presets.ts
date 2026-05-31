@@ -88,7 +88,10 @@ function generateLineSlots(count: number): FormationSlot[] {
  * Performers arranged in a circle facing the center
  */
 function generateCircleSlots(count: number): FormationSlot[] {
-  const radius = DEFAULT_FORMATION_SPACING * 0.75;
+  // 2m min arc per performer — enough for arm span + staff clearance.
+  const MIN_ARC = 2.0;
+  const baseRadius = DEFAULT_FORMATION_SPACING * 0.75;
+  const radius = Math.max(baseRadius, (count * MIN_ARC) / (2 * Math.PI));
   const offset = FORMATION_WALL_OFFSET;
   const slots: FormationSlot[] = [];
 
@@ -97,29 +100,24 @@ function generateCircleSlots(count: number): FormationSlot[] {
   }
 
   if (count === 2) {
-    // Two performers facing each other
     return [
       {
         index: 0,
         position: { x: -radius, z: offset },
         facingAngle: Math.PI / 2,
-      }, // Face right
+      },
       {
         index: 1,
         position: { x: radius, z: offset },
         facingAngle: -Math.PI / 2,
-      }, // Face left
+      },
     ];
   }
 
-  // 3-4 performers in a circle
   for (let i = 0; i < count; i++) {
-    // Start from front and go clockwise
     const angle = (i / count) * Math.PI * 2 - Math.PI / 2;
     const x = Math.cos(angle) * radius;
     const z = Math.sin(angle) * radius + offset;
-
-    // Face toward center
     const facingAngle = angle + Math.PI / 2;
 
     slots.push({
@@ -373,6 +371,20 @@ export function createFormationFromPreset(
 ): Formation {
   const slots = getSlotsForPreset(preset, performerCount);
   const facingMode = getDefaultFacingMode(preset);
+
+  // Center formation at z=0 so performers sit in the middle of any stage
+  if (slots.length > 0) {
+    let minZ = Infinity;
+    let maxZ = -Infinity;
+    for (const s of slots) {
+      if (s.position.z < minZ) minZ = s.position.z;
+      if (s.position.z > maxZ) maxZ = s.position.z;
+    }
+    const centerZ = (minZ + maxZ) / 2;
+    for (const s of slots) {
+      s.position.z -= centerZ;
+    }
+  }
 
   const presetNames: Record<FormationPreset, string> = {
     "grid-2x2": "Grid",

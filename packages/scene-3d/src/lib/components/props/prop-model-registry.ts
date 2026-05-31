@@ -46,10 +46,8 @@ function modelUrl(filename: string): string {
  * Add entries as models become available - the system degrades gracefully.
  */
 export const PROP_MODEL_REGISTRY: Partial<Record<PropType, PropModelEntry>> = {
-  // Models will be added here as they're generated.
-  // Example:
-  // [PropType.CLUB]: { modelUrl: modelUrl("club.glb"), scale: 1, gripOffsetY: 0 },
-  // [PropType.FAN]: { modelUrl: modelUrl("fan.glb"), scale: 1, gripOffsetY: 0 },
+  // Re-enable after Blender assembly: scale + gripOffsetY may need tuning
+  // [PropType.BUUGENG]: { modelUrl: modelUrl("buugeng.glb"), scale: 1, gripOffsetY: 0 },
 };
 
 /**

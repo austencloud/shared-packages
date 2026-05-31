@@ -78,6 +78,7 @@
     tipEffectMap?: TipEffectMap;
     isPlaying?: boolean;
     staffHalfLength?: number;
+    propLength?: number;
 
     // Vertical offset (museum platforms, stages)
     groundOffset?: number;
@@ -111,8 +112,30 @@
 
     /** Optional grid component rendered at appropriate offset */
     gridSlot?: Snippet;
-    /** Optional effects component rendered in rig-local space */
-    effectsSlot?: Snippet;
+    /**
+     * Optional effects component rendered in rig-local space. Receives the
+     * rig's live prop states, hand-anchor offsets, play flag, tip-effect map,
+     * staff half length, and the effects group ref so a consumer-mounted
+     * effect orchestrator can place tip-tracking effects (trails, LED, etc.)
+     * in the correct rig-root-local frame without duplicating rig internals.
+     */
+    effectsSlot?: Snippet<[{
+      bluePropState: PropState3D | null;
+      redPropState: PropState3D | null;
+      blueHandPos: { x: number; z: number };
+      redHandPos: { x: number; z: number };
+      isPlaying: boolean;
+      tipEffectMap: TipEffectMap;
+      staffHalfLength: number;
+      effectsParentRef: Group | undefined;
+    }]>;
+
+    /** Avatar mesh opacity 0-1, forwarded to Avatar3D for swap cross-fades.
+     *  1 = fully opaque (default). */
+    avatarOpacity?: number;
+    /** Fired with the avatar id when the avatar model finishes loading or
+     *  swapping. Forwarded from Avatar3D for swap-transition wrappers. */
+    onAvatarSwapped?: (avatarId: string) => void;
   }
 
   let {
@@ -132,7 +155,8 @@
     redPropState: redPropStateOverride,
     tipEffectMap = {},
     isPlaying = false,
-    staffHalfLength = userProportionsState.staffLength / 2,
+    staffHalfLength: staffHalfLengthProp,
+    propLength,
     groundOffset = 0,
     avatarId,
     enableLocomotion = false,
@@ -143,9 +167,15 @@
     enableRootMotion = false,
     enableFootPlanting = false,
     turnRequestOverride,
+    avatarOpacity = 1,
+    onAvatarSwapped,
     gridSlot,
     effectsSlot,
   }: Props = $props();
+
+  const staffHalfLength = $derived(
+    staffHalfLengthProp ?? (propLength ? propLength / 2 : userProportionsState.staffLength / 2)
+  );
 
   // Animation-driven yaw accumulator. When animationDrivenYaw is true, the
   // rig's rotation is advanced by yawDelta from Avatar3D's onRootMotion
@@ -279,6 +309,8 @@
     <Avatar3D
       id={avatarState.id}
       {avatarId}
+      opacity={avatarOpacity}
+      onModelSwapped={onAvatarSwapped}
       bluePropState={bluePropState}
       redPropState={redPropState}
       facingAngle={0}
@@ -328,6 +360,7 @@
             propType={bluePropType}
             propState={bluePropState}
             color="blue"
+            length={propLength}
           />
         {/if}
       </T.Group>
@@ -351,6 +384,7 @@
             propType={redPropType}
             propState={redPropState}
             color="red"
+            length={propLength}
           />
         {/if}
       </T.Group>
@@ -360,7 +394,16 @@
   <!-- Effects (consumer-provided via effectsSlot) -->
   {#if showEffects && effectsSlot}
     <T.Group bind:ref={effectsGroupRef}>
-      {@render effectsSlot()}
+      {@render effectsSlot({
+        bluePropState,
+        redPropState,
+        blueHandPos,
+        redHandPos,
+        isPlaying,
+        tipEffectMap,
+        staffHalfLength,
+        effectsParentRef: effectsGroupRef,
+      })}
     </T.Group>
   {/if}
 </T.Group>

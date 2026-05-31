@@ -143,6 +143,12 @@
      *  rotations from the sampled turn clip between locomotion and root
      *  motion in the animation pipeline. Null means no turn is active. */
     turnRequest?: TurnRequest | null;
+    /** Mesh opacity 0-1 applied to every material on the loaded model.
+     *  Drives avatar-swap cross-fades. 1 = fully opaque (default). */
+    opacity?: number;
+    /** Fired with the avatar id once a model finishes loading (initial load
+     *  or swap). Lets a swap-transition wrapper know when to fade back in. */
+    onModelSwapped?: (avatarId: string) => void;
   }
 
   let {
@@ -176,6 +182,8 @@
     spinePitchOffset = 0,
     enableFootPlanting = false,
     turnRequest: turnRequestProp = null,
+    opacity = 1,
+    onModelSwapped,
   }: Props = $props();
 
   // Current locomotion state - tracked so FootPlanter can decide when to
@@ -341,6 +349,10 @@
       currentLoadedAvatarId = targetAvatarId;
       modelLoaded = true;
       useProceduralFallback = false;
+
+      // Notify a swap-transition wrapper that the new model is ready (so it
+      // can fade the avatar back in). Fires on initial load and on every swap.
+      onModelSwapped?.(targetAvatarId);
 
       // Widen the default stance - rotate upper legs outward so feet
       // are shoulder-width apart instead of the narrow T-pose default.
@@ -846,6 +858,25 @@
     // Set layer on root and ALL children (Three.js doesn't inherit layers)
     cachedRoot.traverse((child) => {
       child.layers.set(targetLayer);
+    });
+  });
+
+  // Apply avatar opacity to every material on the loaded model. Reacts to
+  // both the opacity prop (swap cross-fade) and cachedRoot changes (new model
+  // after a swap inherits the current opacity). Below 1, materials switch to
+  // transparent with depth-write off so the fade blends correctly.
+  $effect(() => {
+    if (!cachedRoot) return;
+    const o = opacity;
+    const transparent = o < 1;
+    cachedRoot.traverse((child: any) => {
+      if (!child.isMesh || !child.material) return;
+      const materials = Array.isArray(child.material) ? child.material : [child.material];
+      for (const material of materials) {
+        material.transparent = transparent;
+        material.opacity = o;
+        material.depthWrite = !transparent;
+      }
     });
   });
 
