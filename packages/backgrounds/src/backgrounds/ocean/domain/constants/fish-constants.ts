@@ -555,3 +555,51 @@ export const METABOLISM_RATES = {
   /** Energy recovery when resting */
   restRecovery: 0.01,
 };
+
+// =============================================================================
+// MOTION SMOOTHING (velocity integration)
+// =============================================================================
+
+/**
+ * Exponential-approach rates (1/s) for easing `speed` toward `targetSpeed`.
+ * Higher = snappier ramp. Darting is high so the C-start still bursts, but over
+ * ~120ms not one frame. Tunable live in OceanLab.
+ */
+export const MOTION_SMOOTHING = {
+  /** default speed ease rate for cruise/pass/ascend/descend/etc. */
+  speedRate: 6,
+  /** faster ease during darting burst so it still reads as explosive */
+  dartSpeedRate: 18,
+  /** heading ease rate for turns (direction flip ramps through 0) */
+  headingRate: 5,
+};
+
+// =============================================================================
+// LATERAL WANDER (replaces RNG dart jitter)
+// =============================================================================
+
+export const LATERAL_WANDER = {
+  /** base frequency for the smooth wander signal */
+  frequency: 1.5,
+  /** amplitude (px) of the dart-phase lateral wander */
+  dartAmplitude: 4,
+  /** amplitude (px) of the recovery-phase residual wander */
+  recoveryAmplitude: 0.6,
+};
+
+// =============================================================================
+// CURSOR FLEE (screen-space, mirrors 3D scatter)
+// =============================================================================
+
+export const CURSOR_FLEE = {
+  /** base scatter radius (px), scaled by boldness in computeFlee */
+  radius: 180,
+  /** peak horizontal speed multiplier at full flee intensity */
+  speedMultiplier: 4.0,
+  /** vertical flee velocity scale (px/s) at full intensity */
+  verticalForce: 120,
+  /** panic duration (s) seeded on trigger; recovery eases over this window */
+  panicDuration: 2.5,
+  /** master on/off; flee is active wherever the ocean background renders */
+  enabled: true,
+};
