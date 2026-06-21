@@ -58,6 +58,8 @@ export class OceanBackgroundOrchestrator implements IBackgroundSystem {
   private animationTime = 0;
   private perfMonitor = new OceanPerformanceMonitor();
   private pointer: { x: number; y: number; active: boolean } | null = null;
+  /** Last dimensions seen by update() — pokeAt needs them for pitch/pan mapping. */
+  private lastDimensions: Dimensions | null = null;
 
   // Layer visibility for lab mode
   private layerVisibility: OceanLayers = {
@@ -203,6 +205,7 @@ export class OceanBackgroundOrchestrator implements IBackgroundSystem {
 
   update(dimensions: Dimensions, frameMultiplier: number = 1.0): void {
     this.perfMonitor.startFrame();
+    this.lastDimensions = dimensions;
 
     const accessibilityMultiplier = this.accessibility.reducedMotion
       ? 0.3
@@ -335,6 +338,50 @@ export class OceanBackgroundOrchestrator implements IBackgroundSystem {
 
   setPointer(x: number, y: number, active: boolean): void {
     this.pointer = { x, y, active };
+  }
+
+  /**
+   * Hit-test a tap against the jellyfish swarm. Finds the closest jelly whose bell
+   * covers (x, y) and, on a hit, lights its bell from within (flashTimer) and
+   * returns the note mapping the caller uses to ring a chime.
+   *
+   *   pitch01 — 0..1, higher on screen → higher note (vertical xylophone, mirrors
+   *             the 3D depth→pitch assignment).
+   *   pan     — -1..1 from horizontal position.
+   *
+   * Bell radius is size*0.6 (renderer treats `size` as the full bell diameter, so
+   * the true radius is ~size*0.5; the extra margin makes taps land easily).
+   */
+  pokeAt(x: number, y: number): { hit: boolean; pitch01: number; pan: number } {
+    const width = this.lastDimensions?.width ?? 0;
+    const height = this.lastDimensions?.height ?? 0;
+
+    let closest: JellyfishMarineLife | null = null;
+    let closestDistSq = Infinity;
+
+    for (const jelly of this.state.jellyfish) {
+      const radius = jelly.size * 0.6;
+      const dx = jelly.x - x;
+      const dy = jelly.y - y;
+      const distSq = dx * dx + dy * dy;
+      if (distSq <= radius * radius && distSq < closestDistSq) {
+        closest = jelly;
+        closestDistSq = distSq;
+      }
+    }
+
+    if (!closest) {
+      return { hit: false, pitch01: 0, pan: 0 };
+    }
+
+    const FLASH_DURATION = 0.6;
+    closest.flashTimer = FLASH_DURATION;
+
+    const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
+    const pitch01 = height > 0 ? clamp01(1 - closest.y / height) : 0.5;
+    const pan = width > 0 ? Math.max(-1, Math.min(1, (closest.x / width) * 2 - 1)) : 0;
+
+    return { hit: true, pitch01, pan };
   }
 
   setAccessibilitySettings(settings: AccessibilitySettings): void {

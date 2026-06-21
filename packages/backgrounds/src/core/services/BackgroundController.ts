@@ -191,6 +191,10 @@ export class BackgroundController implements IBackgroundController {
     this.systemB?.setPointer?.(x, y, active);
   }
 
+  pokeAt(x: number, y: number): { hit: boolean; pitch01: number; pan: number } | void {
+    return this.systemA?.pokeAt?.(x, y) ?? this.systemB?.pokeAt?.(x, y);
+  }
+
   /**
    * Get current background type.
    */

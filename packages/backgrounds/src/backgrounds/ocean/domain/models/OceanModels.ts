@@ -566,6 +566,13 @@ export interface JellyfishMarineLife extends MarineLifeBase {
   /** Glow pulse speed */
   glowSpeed: number;
 
+  // Tap interaction (jellyfish "ding")
+  /**
+   * Seconds remaining on the tap-flash. >0 means the bell is lit from within and
+   * the jelly is jetting upward (startle). Decays toward 0 each frame.
+   */
+  flashTimer: number;
+
   // Particle trail
   /** Recent positions for particle spawning */
   trailPositions: { x: number; y: number; age: number }[];

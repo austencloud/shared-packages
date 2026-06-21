@@ -60,4 +60,11 @@ export interface BackgroundSystem {
    * backgrounds (e.g. fish cursor flee). active=false when pointer left.
    */
   setPointer?: (x: number, y: number, active: boolean) => void;
+  /**
+   * Tap-test the background at (x, y) in canvas-logical px. Interactive
+   * backgrounds (e.g. ocean jellyfish) hit-test their elements and, on a hit,
+   * trigger feedback (flash) and return a note mapping the caller can sonify.
+   * pitch01 in [0,1] (higher = higher pitch), pan in [-1,1].
+   */
+  pokeAt?: (x: number, y: number) => { hit: boolean; pitch01: number; pan: number } | void;
 }

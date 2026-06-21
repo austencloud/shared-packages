@@ -56,6 +56,13 @@ const JELLYFISH_CONFIG = {
 };
 
 /**
+ * Upward jet (px/sec at full flash) applied to a tapped jelly's baseY while its
+ * flashTimer rings out. Kept subtle so the startle reads as a gentle pulse-up,
+ * not a teleport. Integrated against flashTimer so it eases back to drift.
+ */
+const STARTLE_JET_SPEED = 90;
+
+/**
  * Species definitions with visual characteristics
  */
 interface SpeciesDefinition {
@@ -309,6 +316,9 @@ export class JellyfishAnimator implements IJellyfishAnimator {
         JELLYFISH_CONFIG.glowSpeed.max
       ),
 
+      // Tap interaction — starts at rest (no flash)
+      flashTimer: 0,
+
       // Particle trail
       trailPositions: [],
 
@@ -427,6 +437,15 @@ export class JellyfishAnimator implements IJellyfishAnimator {
       // Update position
       jelly.x += jelly.horizontalSpeed * deltaSeconds;
       jelly.baseY += effectiveVerticalSpeed * deltaSeconds;
+
+      // Tap-flash startle: while the flash is ringing out, give the poked jelly a
+      // gentle upward jet (lower Y) on top of its drift, scaled by the remaining
+      // flash so it pulses up then settles. Mirrors the 3D startle dart.
+      if (jelly.flashTimer > 0) {
+        jelly.flashTimer = Math.max(0, jelly.flashTimer - deltaSeconds);
+        jelly.baseY -= STARTLE_JET_SPEED * jelly.flashTimer * deltaSeconds;
+      }
+
       jelly.y = jelly.baseY;
 
       // Update animation phases - slow and meditative

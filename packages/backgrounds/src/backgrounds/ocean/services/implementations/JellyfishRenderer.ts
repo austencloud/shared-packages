@@ -51,18 +51,25 @@ export class JellyfishRenderer implements IJellyfishRenderer {
     const bellWidth = jelly.size * (1 - pulseAmount * 0.35);
     const bellHeight = jelly.size * jelly.bellAspect * (1 + pulseAmount * 0.2);
 
+    // Tap-flash: while flashTimer rings out the bell lights from within. Boost the
+    // emissive layers (outer glow + bell biolum highlights) up toward ~1.6x at full
+    // flash, easing back to the resting look as the timer decays. flashTimer is set
+    // to FLASH_DURATION (0.6s) on tap; normalize against that for a 0..1 ramp.
+    const flash01 = Math.min(1, Math.max(0, jelly.flashTimer) / 0.6);
+    const flashBoost = 1 + flash01 * 0.6;
+
     // Draw layers back to front
     this.drawParticleTrail(ctx, jelly);
     this.drawTrailingTentacles(ctx, jelly, bellWidth, bellHeight);
     this.drawOralArms(ctx, jelly, bellWidth, bellHeight);
-    this.drawBellGlow(ctx, jelly, bellWidth, bellHeight);
+    this.drawBellGlow(ctx, jelly, bellWidth, bellHeight, flashBoost);
     this.drawBellBody(ctx, jelly, bellWidth, bellHeight, pulseAmount);
     this.drawMesogleaTexture(ctx, jelly, bellWidth, bellHeight);
     this.drawGonads(ctx, jelly, bellWidth, bellHeight);
     this.drawRadialChannels(ctx, jelly, bellWidth, bellHeight);
     this.drawMarginFrills(ctx, jelly, bellWidth, bellHeight, pulseAmount);
     this.drawBellRimHighlight(ctx, jelly, bellWidth, bellHeight, pulseAmount);
-    this.drawBioluminescentHighlights(ctx, jelly, bellWidth, bellHeight);
+    this.drawBioluminescentHighlights(ctx, jelly, bellWidth, bellHeight, flashBoost);
 
     ctx.restore();
   }
@@ -369,19 +376,22 @@ export class JellyfishRenderer implements IJellyfishRenderer {
     ctx: CanvasRenderingContext2D,
     jelly: JellyfishMarineLife,
     bellWidth: number,
-    bellHeight: number
+    bellHeight: number,
+    flashBoost: number = 1
   ): void {
     ctx.save();
 
-    const glowRadius = Math.max(bellWidth, bellHeight) * 1.4;
+    // Tap-flash widens the halo a touch as well as brightening it, so the bell
+    // reads as lit from within rather than just a brighter ring.
+    const glowRadius = Math.max(bellWidth, bellHeight) * 1.4 * (1 + (flashBoost - 1) * 0.5);
     const gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, glowRadius);
 
     const accentColor = this.parseColor(jelly.accentColor);
-    const glowIntensity = jelly.glowIntensity * 0.35;
+    const glowIntensity = jelly.glowIntensity * 0.35 * flashBoost;
 
-    gradient.addColorStop(0, this.rgba(accentColor, glowIntensity * 0.7));
-    gradient.addColorStop(0.25, this.rgba(accentColor, glowIntensity * 0.4));
-    gradient.addColorStop(0.5, this.rgba(accentColor, glowIntensity * 0.15));
+    gradient.addColorStop(0, this.rgba(accentColor, Math.min(1, glowIntensity * 0.7)));
+    gradient.addColorStop(0.25, this.rgba(accentColor, Math.min(1, glowIntensity * 0.4)));
+    gradient.addColorStop(0.5, this.rgba(accentColor, Math.min(1, glowIntensity * 0.15)));
     gradient.addColorStop(1, this.rgba(accentColor, 0));
 
     ctx.fillStyle = gradient;
@@ -731,12 +741,19 @@ export class JellyfishRenderer implements IJellyfishRenderer {
     ctx: CanvasRenderingContext2D,
     jelly: JellyfishMarineLife,
     bellWidth: number,
-    bellHeight: number
+    bellHeight: number,
+    flashBoost: number = 1
   ): void {
     ctx.save();
 
     const accentColor = this.parseColor(jelly.accentColor);
-    const intensity = (Math.sin(jelly.glowPhase * Math.PI * 2) + 1) / 2;
+    // Tap-flash brightens the in-bell highlights; on a strong flash it also lifts
+    // the resting biolum pulse off its floor so the bell never reads dim mid-tap.
+    const restingIntensity = (Math.sin(jelly.glowPhase * Math.PI * 2) + 1) / 2;
+    const intensity = Math.min(
+      1,
+      restingIntensity * flashBoost + (flashBoost - 1) * 0.5
+    );
 
     // Apex glow
     const topGlow = ctx.createRadialGradient(
@@ -747,8 +764,8 @@ export class JellyfishRenderer implements IJellyfishRenderer {
       -bellHeight * 0.5,
       bellWidth * 0.25
     );
-    topGlow.addColorStop(0, this.rgba(this.lightenRgb(accentColor, 0.6), intensity * 0.6));
-    topGlow.addColorStop(0.5, this.rgba(accentColor, intensity * 0.25));
+    topGlow.addColorStop(0, this.rgba(this.lightenRgb(accentColor, 0.6), Math.min(1, intensity * 0.6)));
+    topGlow.addColorStop(0.5, this.rgba(accentColor, Math.min(1, intensity * 0.25)));
     topGlow.addColorStop(1, this.rgba(accentColor, 0));
 
     ctx.fillStyle = topGlow;
@@ -765,7 +782,7 @@ export class JellyfishRenderer implements IJellyfishRenderer {
       -bellHeight * 0.1,
       bellWidth * 0.2
     );
-    centerGlow.addColorStop(0, this.rgba(this.lightenRgb(accentColor, 0.4), intensity * 0.4));
+    centerGlow.addColorStop(0, this.rgba(this.lightenRgb(accentColor, 0.4), Math.min(1, intensity * 0.4)));
     centerGlow.addColorStop(1, this.rgba(accentColor, 0));
 
     ctx.fillStyle = centerGlow;

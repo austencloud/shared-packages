@@ -107,6 +107,13 @@ export interface IBackgroundController {
   setPointer(x: number, y: number, active: boolean): void;
 
   /**
+   * Tap the active background at (x, y) in canvas-logical px. Returns the note
+   * mapping from the active system's pokeAt (e.g. ocean jellyfish), or undefined
+   * when the active background isn't interactive. The caller sonifies a hit.
+   */
+  pokeAt(x: number, y: number): { hit: boolean; pitch01: number; pan: number } | void;
+
+  /**
    * Get the currently displayed background type.
    * Returns null if no background is set.
    */
