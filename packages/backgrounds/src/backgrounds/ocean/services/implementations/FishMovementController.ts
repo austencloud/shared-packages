@@ -34,14 +34,18 @@ export class FishMovementController implements IFishMovementController {
     dimensions: Dimensions,
     animationTime: number
   ): void {
-    // Ease actual speed toward the behavior's target speed (no more snaps).
-    const rate =
-      fish.behavior === "darting"
-        ? MOTION_SMOOTHING.dartSpeedRate
-        : MOTION_SMOOTHING.speedRate;
-    fish.speed = approachExponential(fish.speed, fish.targetSpeed, rate, deltaSeconds);
+    // Spine-chain fish get their eased speed from updatePropulsion (which runs
+    // earlier this frame and now eases toward targetSpeed*thrust). Only ease
+    // speed here for non-spine fish, to avoid two smoothers fighting.
+    if (!fish.useSpineChain) {
+      const rate =
+        fish.behavior === "darting"
+          ? MOTION_SMOOTHING.dartSpeedRate
+          : MOTION_SMOOTHING.speedRate;
+      fish.speed = approachExponential(fish.speed, fish.targetSpeed, rate, deltaSeconds);
+    }
 
-    // Ease heading factor toward the current direction (turns ramp through 0).
+    // Heading easing applies to ALL fish (direction flips ramp through 0).
     fish.headingFactor = easeHeading(
       fish.headingFactor,
       fish.direction,
@@ -250,6 +254,9 @@ export class FishMovementController implements IFishMovementController {
   }
 
   getEdgeProximity(fish: FishMarineLife, dimensions: Dimensions): number {
+    // Uses fish.direction (the heading target), not the eased headingFactor:
+    // edge proximity is only read at behavior-transition decision points, by
+    // which time the ~200ms heading ease has long settled.
     const warningZone = dimensions.width * EDGE_AWARENESS.warningZone;
 
     if (fish.direction === 1) {

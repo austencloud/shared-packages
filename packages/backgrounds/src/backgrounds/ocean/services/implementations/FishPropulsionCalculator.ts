@@ -99,10 +99,11 @@ export class FishPropulsionCalculator implements IFishPropulsionCalculator {
 
   calculateTargetSpeed(fish: FishMarineLife): number {
     const thrust = this.calculateThrust(fish);
-    const baseSpeed = fish.baseSpeed;
-
-    // Target speed is base speed modulated by thrust
-    return baseSpeed * thrust;
+    // Pulse rides on the behavior's intended speed (targetSpeed), not raw
+    // baseSpeed — so a dart/pass target carries through the tail-beat pulse.
+    // Fall back to baseSpeed if targetSpeed isn't seeded yet.
+    const base = fish.targetSpeed || fish.baseSpeed;
+    return base * thrust;
   }
 
   getTailVelocity(fish: FishMarineLife): { lateral: number; angular: number } {
