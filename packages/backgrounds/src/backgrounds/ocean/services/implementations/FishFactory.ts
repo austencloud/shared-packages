@@ -479,25 +479,28 @@ export class FishFactory implements IFishFactory {
   }
 
   private assignSpecies(depthLayer: DepthLayer): FishSpecies {
+    // Biased toward the tiny `schooling` species so the background reads as a
+    // dense reactive school of small flicking fish, with a few larger fish for
+    // variety.
     if (depthLayer === "far") {
       const roll = Math.random();
-      if (roll < 0.4) return "deep";
-      if (roll < 0.7) return "schooling";
+      if (roll < 0.65) return "schooling";
+      if (roll < 0.85) return "deep";
       return "sleek";
     }
 
     if (depthLayer === "mid") {
       const roll = Math.random();
-      if (roll < 0.25) return "tropical";
-      if (roll < 0.5) return "sleek";
-      if (roll < 0.8) return "schooling";
+      if (roll < 0.6) return "schooling";
+      if (roll < 0.75) return "sleek";
+      if (roll < 0.9) return "tropical";
       return "deep";
     }
 
     const roll = Math.random();
-    if (roll < 0.4) return "tropical";
-    if (roll < 0.7) return "sleek";
-    if (roll < 0.9) return "schooling";
+    if (roll < 0.6) return "schooling";
+    if (roll < 0.8) return "tropical";
+    if (roll < 0.95) return "sleek";
     return "deep";
   }
 

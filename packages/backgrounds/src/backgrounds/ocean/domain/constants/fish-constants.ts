@@ -334,9 +334,10 @@ export const SPECIES_BEHAVIOR_MODIFIERS: Record<FishSpecies, Partial<Record<keyo
     ascending: 1.3,
     descending: 1.3,
   },
-  /** Schooling fish stick to cruising */
+  /** Schooling fish stick to cruising but flick often (tiny quick darts) */
   schooling: {
     passing: 0.3, // -70% less likely to break formation
+    dart: 1.6, // +60% — frequent small "flicks" (small baseSpeed = small darts)
   },
 };
 
@@ -433,10 +434,10 @@ export const SPAWN_CONFIG = {
 // =============================================================================
 
 export const FISH_COUNTS: Record<string, number> = {
-  minimal: 3,
-  low: 5,
-  medium: 8,
-  high: 12,
+  minimal: 8,
+  low: 16,
+  medium: 26,
+  high: 38,
 };
 
 export const JELLYFISH_COUNTS: Record<string, number> = {
@@ -593,13 +594,13 @@ export const LATERAL_WANDER = {
 
 export const CURSOR_FLEE = {
   /** base scatter radius (px), scaled by boldness in computeFlee */
-  radius: 180,
+  radius: 260,
   /** peak horizontal speed multiplier at full flee intensity */
-  speedMultiplier: 4.0,
+  speedMultiplier: 7.0,
   /** vertical flee velocity scale (px/s) at full intensity */
-  verticalForce: 120,
+  verticalForce: 220,
   /** panic duration (s) seeded on trigger; recovery eases over this window */
-  panicDuration: 2.5,
+  panicDuration: 3.5,
   /** master on/off; flee is active wherever the ocean background renders */
   enabled: true,
 };

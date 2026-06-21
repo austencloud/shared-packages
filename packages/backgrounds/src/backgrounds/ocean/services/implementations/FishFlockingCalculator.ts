@@ -52,8 +52,12 @@ export class FishFlockingCalculator implements IFishFlockingCalculator {
     for (const [, members] of schools) {
       if (members.length < 2) continue;
 
-      // Check if school is under threat (any member being hunted)
-      const isUnderThreat = members.some((m) => m.isBeingHunted || m.mood === "alert");
+      // Check if school is under threat: any member hunted, alert, OR fleeing
+      // the cursor. The cursor-flee case makes the whole school tighten and
+      // bolt as a unit (group reaction) instead of only the in-radius members.
+      const isUnderThreat = members.some(
+        (m) => m.isBeingHunted || m.mood === "alert" || m.fleeTimer > 0
+      );
 
       for (const f of members) {
         const forces = this.calculateFlockingForces(f, members, isUnderThreat);
