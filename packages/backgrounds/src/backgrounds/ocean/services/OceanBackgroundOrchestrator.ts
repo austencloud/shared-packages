@@ -57,6 +57,7 @@ export class OceanBackgroundOrchestrator implements IBackgroundSystem {
   };
   private animationTime = 0;
   private perfMonitor = new OceanPerformanceMonitor();
+  private pointer: { x: number; y: number; active: boolean } | null = null;
 
   // Layer visibility for lab mode
   private layerVisibility: OceanLayers = {
@@ -251,7 +252,8 @@ export class OceanBackgroundOrchestrator implements IBackgroundSystem {
       this.state.fish,
       dimensions,
       effectiveMultiplier,
-      this.animationTime
+      this.animationTime,
+      this.pointer
     );
 
     this.state.jellyfish = this.jellyfishAnimator.updateJellyfish(
@@ -329,6 +331,10 @@ export class OceanBackgroundOrchestrator implements IBackgroundSystem {
 
   setQuality(quality: QualityLevel): void {
     this.quality = quality;
+  }
+
+  setPointer(x: number, y: number, active: boolean): void {
+    this.pointer = { x, y, active };
   }
 
   setAccessibilitySettings(settings: AccessibilitySettings): void {

@@ -1,6 +1,7 @@
 import type { Dimensions } from "../../../../core/domain/types.js";
 import type { FishMarineLife } from "../../domain/models/OceanModels.js";
 import type { WobbleOffset } from "../../domain/types/fish-personality-types.js";
+import type { PointerState } from "./IFishCursorAvoidance.js";
 import type { IFishRareBehaviorHandler } from "./IFishRareBehaviorHandler.js";
 import type { IFishHomeZoneHandler } from "./IFishHomeZoneHandler.js";
 import type { IFishInteractionHandler } from "./IFishInteractionHandler.js";
@@ -34,7 +35,8 @@ export interface IFishAnimator {
     fish: FishMarineLife[],
     dimensions: Dimensions,
     frameMultiplier: number,
-    animationTime: number
+    animationTime: number,
+    pointer?: PointerState | null
   ): FishMarineLife[];
 
   /**

@@ -21,6 +21,8 @@ import { FishInteractionHandler } from "./FishInteractionHandler.js";
 import { FishRareBehaviorHandler } from "./FishRareBehaviorHandler.js";
 import { FishHomeZoneHandler } from "./FishHomeZoneHandler.js";
 import { FishHuntingHandler } from "./FishHuntingHandler.js";
+import { FishCursorAvoidance } from "./FishCursorAvoidance.js";
+import type { IFishCursorAvoidance, PointerState } from "../contracts/IFishCursorAvoidance.js";
 
 /**
  * FishAnimator - Orchestrates fish animation subsystems
@@ -37,6 +39,7 @@ export class FishAnimator implements IFishAnimator {
   private rareBehaviorHandler: IFishRareBehaviorHandler;
   private homeZoneHandler: IFishHomeZoneHandler;
   private huntingHandler: IFishHuntingHandler;
+  private cursorAvoidance: IFishCursorAvoidance;
 
   constructor(
     private readonly fishFactory: IFishFactory,
@@ -49,7 +52,8 @@ export class FishAnimator implements IFishAnimator {
     interactionHandler?: IFishInteractionHandler,
     rareBehaviorHandler?: IFishRareBehaviorHandler,
     homeZoneHandler?: IFishHomeZoneHandler,
-    huntingHandler?: IFishHuntingHandler
+    huntingHandler?: IFishHuntingHandler,
+    cursorAvoidance?: IFishCursorAvoidance
   ) {
     this.moodManager = moodManager ?? new FishMoodManager();
     this.wobbleAnimator = wobbleAnimator ?? new FishWobbleAnimator();
@@ -57,6 +61,7 @@ export class FishAnimator implements IFishAnimator {
     this.rareBehaviorHandler = rareBehaviorHandler ?? new FishRareBehaviorHandler(this.wobbleAnimator);
     this.homeZoneHandler = homeZoneHandler ?? new FishHomeZoneHandler();
     this.huntingHandler = huntingHandler ?? new FishHuntingHandler(this.wobbleAnimator);
+    this.cursorAvoidance = cursorAvoidance ?? new FishCursorAvoidance();
   }
 
   async initializeFish(
@@ -103,10 +108,16 @@ export class FishAnimator implements IFishAnimator {
     fish: FishMarineLife[],
     dimensions: Dimensions,
     frameMultiplier: number,
-    animationTime: number
+    animationTime: number,
+    pointer: PointerState | null = null
   ): FishMarineLife[] {
     const updatedFish: FishMarineLife[] = [];
     const deltaSeconds = 0.016 * frameMultiplier;
+
+    // Apply cursor flee once per frame for the whole array (mutates fish in
+    // place: sets darting behavior + flee direction/speed that the per-fish
+    // movement loop below then consumes).
+    this.cursorAvoidance.apply(fish, pointer, deltaSeconds, animationTime);
 
     // Apply flocking forces to schooling fish
     this.flockingCalculator.applyFlockingForces(fish, deltaSeconds);
