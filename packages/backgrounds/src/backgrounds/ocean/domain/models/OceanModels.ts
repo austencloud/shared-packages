@@ -237,6 +237,19 @@ export interface FishMarineLife extends MarineLifeBase {
   targetDirection?: 1 | -1;
   dartSpeed?: number;
 
+  // Velocity smoothing (motion layer)
+  /** Smoothed actual horizontal speed target (px/s). Behaviors set this; the
+   *  controller eases `speed` toward it each frame. */
+  targetSpeed: number;
+  /** Continuous heading factor (-1..1), eased on turns instead of flipping. */
+  headingFactor: number;
+
+  // Cursor flee
+  /** Remaining flee panic time (s); >0 means actively fleeing the cursor. */
+  fleeTimer: number;
+  /** Current flee intensity 0..1 for visual + speed scaling. */
+  fleeIntensity: number;
+
   // Schooling
   schoolId?: number;
   leaderOffset?: { x: number; y: number };

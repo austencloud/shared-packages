@@ -454,7 +454,17 @@ export class FishFactory implements IFishFactory {
       // Social identity
       fishId: FishFactory.nextFishId++,
       socialMemory: new Set(),
+
+      // Velocity smoothing + cursor flee (initialized below after object is built)
+      targetSpeed: 0,
+      headingFactor: 0,
+      fleeTimer: 0,
+      fleeIntensity: 0,
     };
+
+    // Seed smoothing fields from spawned values
+    fish.targetSpeed = fish.baseSpeed;
+    fish.headingFactor = fish.direction;
 
     // Home zone will be initialized by FishHomeZoneHandler after spawn
 
