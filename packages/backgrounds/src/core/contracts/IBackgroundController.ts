@@ -103,6 +103,9 @@ export interface IBackgroundController {
    */
   setQuality(quality: QualityLevel): void;
 
+  /** Forward pointer (canvas-logical px) to the active background system. */
+  setPointer(x: number, y: number, active: boolean): void;
+
   /**
    * Get the currently displayed background type.
    * Returns null if no background is set.

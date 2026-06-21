@@ -186,6 +186,11 @@ export class BackgroundController implements IBackgroundController {
     this.systemB?.setQuality(quality);
   }
 
+  setPointer(x: number, y: number, active: boolean): void {
+    this.systemA?.setPointer?.(x, y, active);
+    this.systemB?.setPointer?.(x, y, active);
+  }
+
   /**
    * Get current background type.
    */

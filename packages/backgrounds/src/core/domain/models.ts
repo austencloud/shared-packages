@@ -55,4 +55,9 @@ export interface BackgroundSystem {
   handleResize?: (oldDimensions: Dimensions, newDimensions: Dimensions) => void;
   setAccessibility?: (settings: AccessibilitySettings) => void;
   getMetrics?: () => PerformanceMetrics;
+  /**
+   * Set the current pointer position (canvas-logical px) for interactive
+   * backgrounds (e.g. fish cursor flee). active=false when pointer left.
+   */
+  setPointer?: (x: number, y: number, active: boolean) => void;
 }
