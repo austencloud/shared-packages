@@ -15,7 +15,8 @@ export interface IFishMovementController {
     fish: FishMarineLife,
     deltaSeconds: number,
     frameMultiplier: number,
-    dimensions: Dimensions
+    dimensions: Dimensions,
+    animationTime: number
   ): void;
 
   /**

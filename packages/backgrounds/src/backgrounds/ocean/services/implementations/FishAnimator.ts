@@ -191,7 +191,7 @@ export class FishAnimator implements IFishAnimator {
       }
 
       // Apply behavior-specific movement (now uses thrust-modulated speed)
-      this.movementController.applyBehavior(f, deltaSeconds, frameMultiplier, dimensions);
+      this.movementController.applyBehavior(f, deltaSeconds, frameMultiplier, dimensions, animationTime);
       if (FishAnimator.DEBUG_POSITION_JUMPS) {
         stepPositions.push({ step: 'afterBehavior', x: f.x, y: f.y, spineX: f.spineJoints?.[0]?.x, spineY: f.spineJoints?.[0]?.y });
       }

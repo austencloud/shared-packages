@@ -7,7 +7,11 @@ import {
   EDGE_AWARENESS,
   SPAWN_CONFIG,
   DEPTH_TRANSITION,
+  MOTION_SMOOTHING,
+  LATERAL_WANDER,
 } from "../../domain/constants/fish-constants.js";
+import { approachExponential, easeHeading } from "./fish-motion/velocity-smoothing.js";
+import { wanderOffset } from "./fish-motion/lateral-wander.js";
 import { FishDecisionMaker } from "./FishDecisionMaker.js";
 
 /**
@@ -27,8 +31,24 @@ export class FishMovementController implements IFishMovementController {
     fish: FishMarineLife,
     deltaSeconds: number,
     frameMultiplier: number,
-    dimensions: Dimensions
+    dimensions: Dimensions,
+    animationTime: number
   ): void {
+    // Ease actual speed toward the behavior's target speed (no more snaps).
+    const rate =
+      fish.behavior === "darting"
+        ? MOTION_SMOOTHING.dartSpeedRate
+        : MOTION_SMOOTHING.speedRate;
+    fish.speed = approachExponential(fish.speed, fish.targetSpeed, rate, deltaSeconds);
+
+    // Ease heading factor toward the current direction (turns ramp through 0).
+    fish.headingFactor = easeHeading(
+      fish.headingFactor,
+      fish.direction,
+      MOTION_SMOOTHING.headingRate,
+      deltaSeconds
+    );
+
     // Always update depth (z-axis lerping)
     this.updateDepth(fish, frameMultiplier);
 
@@ -41,7 +61,7 @@ export class FishMovementController implements IFishMovementController {
         this.applyTurning(fish, deltaSeconds);
         break;
       case "darting":
-        this.applyDarting(fish, deltaSeconds);
+        this.applyDarting(fish, deltaSeconds, animationTime);
         break;
       case "passing":
         this.applyPassing(fish, deltaSeconds);
@@ -100,7 +120,7 @@ export class FishMovementController implements IFishMovementController {
       fish.behavior = "cruising";
       fish.behaviorTimer = this.randomInRange(BEHAVIOR_CONFIG.cruising.duration);
       fish.rotation = 0;
-      fish.speed = fish.baseSpeed;
+      fish.targetSpeed = fish.baseSpeed;
       return;
     }
 
@@ -108,7 +128,7 @@ export class FishMovementController implements IFishMovementController {
     if (current === "darting") {
       fish.behavior = "cruising";
       fish.behaviorTimer = this.randomInRange(BEHAVIOR_CONFIG.cruising.duration);
-      fish.speed = fish.baseSpeed;
+      fish.targetSpeed = fish.baseSpeed;
       return;
     }
 
@@ -116,7 +136,7 @@ export class FishMovementController implements IFishMovementController {
     if (current === "passing") {
       fish.behavior = "cruising";
       fish.behaviorTimer = this.randomInRange(BEHAVIOR_CONFIG.cruising.duration);
-      fish.speed = fish.baseSpeed;
+      fish.targetSpeed = fish.baseSpeed;
       fish.rotation = 0;
       return;
     }
@@ -125,7 +145,7 @@ export class FishMovementController implements IFishMovementController {
     if (current === "ascending" || current === "descending") {
       fish.behavior = "cruising";
       fish.behaviorTimer = this.randomInRange(BEHAVIOR_CONFIG.cruising.duration);
-      fish.speed = fish.baseSpeed;
+      fish.targetSpeed = fish.baseSpeed;
       fish.rotation = 0;
       fish.targetY = undefined;
       // Update depth band to center around new position
@@ -141,7 +161,7 @@ export class FishMovementController implements IFishMovementController {
     if (current === "approaching" || current === "receding") {
       fish.behavior = "cruising";
       fish.behaviorTimer = this.randomInRange(BEHAVIOR_CONFIG.cruising.duration);
-      fish.speed = fish.baseSpeed;
+      fish.targetSpeed = fish.baseSpeed;
       return;
     }
 
@@ -161,6 +181,7 @@ export class FishMovementController implements IFishMovementController {
       case "turning":
         fish.behaviorTimer = BEHAVIOR_CONFIG.turning.duration;
         fish.targetDirection = decision.targetDirection;
+        fish.targetSpeed = fish.baseSpeed * BEHAVIOR_CONFIG.turning.speedMultiplier;
         break;
       case "darting":
         fish.behaviorTimer = BEHAVIOR_CONFIG.darting.duration;
@@ -168,29 +189,30 @@ export class FishMovementController implements IFishMovementController {
           fish.baseSpeed *
           (decision.speedMultiplier ??
             this.randomInRange(BEHAVIOR_CONFIG.darting.speedMultiplier));
+        fish.targetSpeed = fish.dartSpeed;
         break;
       case "passing":
         fish.behaviorTimer = this.randomInRange(BEHAVIOR_CONFIG.passing.duration);
-        fish.speed =
+        fish.targetSpeed =
           fish.baseSpeed *
           (decision.speedMultiplier ??
             this.randomInRange(BEHAVIOR_CONFIG.passing.speedMultiplier));
         break;
       case "ascending":
         fish.behaviorTimer = this.randomInRange(BEHAVIOR_CONFIG.ascending.duration);
-        fish.speed = fish.baseSpeed * BEHAVIOR_CONFIG.ascending.speedMultiplier;
+        fish.targetSpeed = fish.baseSpeed * BEHAVIOR_CONFIG.ascending.speedMultiplier;
         fish.targetY = decision.targetY ?? fish.baseY - this.randomInRange([30, 60]);
         fish.rotation = this.randomInRange(BEHAVIOR_CONFIG.ascending.bodyRotation);
         break;
       case "descending":
         fish.behaviorTimer = this.randomInRange(BEHAVIOR_CONFIG.descending.duration);
-        fish.speed = fish.baseSpeed * BEHAVIOR_CONFIG.descending.speedMultiplier;
+        fish.targetSpeed = fish.baseSpeed * BEHAVIOR_CONFIG.descending.speedMultiplier;
         fish.targetY = decision.targetY ?? fish.baseY + this.randomInRange([30, 60]);
         fish.rotation = this.randomInRange(BEHAVIOR_CONFIG.descending.bodyRotation);
         break;
       case "approaching":
         fish.behaviorTimer = this.randomInRange(BEHAVIOR_CONFIG.approaching.duration);
-        fish.speed = fish.baseSpeed * BEHAVIOR_CONFIG.approaching.speedMultiplier;
+        fish.targetSpeed = fish.baseSpeed * BEHAVIOR_CONFIG.approaching.speedMultiplier;
         fish.targetZ = Math.max(
           DEPTH_TRANSITION.minZ,
           fish.z + this.randomInRange(BEHAVIOR_CONFIG.approaching.zChange)
@@ -198,7 +220,7 @@ export class FishMovementController implements IFishMovementController {
         break;
       case "receding":
         fish.behaviorTimer = this.randomInRange(BEHAVIOR_CONFIG.receding.duration);
-        fish.speed = fish.baseSpeed * BEHAVIOR_CONFIG.receding.speedMultiplier;
+        fish.targetSpeed = fish.baseSpeed * BEHAVIOR_CONFIG.receding.speedMultiplier;
         fish.targetZ = Math.min(
           DEPTH_TRANSITION.maxZ,
           fish.z + this.randomInRange(BEHAVIOR_CONFIG.receding.zChange)
@@ -208,9 +230,9 @@ export class FishMovementController implements IFishMovementController {
       case "schooling":
         fish.behaviorTimer = this.randomInRange(BEHAVIOR_CONFIG.cruising.duration);
         // Apply speed modifier for mood-based decisions (e.g., tired fish)
-        if (decision.speedMultiplier) {
-          fish.speed = fish.baseSpeed * decision.speedMultiplier;
-        }
+        fish.targetSpeed = decision.speedMultiplier
+          ? fish.baseSpeed * decision.speedMultiplier
+          : fish.baseSpeed;
         break;
     }
 
@@ -247,7 +269,7 @@ export class FishMovementController implements IFishMovementController {
     frameMultiplier: number
   ): void {
     fish.animationPhase += fish.bobSpeed * frameMultiplier;
-    fish.x += fish.direction * fish.speed * deltaSeconds;
+    fish.x += fish.headingFactor * fish.speed * deltaSeconds;
     fish.baseY += fish.verticalDrift * deltaSeconds;
 
     const bob = Math.sin(fish.animationPhase) * fish.bobAmplitude;
@@ -255,8 +277,7 @@ export class FishMovementController implements IFishMovementController {
   }
 
   private applyTurning(fish: FishMarineLife, deltaSeconds: number): void {
-    fish.speed = fish.baseSpeed * BEHAVIOR_CONFIG.turning.speedMultiplier;
-    fish.x += fish.direction * fish.speed * deltaSeconds;
+    fish.x += fish.headingFactor * fish.speed * deltaSeconds;
 
     const turnProgress =
       1 - fish.behaviorTimer / BEHAVIOR_CONFIG.turning.duration;
@@ -272,60 +293,40 @@ export class FishMovementController implements IFishMovementController {
    * 2. BURST - explosive acceleration (propulsive)
    * 3. RECOVERY - gradual easeOutExpo deceleration
    */
-  private applyDarting(fish: FishMarineLife, deltaSeconds: number): void {
+  private applyDarting(
+    fish: FishMarineLife,
+    deltaSeconds: number,
+    animationTime: number
+  ): void {
     const config = BEHAVIOR_CONFIG.darting;
-    const totalDuration = config.duration;
+    const elapsed = config.duration - fish.behaviorTimer;
 
-    // Calculate elapsed time (timer counts down, so invert)
-    const elapsed = totalDuration - fish.behaviorTimer;
-
-    // Determine which phase we're in and calculate speed multiplier
-    let speedMultiplier: number;
-    let verticalJitter = 0;
-
+    // Body flex cue per phase (speed itself is eased in applyBehavior).
+    let amp = LATERAL_WANDER.recoveryAmplitude;
     if (elapsed < config.coilDuration) {
-      // Phase 1: COIL (preparatory)
-      // Fish slows down, body tenses - this creates the "windup" feel
-      speedMultiplier = config.coilSpeedMultiplier;
-      // Increase body flex to simulate coiling
       fish.bodyFlexAmount = 1.3;
     } else if (elapsed < config.coilDuration + config.burstDuration) {
-      // Phase 2: BURST (propulsive)
-      // Explosive acceleration - the actual dart
       const burstProgress =
         (elapsed - config.coilDuration) / config.burstDuration;
-      speedMultiplier =
-        (fish.dartSpeed ?? fish.baseSpeed * config.burstSpeedMultiplier[0]) /
-        fish.baseSpeed;
-      // Strong vertical jitter that decreases as burst progresses
-      // (fish doesn't move in a perfectly straight line during escape)
-      verticalJitter = (Math.random() - 0.5) * 4 * (1 - burstProgress);
-      // Reset body flex
       fish.bodyFlexAmount = 1.0;
-    } else {
-      // Phase 3: RECOVERY (deceleration)
-      // Gradual slowdown using easeOutExpo for natural feel
-      const recoveryProgress =
-        (elapsed - config.coilDuration - config.burstDuration) /
-        config.recoveryDuration;
-
-      // easeOutExpo: fast initial slowdown, then gradual settle
-      const easeOut = recoveryProgress === 1 ? 1 : 1 - Math.pow(2, -10 * recoveryProgress);
-
-      // Interpolate from dart speed back to base speed
-      const dartMultiplier =
-        (fish.dartSpeed ?? fish.baseSpeed * config.burstSpeedMultiplier[0]) /
-        fish.baseSpeed;
-      speedMultiplier = dartMultiplier * (1 - easeOut) + 1 * easeOut;
-
-      // Minimal jitter during recovery
-      verticalJitter = (Math.random() - 0.5) * 0.5;
+      amp = LATERAL_WANDER.dartAmplitude * (1 - burstProgress);
     }
 
-    // Apply movement
-    fish.speed = fish.baseSpeed * speedMultiplier;
-    fish.x += fish.direction * fish.speed * deltaSeconds;
-    fish.y += verticalJitter;
+    // Horizontal advance uses the eased speed.
+    fish.x += fish.headingFactor * fish.speed * deltaSeconds;
+
+    // Smooth, deterministic lateral wander INTO baseY (not raw fish.y), so the
+    // return to cruising doesn't pop. Velocity form (derivative) * dt keeps it
+    // frame-rate independent and continuous.
+    const seed = fish.bodyFlexPhase; // per-fish constant phase
+    const w0 = wanderOffset(seed, animationTime, LATERAL_WANDER.frequency, amp);
+    const w1 = wanderOffset(
+      seed,
+      animationTime + deltaSeconds,
+      LATERAL_WANDER.frequency,
+      amp
+    );
+    fish.baseY += w1 - w0;
   }
 
   /**
@@ -334,7 +335,7 @@ export class FishMovementController implements IFishMovementController {
    */
   private applyPassing(fish: FishMarineLife, deltaSeconds: number): void {
     // No bobbing, no vertical drift - straight line
-    fish.x += fish.direction * fish.speed * deltaSeconds;
+    fish.x += fish.headingFactor * fish.speed * deltaSeconds;
     // Reduced body flex for streamlined appearance
     fish.bodyFlexAmount = BEHAVIOR_CONFIG.passing.bodyFlexMultiplier;
   }
@@ -351,7 +352,7 @@ export class FishMovementController implements IFishMovementController {
   ): void {
     // Horizontal movement at reduced speed
     fish.animationPhase += fish.bobSpeed * frameMultiplier;
-    fish.x += fish.direction * fish.speed * deltaSeconds;
+    fish.x += fish.headingFactor * fish.speed * deltaSeconds;
 
     // Strong vertical movement upward
     if (fish.targetY !== undefined) {
@@ -377,7 +378,7 @@ export class FishMovementController implements IFishMovementController {
   ): void {
     // Horizontal movement at reduced speed
     fish.animationPhase += fish.bobSpeed * frameMultiplier;
-    fish.x += fish.direction * fish.speed * deltaSeconds;
+    fish.x += fish.headingFactor * fish.speed * deltaSeconds;
 
     // Strong vertical movement downward
     if (fish.targetY !== undefined) {
