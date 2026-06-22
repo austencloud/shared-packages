@@ -63,6 +63,8 @@ export class LightRayRenderer implements ILightRayRenderer {
     const glowWidth = ray.width * 2;
 
     ctx.save();
+    // God-ray glow is additive light: crossing rays should brighten, not fog.
+    ctx.globalCompositeOperation = "screen";
     ctx.globalAlpha = ray.opacity * ray.glowIntensity * 0.3;
 
     // Outer glow gradient
@@ -103,6 +105,8 @@ export class LightRayRenderer implements ILightRayRenderer {
     const halfWidth = ray.width / 2;
 
     ctx.save();
+    // The beam itself is light — additive so overlapping rays accumulate brightness.
+    ctx.globalCompositeOperation = "screen";
     ctx.globalAlpha = ray.opacity;
 
     // Create gradient with color shift
@@ -136,7 +140,7 @@ export class LightRayRenderer implements ILightRayRenderer {
       const x = -halfWidth * taper * variation;
 
       const cpY = (prevY + y) / 2;
-      const cpX = x + (Math.random() - 0.5) * halfWidth * 0.1;
+      const cpX = x + this.getEdgeWobble(ray, i - 1) * halfWidth * 0.1;
 
       ctx.quadraticCurveTo(cpX, cpY, x, y);
     }
@@ -156,7 +160,7 @@ export class LightRayRenderer implements ILightRayRenderer {
 
       if (i < segments) {
         const cpY = (nextY + y) / 2;
-        const cpX = x + (Math.random() - 0.5) * halfWidth * 0.1;
+        const cpX = x + this.getEdgeWobble(ray, i + segments) * halfWidth * 0.1;
         ctx.quadraticCurveTo(cpX, cpY, x, y);
       } else {
         ctx.lineTo(x, y);
@@ -180,6 +184,21 @@ export class LightRayRenderer implements ILightRayRenderer {
   }
 
   /**
+   * Stable control-point wobble derived from the ray's edgeSeeds (NOT Math.random,
+   * which re-randomized the silhouette every frame). The seed fixes a per-segment
+   * phase so the dapple is consistent; colorShiftPhase adds a slow sway so the edge
+   * breathes instead of being frozen. Returns ~[-0.5, 0.5] to match the old range.
+   */
+  private getEdgeWobble(ray: LightRay, index: number): number {
+    const seedIndex = index % ray.edgeSeeds.length;
+    const seed = ray.edgeSeeds[seedIndex] ?? 0.5;
+    // seed * TAU spreads segments around the circle; the slow phase term sways it.
+    return (
+      Math.sin(seed * Math.PI * 2 + ray.colorShiftPhase + index * 1.7) * 0.5
+    );
+  }
+
+  /**
    * Draw visible dust particles in the light beam
    */
   private drawDustParticles(
@@ -192,6 +211,8 @@ export class LightRayRenderer implements ILightRayRenderer {
     if (quality === "low" || ray.dustParticles.length === 0) return;
 
     ctx.save();
+    // Suspended dust catches the beam — additive sparkle glints, not flat dots.
+    ctx.globalCompositeOperation = "screen";
 
     for (const dust of ray.dustParticles) {
       // Only draw if within ray bounds
@@ -239,6 +260,8 @@ export class LightRayRenderer implements ILightRayRenderer {
     if (quality === "minimal" || quality === "low") return;
 
     ctx.save();
+    // Caustics are focused light on the floor — additive so overlaps brighten.
+    ctx.globalCompositeOperation = "screen";
 
     // Apply drift offset
     ctx.translate(caustics.driftX, caustics.driftY);

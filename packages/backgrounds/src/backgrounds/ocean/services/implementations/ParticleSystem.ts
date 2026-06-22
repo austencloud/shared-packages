@@ -12,16 +12,20 @@ export class ParticleSystem implements IParticleSystem {
   }
 
   createParticle(dimensions: Dimensions): OceanParticle {
+    // Sample brightness ONCE here, not every frame — a per-frame Math.random()
+    // in the fade caused the particle to twitch/shimmer uncorrelated.
+    const brightness = 0.15 + Math.random() * 0.25;
     return {
       x: Math.random() * dimensions.width,
       y: Math.random() * dimensions.height,
       vx: (Math.random() - 0.5) * 0.2, // Slower horizontal: ±0.1 instead of ±0.25
       vy: -0.05 - Math.random() * 0.15, // Slower upward: -0.05 to -0.2 instead of -0.1 to -0.4
       size: 0.8 + Math.random() * 2, // Smaller: 0.8-2.8 instead of 1-4
-      opacity: 0.15 + Math.random() * 0.25, // More subtle opacity for dark particles
+      opacity: brightness, // More subtle opacity for dark particles
       color: this.getParticleColor(),
       life: 0,
       maxLife: 100 + Math.random() * 200,
+      brightness,
     };
   }
 
@@ -41,9 +45,10 @@ export class ParticleSystem implements IParticleSystem {
       particle.y += particle.vy * frameMultiplier;
       particle.life += frameMultiplier;
 
-      // Update opacity based on life
+      // Update opacity based on life — use the brightness sampled at creation
+      // (not a fresh Math.random() each frame, which made particles twitch).
       const lifeRatio = particle.life / particle.maxLife;
-      particle.opacity = (1 - lifeRatio) * (0.15 + Math.random() * 0.25);
+      particle.opacity = (1 - lifeRatio) * particle.brightness;
 
       // Remove if dead or off-screen, otherwise keep
       if (particle.life >= particle.maxLife || particle.y < -10) {

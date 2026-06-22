@@ -72,6 +72,10 @@ export class FishEffectRenderer implements IFishEffectRenderer {
     // Pulsing glow intensity
     const pulseIntensity = fish.glowIntensity * (0.7 + Math.sin(fish.glowPhase * 2) * 0.3);
 
+    // Bioluminescent body glow is emissive — additive so it brightens the water.
+    ctx.save();
+    ctx.globalCompositeOperation = "screen";
+
     // Layer 1: Large outer glow
     const outerRadius = Math.max(fish.bodyLength, fish.bodyHeight) * 1.2;
     const rgb = this.colorCalc.hexToRgb(fish.colors.accent);
@@ -106,6 +110,8 @@ export class FishEffectRenderer implements IFishEffectRenderer {
     this.bodyOutlineCalculator.drawBodyPath(ctx, outline);
     ctx.stroke();
     ctx.restore();
+
+    ctx.restore(); // close additive bracket
   }
 
   drawSpineBioluminescenceSpots(
@@ -118,6 +124,8 @@ export class FishEffectRenderer implements IFishEffectRenderer {
     const colors = ["#00fff7", "#7b68ee", "#00ced1", "#ff00ff", "#00ff88"];
 
     ctx.save();
+    // Biolum spots + anglerfish lure are emissive light — additive.
+    ctx.globalCompositeOperation = "screen";
 
     for (let i = 0; i < spotCount; i++) {
       const t = (i + 0.5) / (spotCount);
@@ -198,6 +206,8 @@ export class FishEffectRenderer implements IFishEffectRenderer {
     const glowRadius = Math.max(len, height) * 0.8;
 
     ctx.save();
+    // Ambient bioluminescent body glow is emissive — additive.
+    ctx.globalCompositeOperation = "screen";
 
     const gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, glowRadius);
     const glowColor = fish.colors.accent;
@@ -232,6 +242,8 @@ export class FishEffectRenderer implements IFishEffectRenderer {
     const config = this.GLOW_CONFIG;
 
     ctx.save();
+    // Legacy bioluminescent spots are emissive — additive.
+    ctx.globalCompositeOperation = "screen";
 
     // Draw glowing spots along body
     for (let i = 0; i < config.spotCount; i++) {
@@ -246,8 +258,11 @@ export class FishEffectRenderer implements IFishEffectRenderer {
 
       if (spotIntensity < 0.1) continue;
 
+      // Stable per-spot size factor (sin of the spot's index-derived phase) instead
+      // of a per-frame Math.random() that made each spot's radius twitch.
+      const sizeFactor = 0.5 + Math.sin(i * 2.39996 + fish.glowPhase * 0.5) * 0.5;
       const spotSize =
-        height * (config.spotSize[0] + Math.random() * (config.spotSize[1] - config.spotSize[0]));
+        height * (config.spotSize[0] + sizeFactor * (config.spotSize[1] - config.spotSize[0]));
       const color = config.colors[i % config.colors.length]!;
       const rgb = this.colorCalc.hexToRgb(color);
 

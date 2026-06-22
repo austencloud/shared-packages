@@ -236,6 +236,11 @@ export interface FishMarineLife extends MarineLifeBase {
   behaviorTimer: number;
   targetDirection?: 1 | -1;
   dartSpeed?: number;
+  /**
+   * Vertical speed (px/s) sampled ONCE when ascending/descending begins, then
+   * reused every frame. Sampling per-frame produced uncorrelated jitter.
+   */
+  verticalSpeed?: number;
 
   // Velocity smoothing (motion layer)
   /** Smoothed actual horizontal speed target (px/s). Behaviors set this; the
@@ -596,6 +601,11 @@ export interface OceanParticle {
   color: string;
   life: number;
   maxLife: number;
+  /**
+   * Per-particle brightness factor (0.15..0.40 range) sampled ONCE at creation.
+   * Reused in the per-frame fade so opacity doesn't twitch every frame.
+   */
+  brightness: number;
 }
 
 export interface MarineLifeSpawn {

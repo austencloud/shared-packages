@@ -114,6 +114,8 @@ export class BubbleRenderer implements IBubbleRenderer {
     const glowRadius = bubble.radius * 1.5;
 
     ctx.save();
+    // Soft outer halo is light scattering off the bubble — additive, not fog.
+    ctx.globalCompositeOperation = "screen";
     ctx.globalAlpha = 0.15 * bubble.opacity;
 
     const gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, glowRadius);
@@ -232,6 +234,8 @@ export class BubbleRenderer implements IBubbleRenderer {
     const phase = bubble.iridescentPhase;
 
     ctx.save();
+    // Thin-film iridescence is a light-interference highlight — additive.
+    ctx.globalCompositeOperation = "screen";
     ctx.globalAlpha = bubble.sizeCategory === "large" ? 0.2 : 0.12;
 
     // Create arc segment for iridescent band
@@ -289,6 +293,9 @@ export class BubbleRenderer implements IBubbleRenderer {
     const angle = bubble.rimHighlightAngle;
 
     ctx.save();
+    // Specular rim/edge highlights are reflected light — additive so they read
+    // as bright catches rather than pale overlays.
+    ctx.globalCompositeOperation = "screen";
 
     // Primary highlight (bright spot)
     const highlightX = Math.cos(angle) * r * 0.6 * wobbleX;

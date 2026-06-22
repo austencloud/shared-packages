@@ -380,6 +380,9 @@ export class JellyfishRenderer implements IJellyfishRenderer {
     flashBoost: number = 1
   ): void {
     ctx.save();
+    // The bell's outer glow is emissive bioluminescence — additive so it lights
+    // the surrounding water rather than fogging it.
+    ctx.globalCompositeOperation = "screen";
 
     // Tap-flash widens the halo a touch as well as brightening it, so the bell
     // reads as lit from within rather than just a brighter ring.
@@ -709,6 +712,8 @@ export class JellyfishRenderer implements IJellyfishRenderer {
 
         if (intensity > 0.1) {
           ctx.save();
+          // Traveling biolum spots on the tentacles are emissive — additive.
+          ctx.globalCompositeOperation = "screen";
           ctx.globalAlpha = intensity;
 
           const gradient = ctx.createRadialGradient(
@@ -745,6 +750,8 @@ export class JellyfishRenderer implements IJellyfishRenderer {
     flashBoost: number = 1
   ): void {
     ctx.save();
+    // In-bell biolum highlights are emissive light — additive.
+    ctx.globalCompositeOperation = "screen";
 
     const accentColor = this.parseColor(jelly.accentColor);
     // Tap-flash brightens the in-bell highlights; on a strong flash it also lifts

@@ -207,12 +207,19 @@ export class FishMovementController implements IFishMovementController {
         fish.targetSpeed = fish.baseSpeed * BEHAVIOR_CONFIG.ascending.speedMultiplier;
         fish.targetY = decision.targetY ?? fish.baseY - this.randomInRange([30, 60]);
         fish.rotation = this.randomInRange(BEHAVIOR_CONFIG.ascending.bodyRotation);
+        // Sample vertical speed ONCE on entry; applyAscending reuses it each frame
+        // so the climb is steady instead of re-randomized (jittery) per frame.
+        fish.verticalSpeed = this.randomInRange(BEHAVIOR_CONFIG.ascending.verticalSpeed);
         break;
       case "descending":
         fish.behaviorTimer = this.randomInRange(BEHAVIOR_CONFIG.descending.duration);
         fish.targetSpeed = fish.baseSpeed * BEHAVIOR_CONFIG.descending.speedMultiplier;
         fish.targetY = decision.targetY ?? fish.baseY + this.randomInRange([30, 60]);
         fish.rotation = this.randomInRange(BEHAVIOR_CONFIG.descending.bodyRotation);
+        // Sample vertical speed ONCE on entry; applyDescending reuses it each frame.
+        fish.verticalSpeed = Math.abs(
+          this.randomInRange(BEHAVIOR_CONFIG.descending.verticalSpeed)
+        );
         break;
       case "approaching":
         fish.behaviorTimer = this.randomInRange(BEHAVIOR_CONFIG.approaching.duration);
@@ -361,9 +368,12 @@ export class FishMovementController implements IFishMovementController {
     fish.animationPhase += fish.bobSpeed * frameMultiplier;
     fish.x += fish.headingFactor * fish.speed * deltaSeconds;
 
-    // Strong vertical movement upward
+    // Strong vertical movement upward. Reuse the speed sampled once at behavior
+    // entry (fallback-sample only if it was never seeded).
     if (fish.targetY !== undefined) {
-      const verticalSpeed = this.randomInRange(BEHAVIOR_CONFIG.ascending.verticalSpeed);
+      const verticalSpeed =
+        fish.verticalSpeed ??
+        this.randomInRange(BEHAVIOR_CONFIG.ascending.verticalSpeed);
       const direction = fish.targetY < fish.baseY ? -1 : 1;
       fish.baseY += direction * verticalSpeed * deltaSeconds;
     }
@@ -387,9 +397,12 @@ export class FishMovementController implements IFishMovementController {
     fish.animationPhase += fish.bobSpeed * frameMultiplier;
     fish.x += fish.headingFactor * fish.speed * deltaSeconds;
 
-    // Strong vertical movement downward
+    // Strong vertical movement downward. Reuse the speed sampled once at behavior
+    // entry (fallback-sample only if it was never seeded).
     if (fish.targetY !== undefined) {
-      const verticalSpeed = Math.abs(this.randomInRange(BEHAVIOR_CONFIG.descending.verticalSpeed));
+      const verticalSpeed =
+        fish.verticalSpeed ??
+        Math.abs(this.randomInRange(BEHAVIOR_CONFIG.descending.verticalSpeed));
       const direction = fish.targetY > fish.baseY ? 1 : -1;
       fish.baseY += direction * verticalSpeed * deltaSeconds;
     }

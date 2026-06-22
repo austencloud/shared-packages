@@ -253,6 +253,8 @@ export class GradientRenderer implements IGradientRenderer {
     glows: DistantGlow[]
   ): void {
     ctx.save();
+    // Distant biolum is emissive — additive so it glows rather than reading as fog.
+    ctx.globalCompositeOperation = "screen";
 
     for (const glow of glows) {
       const pulse = 0.3 + Math.sin(glow.phase) * 0.7;
