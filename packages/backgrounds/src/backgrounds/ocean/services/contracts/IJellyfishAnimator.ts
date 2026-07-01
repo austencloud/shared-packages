@@ -19,12 +19,15 @@ export interface IJellyfishAnimator {
   createJellyfish(dimensions: Dimensions): JellyfishMarineLife;
 
   /**
-   * Update all jellyfish positions and animations
+   * Update all jellyfish positions and animations. The optional pointer
+   * (canvas-logical px) drives the hover shimmer — pass null/omit when no
+   * pointer is available and the shimmer simply eases out.
    */
   updateJellyfish(
     jellyfish: JellyfishMarineLife[],
     dimensions: Dimensions,
-    frameMultiplier: number
+    frameMultiplier: number,
+    pointer?: { x: number; y: number; active: boolean } | null
   ): JellyfishMarineLife[];
 
   /**

@@ -56,7 +56,12 @@ export class JellyfishRenderer implements IJellyfishRenderer {
     // flash, easing back to the resting look as the timer decays. flashTimer is set
     // to FLASH_DURATION (0.6s) on tap; normalize against that for a 0..1 ramp.
     const flash01 = Math.min(1, Math.max(0, jelly.flashTimer) / 0.6);
-    const flashBoost = 1 + flash01 * 0.6;
+    // Hover shimmer rides the same emissive path at a third of the flash's
+    // amplitude (~1.2x max vs 1.6x) so the two stay legibly distinct: hover
+    // whispers "pokeable", the tap-flash startle shouts. `?? 0` covers jellies
+    // minted by a pre-hoverGlow build surviving in the HMR-persistent singleton.
+    const hover01 = Math.min(1, Math.max(0, jelly.hoverGlow ?? 0));
+    const flashBoost = 1 + flash01 * 0.6 + hover01 * 0.2;
 
     // Draw layers back to front
     this.drawParticleTrail(ctx, jelly);

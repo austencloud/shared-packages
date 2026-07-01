@@ -262,7 +262,8 @@ export class OceanBackgroundOrchestrator implements IBackgroundSystem {
     this.state.jellyfish = this.jellyfishAnimator.updateJellyfish(
       this.state.jellyfish,
       dimensions,
-      effectiveMultiplier
+      effectiveMultiplier,
+      this.pointer
     );
 
     // Process pending fish spawns

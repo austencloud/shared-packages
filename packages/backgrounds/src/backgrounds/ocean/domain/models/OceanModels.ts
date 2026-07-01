@@ -577,6 +577,13 @@ export interface JellyfishMarineLife extends MarineLifeBase {
    * the jelly is jetting upward (startle). Decays toward 0 each frame.
    */
   flashTimer: number;
+  /**
+   * Hover affordance (0-1). Eases toward 1 while the pointer rests inside the
+   * bell's poke radius and back to 0 when it leaves — a gentle "I'm alive,
+   * poke me" shimmer, deliberately far subtler than the tap-flash startle
+   * (no jet, no chime, small brightness lift only).
+   */
+  hoverGlow: number;
 
   // Particle trail
   /** Recent positions for particle spawning */

@@ -1,6 +1,6 @@
 {
   "name": "@austencloud/backgrounds",
-  "version": "0.6.3",
+  "version": "0.6.5",
   "description": "Animated canvas backgrounds - winter, cosmic, ocean, forest, and more",
   "type": "module",
   "main": "./dist/index.js",

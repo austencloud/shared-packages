@@ -63,6 +63,20 @@ const JELLYFISH_CONFIG = {
 const STARTLE_JET_SPEED = 90;
 
 /**
+ * Hover-glow easing rate (per second). ~8/s reads as a quick-but-soft breath in
+ * (~150ms to mostly-lit) and the same breath out — fast enough that the shimmer
+ * tracks the cursor, slow enough that sweeping across the swarm doesn't strobe.
+ */
+const HOVER_GLOW_EASE_RATE = 8;
+
+/**
+ * Pointer-in-bell radius factor for the hover shimmer. Matches pokeAt's generous
+ * hit factor exactly so the three affordances agree on one boundary: the cursor
+ * flips, the bell brightens, and a click rings — all at the same edge.
+ */
+const HOVER_HIT_RADIUS_FACTOR = 0.6;
+
+/**
  * Species definitions with visual characteristics
  */
 interface SpeciesDefinition {
@@ -316,8 +330,9 @@ export class JellyfishAnimator implements IJellyfishAnimator {
         JELLYFISH_CONFIG.glowSpeed.max
       ),
 
-      // Tap interaction — starts at rest (no flash)
+      // Tap interaction — starts at rest (no flash, no hover shimmer)
       flashTimer: 0,
+      hoverGlow: 0,
 
       // Particle trail
       trailPositions: [],
@@ -417,10 +432,14 @@ export class JellyfishAnimator implements IJellyfishAnimator {
   updateJellyfish(
     jellyfish: JellyfishMarineLife[],
     dimensions: Dimensions,
-    frameMultiplier: number
+    frameMultiplier: number,
+    pointer?: { x: number; y: number; active: boolean } | null
   ): JellyfishMarineLife[] {
     const updatedJellyfish: JellyfishMarineLife[] = [];
     const deltaSeconds = 0.016 * frameMultiplier;
+    // Hover shimmer easing step for this frame, clamped so a long frame can't
+    // overshoot the 0..1 band.
+    const hoverEase = Math.min(1, HOVER_GLOW_EASE_RATE * deltaSeconds);
 
     for (const jelly of jellyfish) {
       // Update pulse phase
@@ -445,6 +464,21 @@ export class JellyfishAnimator implements IJellyfishAnimator {
         jelly.flashTimer = Math.max(0, jelly.flashTimer - deltaSeconds);
         jelly.baseY -= STARTLE_JET_SPEED * jelly.flashTimer * deltaSeconds;
       }
+
+      // Hover shimmer: ease hoverGlow toward 1 while the pointer rests inside
+      // the bell's poke radius, back to 0 once it leaves. The `?? 0` heals
+      // jellies minted by a pre-hoverGlow build that survived HMR in the
+      // persistent controller singleton — without it the lerp feeds on
+      // undefined and the shimmer NaNs out silently.
+      let hoverTarget = 0;
+      if (pointer?.active) {
+        const hitRadius = jelly.size * HOVER_HIT_RADIUS_FACTOR;
+        const hdx = jelly.x - pointer.x;
+        const hdy = jelly.y - pointer.y;
+        if (hdx * hdx + hdy * hdy <= hitRadius * hitRadius) hoverTarget = 1;
+      }
+      const currentHover = jelly.hoverGlow ?? 0;
+      jelly.hoverGlow = currentHover + (hoverTarget - currentHover) * hoverEase;
 
       jelly.y = jelly.baseY;
 
