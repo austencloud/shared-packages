@@ -8,13 +8,19 @@ export interface Section {
 	gradient?: string;
 	disabled?: boolean;
 	description?: string;
+	/** Ties a section to a collapsible SectionGroup (optional grouping feature). */
+	groupId?: string;
 	metadata?: Record<string, unknown>;
 }
 
 export interface SectionGroup {
 	id: string;
 	label: string;
-	sections: Section[];
+	icon?: string;
+	color?: string;
+	/** Present when a group is defined inline with its members; the tree reads
+	 *  membership from each Section's groupId, so this is optional. */
+	sections?: Section[];
 }
 
 export interface ModuleDefinition {
@@ -25,6 +31,8 @@ export interface ModuleDefinition {
 	description?: string;
 	isMain?: boolean;
 	sections: Section[];
+	/** Optional collapsible group headers (e.g. a Lab-style module). */
+	groups?: SectionGroup[];
 	disabled?: boolean;
 	disabledMessage?: string;
 }
