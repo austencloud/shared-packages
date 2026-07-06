@@ -57,6 +57,9 @@ export interface SidebarProps {
 	expandedWidth?: number;
 	hoverIntent?: { openDelay?: number; closeDelay?: number };
 	disableHoverExpand?: boolean;
+	/** Host-controlled: keep the hover overlay open while an anchored popover or
+	 *  context menu (rendered by the host) is showing, so it doesn't orphan. */
+	holdOpen?: boolean;
 	onReservedWidthChange?: (px: number) => void;
 
 	// DI adapters (replace host services)

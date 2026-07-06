@@ -13,12 +13,12 @@
     onclick,
     onHaptic,
   } = $props<{
-    variant?: 'expanded' | 'collapsed';
-    isAuthenticated?: boolean;
-    displayName?: string;
-    avatar?: Snippet;
-    onclick?: () => void;
-    onHaptic?: () => void;
+    variant?: 'expanded' | 'collapsed' | undefined;
+    isAuthenticated?: boolean | undefined;
+    displayName?: string | undefined;
+    avatar?: Snippet | undefined;
+    onclick?: (() => void) | undefined;
+    onHaptic?: (() => void) | undefined;
   }>();
 
   function handleClick() {

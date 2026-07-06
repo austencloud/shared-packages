@@ -13,10 +13,10 @@
   let { mode, onToggleCollapse, homeHref = null, brandLead, brandRest, brand } = $props<{
     mode: 'rail' | 'hover' | 'pinned';
     onToggleCollapse: () => void;
-    homeHref?: string | null;
-    brandLead?: Snippet | string;
-    brandRest?: Snippet | string;
-    brand?: Snippet<[expanded: boolean]>;
+    homeHref?: string | null | undefined;
+    brandLead?: Snippet | string | undefined;
+    brandRest?: Snippet | string | undefined;
+    brand?: Snippet<[expanded: boolean]> | undefined;
   }>();
 
   const expanded = $derived(mode !== 'rail');
