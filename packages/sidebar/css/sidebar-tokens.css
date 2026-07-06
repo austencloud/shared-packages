@@ -1,25 +1,40 @@
-/*
- * Default sidebar CSS custom property values.
- * Import this file in your app to get sensible defaults,
- * then override any variable in your own CSS.
+/* @austencloud/sidebar default tokens.
+ *
+ * Import once at your app root. A host that already defines --theme-* /
+ * --duration-* (e.g. via @austencloud/theme) overrides these. Every consuming
+ * var() inside the components ALSO carries an inline fallback, so this sheet is
+ * optional — it only exists so a bare consumer with no theme layer still renders
+ * and animates correctly. :where() keeps specificity at 0 so app tokens win.
  *
  * Usage:
  *   @import '@austencloud/sidebar/css/sidebar-tokens.css';
  */
-:root {
-  --sidebar-width: 220px;
-  --sidebar-collapsed-width: 64px;
-  --sidebar-bg: var(--theme-panel-bg, rgba(10, 10, 15, 0.95));
-  --sidebar-border: var(--theme-stroke, rgba(255, 255, 255, 0.08));
-  --sidebar-z-index: 150;
-  --sidebar-transition-duration: 280ms;
-  --sidebar-transition-easing: cubic-bezier(0.16, 1, 0.3, 1);
-  --sidebar-module-radius: 12px;
-  --sidebar-section-radius: 10px;
-  --sidebar-text: rgba(255, 255, 255, 0.95);
-  --sidebar-text-dim: rgba(255, 255, 255, 0.6);
-  --sidebar-text-muted: rgba(255, 255, 255, 0.5);
-  --sidebar-focus-ring: rgba(255, 255, 255, 0.5);
-  --sidebar-hover-bg: var(--theme-card-bg, rgba(255, 255, 255, 0.03));
-  --sidebar-active-bg: var(--theme-card-hover-bg, rgba(255, 255, 255, 0.06));
+:where(:root) {
+  /* Surfaces / strokes / text */
+  --theme-panel-bg: rgba(10, 10, 15, 0.95);
+  --theme-stroke: rgba(255, 255, 255, 0.08);
+  --theme-stroke-strong: rgba(255, 255, 255, 0.16);
+  --theme-accent: #818cf8;
+  --theme-accent-strong: #6366f1;
+  --theme-text: #f4f4f5;
+  --theme-text-dim: #a1a1aa;
+  --theme-card-bg: rgba(255, 255, 255, 0.03);
+  --theme-card-hover-bg: rgba(255, 255, 255, 0.06);
+  --theme-shadow: rgba(0, 0, 0, 0.45);
+
+  /* Semantic status */
+  --semantic-error: #ef4444;
+  --semantic-info: #3b82f6;
+  --semantic-success: #22c55e;
+
+  /* Motion */
+  --duration-instant: 100ms;
+  --duration-fast: 150ms;
+  --duration-normal: 200ms;
+  --duration-emphasis: 280ms;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* Sizing / layering */
+  --min-touch-target: 44px;
+  --z-sidebar: 200;
 }

@@ -1,7 +1,7 @@
 {
   "name": "@austencloud/sidebar",
   "version": "0.1.0",
-  "description": "Composable sidebar navigation with collapsible activity bar, snippet slots, and callback props for Svelte 5",
+  "description": "Hover-expand overlay sidebar for Svelte 5: rail<->pinned tri-state, no-layout-shift morphing nav tree, DI seam for i18n/haptics/auth/flags",
   "type": "module",
   "svelte": "./src/index.ts",
   "main": "./dist/index.js",
@@ -23,6 +23,8 @@
     "build": "svelte-package -i src -o dist",
     "dev": "svelte-package -i src -o dist --watch",
     "check": "svelte-check --tsconfig ./tsconfig.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "clean": "rimraf dist"
   },
   "peerDependencies": {
@@ -33,14 +35,16 @@
     "rimraf": "^5.0.0",
     "svelte": "^5.0.0",
     "svelte-check": "^4.0.0",
-    "typescript": "^5.0.0"
+    "typescript": "^5.0.0",
+    "vitest": "^2"
   },
   "keywords": [
     "svelte",
     "sidebar",
     "navigation",
-    "activity-bar",
-    "collapsible",
+    "hover-expand",
+    "overlay",
+    "rail",
     "modules",
     "tabs"
   ],
