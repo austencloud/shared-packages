@@ -1,7 +1,5 @@
 import type { Snippet } from 'svelte';
 
-export type ModuleId = string;
-
 export interface Section {
 	id: string;
 	label: string;
@@ -13,8 +11,14 @@ export interface Section {
 	metadata?: Record<string, unknown>;
 }
 
+export interface SectionGroup {
+	id: string;
+	label: string;
+	sections: Section[];
+}
+
 export interface ModuleDefinition {
-	id: ModuleId;
+	id: string;
 	label: string;
 	icon: string;
 	color?: string;
@@ -26,7 +30,7 @@ export interface ModuleDefinition {
 }
 
 export interface SidebarProps {
-	// Required
+	// Data
 	modules: ModuleDefinition[];
 	currentModule: string;
 	currentSection: string;
@@ -34,24 +38,37 @@ export interface SidebarProps {
 	// Navigation
 	onModuleChange?: (moduleId: string, targetSection?: string) => void | Promise<void>;
 	onSectionChange?: (sectionId: string) => void;
+	onModuleContextMenu?: (moduleId: string, e: MouseEvent) => void;
+	onSectionContextMenu?: (moduleId: string, sectionId: string, e: MouseEvent) => void;
+	onModuleHover?: (moduleId: string) => void;
 
-	// Collapse
-	collapsible?: boolean;
-	collapsed?: boolean;
-	collapseStorageKey?: string | null;
+	// Interaction — hover-expand overlay is THE model
+	pinned?: boolean;
+	pinStorageKey?: string | null;
+	railWidth?: number;
+	expandedWidth?: number;
+	hoverIntent?: { openDelay?: number; closeDelay?: number };
+	disableHoverExpand?: boolean;
+	onReservedWidthChange?: (px: number) => void;
 
-	// Optional callbacks (replace DI services)
+	// DI adapters (replace host services)
 	onHaptic?: () => void;
 	translateLabel?: (moduleId: string) => string;
 	translateSectionLabel?: (moduleId: string, sectionId: string, fallback: string) => string;
 	filterSection?: (moduleId: string, sectionId: string) => boolean;
 	getBadgeCount?: (moduleId: string, sectionId?: string) => number;
-	onModuleHover?: (moduleId: string) => void;
 
-	// Snippet slots
+	// Chrome — structured props get the shared slide-reveal; snippet = escape hatch
+	homeHref?: string | null;
+	brandLead?: Snippet | string;
+	brandRest?: Snippet | string;
+	brand?: Snippet<[expanded: boolean]>;
+
+	// Slots
 	renderIcon?: Snippet<[name: string, size: number]>;
-	header?: Snippet<[collapsed: boolean]>;
-	footer?: Snippet<[collapsed: boolean]>;
+	beforeTree?: Snippet<[expanded: boolean]>;
+	account?: Snippet<[expanded: boolean]>;
+	footer?: Snippet<[expanded: boolean]>;
 
 	// Styling
 	class?: string;
