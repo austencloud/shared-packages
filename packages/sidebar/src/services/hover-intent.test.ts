@@ -58,4 +58,26 @@ describe('createHoverIntent', () => {
     vi.advanceTimersByTime(1);
     expect(onOpen).toHaveBeenCalledOnce();
   });
+
+  it('re-enter within closeDelay cancels the pending close', () => {
+    const onOpen = vi.fn(), onClose = vi.fn();
+    const c = createHoverIntent({ openDelay: 50, closeDelay: 300, onOpen, onClose });
+    c.pointerEnter();
+    vi.advanceTimersByTime(50);
+    c.pointerLeave();
+    vi.advanceTimersByTime(150); // still inside the 300 grace
+    c.pointerEnter();
+    vi.advanceTimersByTime(1000);
+    expect(onClose).not.toHaveBeenCalled(); // the pending close was cancelled
+  });
+
+  it('cancel clears both timers without firing callbacks', () => {
+    const onOpen = vi.fn(), onClose = vi.fn();
+    const c = createHoverIntent({ openDelay: 50, closeDelay: 300, onOpen, onClose });
+    c.pointerEnter();
+    c.cancel();
+    vi.advanceTimersByTime(1000);
+    expect(onOpen).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
+  });
 });
