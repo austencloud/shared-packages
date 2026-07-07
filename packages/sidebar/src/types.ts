@@ -7,10 +7,11 @@ export interface Section {
 	color?: string;
 	gradient?: string;
 	disabled?: boolean;
-	description?: string;
 	/** Ties a section to a collapsible SectionGroup (optional grouping feature). */
 	groupId?: string;
-	metadata?: Record<string, unknown>;
+	// NOTE: only the fields the component reads are declared. Hosts may pass
+	// richer section objects (extra fields are allowed) — the contract stays a
+	// minimal structural subset so any host superset is assignable.
 }
 
 export interface SectionGroup {
@@ -28,7 +29,6 @@ export interface ModuleDefinition {
 	label: string;
 	icon: string;
 	color?: string;
-	description?: string;
 	isMain?: boolean;
 	sections: Section[];
 	/** Optional collapsible group headers (e.g. a Lab-style module). */
