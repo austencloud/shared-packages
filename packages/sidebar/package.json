@@ -1,6 +1,9 @@
 {
   "name": "@austencloud/sidebar",
-  "version": "0.1.0",
+  "version": "1.0.0",
+  "publishConfig": {
+    "access": "public"
+  },
   "description": "Hover-expand overlay sidebar for Svelte 5: rail<->pinned tri-state, no-layout-shift morphing nav tree, DI seam for i18n/haptics/auth/flags",
   "type": "module",
   "svelte": "./src/index.ts",
