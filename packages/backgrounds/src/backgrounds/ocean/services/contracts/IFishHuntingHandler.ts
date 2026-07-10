@@ -28,6 +28,9 @@ export interface ActiveHunt {
 
   /** Maximum duration before predator gives up */
   maxDuration: number;
+
+  /** Hunt age (seconds) at which the stalk phase ends and the chase begins */
+  stalkEnd: number;
 }
 
 /**

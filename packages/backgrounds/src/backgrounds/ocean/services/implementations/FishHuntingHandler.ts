@@ -32,6 +32,9 @@ const HUNTING_CONFIG = {
 
   // School defense
   alertPropagationRadius: 100, // Alert nearby fish in school
+
+  // Movement
+  directionDeadzone: 6, // px of |dx| below which sprite facing doesn't flip
 };
 
 /**
@@ -85,13 +88,9 @@ export class FishHuntingHandler implements IFishHuntingHandler {
       // State machine
       switch (hunt.state) {
         case "stalking": {
-          // Check if stalk phase is complete
-          const stalkEnd =
-            HUNTING_CONFIG.stalkDuration[0] +
-            Math.random() *
-              (HUNTING_CONFIG.stalkDuration[1] -
-                HUNTING_CONFIG.stalkDuration[0]);
-          if (huntAge >= stalkEnd) {
+          // Stalk length was sampled once at hunt start (re-rolling it every
+          // frame made the phase boundary a per-frame dice roll).
+          if (huntAge >= hunt.stalkEnd) {
             // Transition to chase
             hunt.state = "chasing";
             predator.huntState = "chasing";
@@ -314,11 +313,8 @@ export class FishHuntingHandler implements IFishHuntingHandler {
     const hunterId = predator.fishId ?? 0;
     const targetId = prey.fishId ?? 0;
 
-    const maxDuration =
-      HUNTING_CONFIG.maxChaseDuration[0] +
-      Math.random() *
-        (HUNTING_CONFIG.maxChaseDuration[1] -
-          HUNTING_CONFIG.maxChaseDuration[0]);
+    const maxDuration = this.randomInRange(HUNTING_CONFIG.maxChaseDuration);
+    const stalkEnd = this.randomInRange(HUNTING_CONFIG.stalkDuration);
 
     const hunt: ActiveHunt = {
       hunterId,
@@ -326,6 +322,7 @@ export class FishHuntingHandler implements IFishHuntingHandler {
       state: "stalking",
       startTime: animationTime,
       maxDuration,
+      stalkEnd,
     };
 
     this.activeHunts.set(hunterId, hunt);
@@ -362,19 +359,13 @@ export class FishHuntingHandler implements IFishHuntingHandler {
     deltaSeconds: number
   ): void {
     // Slow, steady approach toward prey
-    const dx = prey.x - predator.x;
-    const dy = prey.y - predator.y;
-    const dist = Math.sqrt(dx * dx + dy * dy);
-
-    if (dist > 0) {
-      const speed =
-        predator.baseSpeed * HUNTING_CONFIG.predatorStalkSpeed * deltaSeconds;
-      predator.x += (dx / dist) * speed * 60;
-      predator.y += (dy / dist) * speed * 60;
-
-      // Update direction to face prey
-      predator.direction = dx > 0 ? 1 : -1;
-    }
+    this.moveAlong(
+      predator,
+      prey.x - predator.x,
+      prey.y - predator.y,
+      predator.baseSpeed * HUNTING_CONFIG.predatorStalkSpeed,
+      deltaSeconds
+    );
   }
 
   private applyChasing(
@@ -383,22 +374,16 @@ export class FishHuntingHandler implements IFishHuntingHandler {
     deltaSeconds: number
   ): void {
     // Burst speed pursuit
-    const dx = prey.x - predator.x;
-    const dy = prey.y - predator.y;
-    const dist = Math.sqrt(dx * dx + dy * dy);
-
-    if (dist > 0) {
-      const speed =
-        predator.baseSpeed * HUNTING_CONFIG.predatorChaseSpeed * deltaSeconds;
-      predator.x += (dx / dist) * speed * 60;
-      predator.y += (dy / dist) * speed * 60;
-
-      // Update direction
-      predator.direction = dx > 0 ? 1 : -1;
-
-      // Set high speed for visual effect
-      predator.speed = predator.baseSpeed * HUNTING_CONFIG.predatorChaseSpeed;
-    }
+    const chaseSpeed = predator.baseSpeed * HUNTING_CONFIG.predatorChaseSpeed;
+    this.moveAlong(
+      predator,
+      prey.x - predator.x,
+      prey.y - predator.y,
+      chaseSpeed,
+      deltaSeconds
+    );
+    // Set high speed for visual effect
+    predator.speed = chaseSpeed;
   }
 
   private applyFleeing(
@@ -407,21 +392,51 @@ export class FishHuntingHandler implements IFishHuntingHandler {
     deltaSeconds: number
   ): void {
     // Flee away from predator
-    const dx = prey.x - predator.x;
-    const dy = prey.y - predator.y;
+    const fleeSpeed = prey.baseSpeed * HUNTING_CONFIG.escapeSpeedBoost;
+    this.moveAlong(
+      prey,
+      prey.x - predator.x,
+      prey.y - predator.y,
+      fleeSpeed,
+      deltaSeconds
+    );
+    // Set high speed for visual effect
+    prey.speed = fleeSpeed;
+  }
+
+  /**
+   * Moves a fish along a direction vector at `speed` px/s.
+   *
+   * baseSpeed is px/s, so displacement is speed * dt — no frame factor. (The
+   * old code multiplied by an extra 60, launching hunts at ~60x intended
+   * speed: predators teleport-dashed and locked chase pairs oscillated around
+   * each other at thousands of px/s.)
+   *
+   * Writes baseY alongside y so the cruising formula (y = baseY + bob) picks
+   * up where the hunt left off instead of snapping back to the pre-hunt
+   * vertical position when the hunt ends.
+   *
+   * Direction only flips outside a small horizontal deadzone — when the pair
+   * overlaps, dx flips sign every frame and the sprite twitches left/right.
+   */
+  private moveAlong(
+    fish: FishMarineLife,
+    dx: number,
+    dy: number,
+    speed: number,
+    deltaSeconds: number
+  ): void {
     const dist = Math.sqrt(dx * dx + dy * dy);
+    if (dist <= 0) return;
 
-    if (dist > 0) {
-      const speed =
-        prey.baseSpeed * HUNTING_CONFIG.escapeSpeedBoost * deltaSeconds;
-      prey.x += (dx / dist) * speed * 60;
-      prey.y += (dy / dist) * speed * 60;
+    const step = speed * deltaSeconds;
+    fish.x += (dx / dist) * step;
+    const stepY = (dy / dist) * step;
+    fish.baseY += stepY;
+    fish.y = fish.baseY;
 
-      // Update direction (away from predator)
-      prey.direction = dx > 0 ? 1 : -1;
-
-      // Set high speed for visual effect
-      prey.speed = prey.baseSpeed * HUNTING_CONFIG.escapeSpeedBoost;
+    if (Math.abs(dx) > HUNTING_CONFIG.directionDeadzone) {
+      fish.direction = dx > 0 ? 1 : -1;
     }
   }
 
