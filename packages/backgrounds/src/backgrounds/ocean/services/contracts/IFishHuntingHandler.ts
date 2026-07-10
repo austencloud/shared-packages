@@ -31,6 +31,18 @@ export interface ActiveHunt {
 
   /** Hunt age (seconds) at which the stalk phase ends and the chase begins */
   stalkEnd: number;
+
+  /**
+   * Outcome decided once at hunt start (20% catch rate). Rolling per frame at
+   * 60fps made every close approach a near-certain catch.
+   */
+  willCatch: boolean;
+
+  /** Predator's current steering heading (unit vector) */
+  hunterHeading: { x: number; y: number };
+
+  /** Prey's current steering heading (unit vector) */
+  preyHeading: { x: number; y: number };
 }
 
 /**
@@ -73,7 +85,8 @@ export interface IFishHuntingHandler {
   processHunting(
     fish: FishMarineLife[],
     deltaSeconds: number,
-    animationTime: number
+    animationTime: number,
+    dimensions?: { width: number; height: number }
   ): HuntResult[];
 
   /**

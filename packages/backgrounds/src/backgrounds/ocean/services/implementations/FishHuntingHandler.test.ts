@@ -78,6 +78,28 @@ describe("FishHuntingHandler movement", () => {
     expect(predator.baseY).not.toBe(100); // it actually moved
   });
 
+  it("resolves the hunt on close approach - no glued-together lingering", () => {
+    const handler = new FishHuntingHandler();
+    const predator = makeFish(1, "sleek", 100, 100);
+    const prey = makeFish(2, "tropical", 200, 100);
+    const tChase = runToChase(handler, [predator, prey]);
+
+    // Teleport prey next to predator to force a close approach
+    prey.x = predator.x + 10;
+    prey.baseY = predator.baseY;
+    prey.y = predator.y;
+    const results = handler.processHunting([predator, prey], DT, tChase + DT);
+
+    expect(results).toHaveLength(1);
+    expect(["caught", "escaped"]).toContain(results[0]!.outcome);
+    expect(handler.getActiveHunts()).toHaveLength(0);
+    // On escape, prey jukes via a real darting burst
+    if (results[0]!.outcome === "escaped") {
+      expect(prey.behavior).toBe("darting");
+      expect(prey.targetSpeed).toBeGreaterThan(prey.baseSpeed * 2);
+    }
+  });
+
   it("does not flip sprite direction when the pair overlaps horizontally", () => {
     const handler = new FishHuntingHandler();
     const predator = makeFish(1, "sleek", 100, 100);

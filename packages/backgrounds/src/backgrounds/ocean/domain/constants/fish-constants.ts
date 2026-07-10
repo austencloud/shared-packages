@@ -576,6 +576,43 @@ export const MOTION_SMOOTHING = {
 };
 
 // =============================================================================
+// SWIM GAIT (speed -> tail-beat mapping)
+// =============================================================================
+
+/**
+ * Real fish modulate tail-beat FREQUENCY with swim speed far more than
+ * amplitude (amplitude saturates quickly - a sprinting fish beats faster, it
+ * doesn't flop wider). Scaling both linearly with speed made darts/chases
+ * look like panicked flopping at 4-6x amplitude.
+ */
+export const SWIM_GAIT = {
+  /** tail-beat frequency multiplier clamp [min, max] vs speed ratio */
+  frequencyScale: [0.4, 2.5] as const,
+  /** amplitude multiplier = sqrt(speedRatio) clamped to [min, max] */
+  amplitudeScale: [0.5, 1.4] as const,
+  /**
+   * Bob amplitude damping at speed: fast fish hold a level line. Scale =
+   * 1 / (1 + (speedRatio - 1) * bobDamping), clamped to bobScaleMin.
+   */
+  bobDamping: 0.8,
+  bobScaleMin: 0.35,
+};
+
+// =============================================================================
+// TURN ARC (banked turns)
+// =============================================================================
+
+/**
+ * Fish turn in an arc, not a flat pivot. During the turning behavior the fish
+ * carves a subtle vertical arc (peaking mid-turn), which with the heading
+ * ease reads as a banked U-turn instead of a moonwalk reverse.
+ */
+export const TURN_ARC = {
+  /** peak vertical carve speed (px/s) at the middle of the turn */
+  peakVerticalSpeed: 14,
+};
+
+// =============================================================================
 // LATERAL WANDER (replaces RNG dart jitter)
 // =============================================================================
 

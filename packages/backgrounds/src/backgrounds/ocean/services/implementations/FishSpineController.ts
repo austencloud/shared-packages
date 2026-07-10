@@ -9,6 +9,7 @@ import type { IFishPropulsionCalculator } from "../contracts/IFishPropulsionCalc
 import { SpineChain } from "../../physics/SpineChain.js";
 import { FishPropulsionCalculator, smoothSpeed } from "./FishPropulsionCalculator.js";
 import { fishDebugConfig } from "../../domain/debug-config.js";
+import { SWIM_GAIT } from "../../domain/constants/fish-constants.js";
 
 /**
  * FishSpineController - Manages spine chain physics for organic swimming
@@ -88,9 +89,14 @@ export class FishSpineController implements IFishSpineController {
       return;
     }
 
-    // Update swim phase (drives tail oscillation)
+    // Update swim phase (drives tail oscillation). Gait model: frequency
+    // carries the speed change, amplitude saturates (see SWIM_GAIT).
     const speedRatio = fish.speed / fish.baseSpeed;
-    fish.swimPhase += fish.swimSpeed * speedRatio * frameMultiplier;
+    const freqScale = Math.max(
+      SWIM_GAIT.frequencyScale[0],
+      Math.min(SWIM_GAIT.frequencyScale[1], speedRatio)
+    );
+    fish.swimPhase += fish.swimSpeed * freqScale * frameMultiplier;
 
     // Head target is where the movement controller already placed the fish
     // DO NOT add velocity again - applyCruising/applyBehavior already moved fish.x
@@ -100,10 +106,11 @@ export class FishSpineController implements IFishSpineController {
 
     // Apply tail oscillation (DEBUG: can be disabled via toggle)
     if (fishDebugConfig.enableTailOscillation) {
-      spine.applyTailOscillation(
-        fish.tailAmplitude * speedRatio,
-        fish.swimPhase
+      const ampScale = Math.max(
+        SWIM_GAIT.amplitudeScale[0],
+        Math.min(SWIM_GAIT.amplitudeScale[1], Math.sqrt(Math.max(0, speedRatio)))
       );
+      spine.applyTailOscillation(fish.tailAmplitude * ampScale, fish.swimPhase);
     }
 
     // Update spine chain (head follows target, body follows head)

@@ -18,6 +18,21 @@ const DEFENSIVE_FLOCKING = {
 };
 
 /**
+ * Horizontal school cohesion. The boids forces compute an x component, but it
+ * was historically discarded (only verticalDrift was steered), so schools
+ * strung out and dissolved. Two 1D mechanisms make them read as schools:
+ * - speed matching: fish behind the local center speed up, fish ahead ease off
+ * - direction consensus: a member swimming against the school's majority
+ *   heading initiates a turn back into formation
+ */
+const HORIZONTAL_SCHOOLING = {
+  /** gain converting the x steering force into a speed nudge (px/s^2-ish) */
+  speedMatchGain: 40,
+  /** speed clamp as fraction of baseSpeed while speed-matching */
+  speedClamp: [0.7, 1.5] as const,
+};
+
+/**
  * FishFlockingCalculator - Implements Boids algorithm for schooling behavior
  *
  * Handles school formation, calculates separation/alignment/cohesion forces,
@@ -58,6 +73,26 @@ export class FishFlockingCalculator implements IFishFlockingCalculator {
       const isUnderThreat = members.some(
         (m) => m.isBeingHunted || m.mood === "alert" || m.fleeTimer > 0
       );
+
+      // Direction consensus: members swimming against the school majority
+      // turn back into formation (skip fish mid-turn or being hunted).
+      const directionSum = members.reduce((sum, m) => sum + m.direction, 0);
+      if (Math.abs(directionSum) >= 1) {
+        const majority: 1 | -1 = directionSum > 0 ? 1 : -1;
+        for (const f of members) {
+          if (
+            f.direction !== majority &&
+            f.behavior === "schooling" &&
+            !f.isBeingHunted
+          ) {
+            f.behavior = "turning";
+            f.behaviorTimer = BEHAVIOR_CONFIG.turning.duration;
+            f.targetDirection = majority;
+            f.targetSpeed =
+              f.baseSpeed * BEHAVIOR_CONFIG.turning.speedMultiplier;
+          }
+        }
+      }
 
       for (const f of members) {
         const forces = this.calculateFlockingForces(f, members, isUnderThreat);
@@ -211,6 +246,18 @@ export class FishFlockingCalculator implements IFishFlockingCalculator {
     fish.verticalDrift = Math.max(
       -FISH_MOVEMENT.verticalDrift,
       Math.min(FISH_MOVEMENT.verticalDrift, fish.verticalDrift)
+    );
+
+    // Speed matching from the x force: laggards speed up, leaders ease off,
+    // so the school breathes as a unit instead of stringing out. The nudge
+    // rides on current speed; behavior easing pulls it home when flocking
+    // stops feeding it.
+    const nudged =
+      fish.speed +
+      force.x * fish.direction * HORIZONTAL_SCHOOLING.speedMatchGain * deltaSeconds;
+    fish.speed = Math.max(
+      fish.baseSpeed * HORIZONTAL_SCHOOLING.speedClamp[0],
+      Math.min(fish.baseSpeed * HORIZONTAL_SCHOOLING.speedClamp[1], nudged)
     );
   }
 

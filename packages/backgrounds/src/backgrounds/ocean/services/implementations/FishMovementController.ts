@@ -9,6 +9,8 @@ import {
   DEPTH_TRANSITION,
   MOTION_SMOOTHING,
   LATERAL_WANDER,
+  SWIM_GAIT,
+  TURN_ARC,
 } from "../../domain/constants/fish-constants.js";
 import { approachExponential, easeHeading } from "./fish-motion/velocity-smoothing.js";
 import { wanderOffset } from "./fish-motion/lateral-wander.js";
@@ -117,11 +119,13 @@ export class FishMovementController implements IFishMovementController {
   ): void {
     const current = fish.behavior;
 
-    // Complete turning: flip direction
+    // Complete turning: flip direction. School members drop back into
+    // schooling (not cruising) so a turn doesn't silently eject them from
+    // the flocking pass.
     if (current === "turning") {
       fish.direction =
         fish.targetDirection ?? ((fish.direction * -1) as 1 | -1);
-      fish.behavior = "cruising";
+      fish.behavior = fish.schoolId !== undefined ? "schooling" : "cruising";
       fish.behaviorTimer = this.randomInRange(BEHAVIOR_CONFIG.cruising.duration);
       fish.rotation = 0;
       fish.targetSpeed = fish.baseSpeed;
@@ -286,7 +290,13 @@ export class FishMovementController implements IFishMovementController {
     fish.x += fish.headingFactor * fish.speed * deltaSeconds;
     fish.baseY += fish.verticalDrift * deltaSeconds;
 
-    const bob = Math.sin(fish.animationPhase) * fish.bobAmplitude;
+    // Fast fish hold a level line - bob damps as speed rises above cruise.
+    const speedRatio = fish.speed / fish.baseSpeed;
+    const bobScale = Math.max(
+      SWIM_GAIT.bobScaleMin,
+      1 / (1 + Math.max(0, speedRatio - 1) * SWIM_GAIT.bobDamping)
+    );
+    const bob = Math.sin(fish.animationPhase) * fish.bobAmplitude * bobScale;
     fish.y = fish.baseY + bob;
   }
 
@@ -299,6 +309,17 @@ export class FishMovementController implements IFishMovementController {
       fish.direction *
       Math.sin(turnProgress * Math.PI) *
       BEHAVIOR_CONFIG.turning.maxRotation;
+
+    // Banked arc: carve vertically through the turn (peak at mid-turn) so the
+    // reversal reads as a U-turn, not an in-place moonwalk. Arc direction
+    // follows the fish's current vertical drift so successive turns vary.
+    const arcSign = fish.verticalDrift >= 0 ? 1 : -1;
+    fish.baseY +=
+      arcSign *
+      Math.sin(turnProgress * Math.PI) *
+      TURN_ARC.peakVerticalSpeed *
+      deltaSeconds;
+    fish.y = fish.baseY;
   }
 
   /**

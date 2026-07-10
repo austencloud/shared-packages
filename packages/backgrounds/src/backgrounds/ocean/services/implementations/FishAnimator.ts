@@ -150,7 +150,8 @@ export class FishAnimator implements IFishAnimator {
       const huntResults = this.huntingHandler.processHunting(
         fish,
         deltaSeconds,
-        animationTime
+        animationTime,
+        dimensions
       );
       for (const result of huntResults) {
         this.huntingHandler.applyHuntResult(result, fish);

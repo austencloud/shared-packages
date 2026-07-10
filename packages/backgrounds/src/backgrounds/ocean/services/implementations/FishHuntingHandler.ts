@@ -9,6 +9,12 @@ import type {
 } from "../contracts/IFishHuntingHandler.js";
 import type { IFishWobbleAnimator } from "../contracts/IFishWobbleAnimator.js";
 import { FishWobbleAnimator } from "./FishWobbleAnimator.js";
+import {
+  steerHeading,
+  biasAwayFromEdges,
+  type Heading,
+} from "./fish-motion/pursuit-steering.js";
+import { BEHAVIOR_CONFIG } from "../../domain/constants/fish-constants.js";
 
 /**
  * Hunting system configuration
@@ -33,8 +39,16 @@ const HUNTING_CONFIG = {
   // School defense
   alertPropagationRadius: 100, // Alert nearby fish in school
 
-  // Movement
-  directionDeadzone: 6, // px of |dx| below which sprite facing doesn't flip
+  // Steering (rad/s max turn rates - prey out-turns predator, classic pursuit)
+  predatorStalkTurnRate: 1.2,
+  predatorChaseTurnRate: 2.2,
+  preyFleeTurnRate: 3.5,
+  /** Edge margin (px) where fleeing prey starts carving back inward */
+  fleeEdgeMargin: 120,
+
+  // Near-miss escape juke
+  nearMissDistance: 30, // px - close approach that resolves the hunt
+  jukeSpeedMultiplier: 3.0, // prey burst on successful juke
 };
 
 /**
@@ -64,7 +78,8 @@ export class FishHuntingHandler implements IFishHuntingHandler {
   processHunting(
     fish: FishMarineLife[],
     deltaSeconds: number,
-    animationTime: number
+    animationTime: number,
+    dimensions?: { width: number; height: number }
   ): HuntResult[] {
     const results: HuntResult[] = [];
 
@@ -107,7 +122,7 @@ export class FishHuntingHandler implements IFishHuntingHandler {
             this.alertSchoolmates(prey, fish, animationTime);
           } else {
             // Slow approach during stalk
-            this.applyStalking(predator, prey, deltaSeconds);
+            this.applyStalking(hunt, predator, prey, deltaSeconds);
           }
           break;
         }
@@ -131,21 +146,29 @@ export class FishHuntingHandler implements IFishHuntingHandler {
             continue;
           }
 
-          // Check catch - random chance when close enough
-          if (dist < 30) {
-            const caught = Math.random() < HUNTING_CONFIG.catchProbability;
-            if (caught) {
+          // Close approach resolves the hunt using the outcome decided at
+          // hunt start. On a miss the prey jukes: an explosive dart that
+          // re-opens the gap, instead of predator and prey gluing together
+          // until the timeout.
+          if (dist < HUNTING_CONFIG.nearMissDistance) {
+            if (hunt.willCatch) {
               results.push({ hunt, outcome: "caught" });
               this.clearHuntState(predator, prey, animationTime);
               this.activeHunts.delete(hunterId);
               this.stats.successfulCatches++;
-              continue;
+            } else {
+              results.push({ hunt, outcome: "escaped" });
+              this.clearHuntState(predator, prey, animationTime);
+              this.activeHunts.delete(hunterId);
+              this.stats.escapes++;
+              this.applyEscapeJuke(prey);
             }
+            continue;
           }
 
           // Apply chase movement
-          this.applyChasing(predator, prey, deltaSeconds);
-          this.applyFleeing(prey, predator, deltaSeconds);
+          this.applyChasing(hunt, predator, prey, deltaSeconds);
+          this.applyFleeing(hunt, prey, predator, deltaSeconds, dimensions);
           break;
         }
       }
@@ -323,6 +346,9 @@ export class FishHuntingHandler implements IFishHuntingHandler {
       startTime: animationTime,
       maxDuration,
       stalkEnd,
+      willCatch: Math.random() < HUNTING_CONFIG.catchProbability,
+      hunterHeading: { x: predator.direction, y: 0 },
+      preyHeading: { x: prey.direction, y: 0 },
     };
 
     this.activeHunts.set(hunterId, hunt);
@@ -354,61 +380,103 @@ export class FishHuntingHandler implements IFishHuntingHandler {
   }
 
   private applyStalking(
+    hunt: ActiveHunt,
     predator: FishMarineLife,
     prey: FishMarineLife,
     deltaSeconds: number
   ): void {
     // Slow, steady approach toward prey
-    this.moveAlong(
+    hunt.hunterHeading = steerHeading(
+      hunt.hunterHeading,
+      { x: prey.x - predator.x, y: prey.y - predator.y },
+      HUNTING_CONFIG.predatorStalkTurnRate,
+      deltaSeconds
+    );
+    this.moveAlongHeading(
       predator,
-      prey.x - predator.x,
-      prey.y - predator.y,
+      hunt.hunterHeading,
       predator.baseSpeed * HUNTING_CONFIG.predatorStalkSpeed,
       deltaSeconds
     );
   }
 
   private applyChasing(
+    hunt: ActiveHunt,
     predator: FishMarineLife,
     prey: FishMarineLife,
     deltaSeconds: number
   ): void {
-    // Burst speed pursuit
-    const chaseSpeed = predator.baseSpeed * HUNTING_CONFIG.predatorChaseSpeed;
-    this.moveAlong(
-      predator,
-      prey.x - predator.x,
-      prey.y - predator.y,
-      chaseSpeed,
+    // Burst speed pursuit - heading arcs onto the prey at a capped turn rate
+    // so the predator carves a pursuit curve instead of vector-snapping.
+    hunt.hunterHeading = steerHeading(
+      hunt.hunterHeading,
+      { x: prey.x - predator.x, y: prey.y - predator.y },
+      HUNTING_CONFIG.predatorChaseTurnRate,
       deltaSeconds
     );
-    // Set high speed for visual effect
+    const chaseSpeed = predator.baseSpeed * HUNTING_CONFIG.predatorChaseSpeed;
+    this.moveAlongHeading(predator, hunt.hunterHeading, chaseSpeed, deltaSeconds);
+    // Set high speed for visual effect (tail-beat frequency follows)
     predator.speed = chaseSpeed;
   }
 
   private applyFleeing(
+    hunt: ActiveHunt,
     prey: FishMarineLife,
     predator: FishMarineLife,
-    deltaSeconds: number
+    deltaSeconds: number,
+    dimensions?: { width: number; height: number }
   ): void {
-    // Flee away from predator
-    const fleeSpeed = prey.baseSpeed * HUNTING_CONFIG.escapeSpeedBoost;
-    this.moveAlong(
-      prey,
-      prey.x - predator.x,
-      prey.y - predator.y,
-      fleeSpeed,
+    // Flee away from predator; prey turns tighter than the predator (its one
+    // advantage), and carves back inward near screen edges instead of bolting
+    // straight off-screen mid-chase.
+    let desired: Heading = {
+      x: prey.x - predator.x,
+      y: prey.y - predator.y,
+    };
+    if (dimensions) {
+      const len = Math.hypot(desired.x, desired.y);
+      if (len > 0) {
+        desired = biasAwayFromEdges(
+          { x: desired.x / len, y: desired.y / len },
+          prey.x,
+          prey.y,
+          dimensions.width,
+          dimensions.height,
+          HUNTING_CONFIG.fleeEdgeMargin
+        );
+      }
+    }
+    hunt.preyHeading = steerHeading(
+      hunt.preyHeading,
+      desired,
+      HUNTING_CONFIG.preyFleeTurnRate,
       deltaSeconds
     );
+    const fleeSpeed = prey.baseSpeed * HUNTING_CONFIG.escapeSpeedBoost;
+    this.moveAlongHeading(prey, hunt.preyHeading, fleeSpeed, deltaSeconds);
     // Set high speed for visual effect
     prey.speed = fleeSpeed;
   }
 
   /**
-   * Moves a fish along a direction vector at `speed` px/s.
+   * Prey wins the close-quarters exchange: explosive dart re-opens the gap.
+   * Routed through the normal darting behavior so the C-start coil/burst/
+   * recovery phases and speed easing all apply.
+   */
+  private applyEscapeJuke(prey: FishMarineLife): void {
+    prey.behavior = "darting";
+    prey.behaviorTimer = BEHAVIOR_CONFIG.darting.duration;
+    prey.dartSpeed = prey.baseSpeed * HUNTING_CONFIG.jukeSpeedMultiplier;
+    prey.targetSpeed = prey.dartSpeed;
+    this.wobbleAnimator.triggerWobble(prey, "startled_dart", 1.0);
+  }
+
+  /**
+   * Moves a fish along a unit heading at `speed` px/s.
    *
-   * baseSpeed is px/s, so displacement is speed * dt — no frame factor. (The
-   * old code multiplied by an extra 60, launching hunts at ~60x intended
+   * baseSpeed is px/s, so displacement is speed * dt — no frame factor. (An
+   * older version multiplied by an extra 60, launching hunts at ~60x intended
    * speed: predators teleport-dashed and locked chase pairs oscillated around
    * each other at thousands of px/s.)
    *
@@ -419,24 +487,20 @@ export class FishHuntingHandler implements IFishHuntingHandler {
    * Direction only flips outside a small horizontal deadzone — when the pair
    * overlaps, dx flips sign every frame and the sprite twitches left/right.
    */
-  private moveAlong(
+  private moveAlongHeading(
     fish: FishMarineLife,
-    dx: number,
-    dy: number,
+    heading: Heading,
     speed: number,
     deltaSeconds: number
   ): void {
-    const dist = Math.sqrt(dx * dx + dy * dy);
-    if (dist <= 0) return;
-
     const step = speed * deltaSeconds;
-    fish.x += (dx / dist) * step;
-    const stepY = (dy / dist) * step;
-    fish.baseY += stepY;
+    fish.x += heading.x * step;
+    fish.baseY += heading.y * step;
     fish.y = fish.baseY;
 
-    if (Math.abs(dx) > HUNTING_CONFIG.directionDeadzone) {
-      fish.direction = dx > 0 ? 1 : -1;
+    // Flip facing only when the heading has meaningful horizontal component
+    if (Math.abs(heading.x) > 0.15) {
+      fish.direction = heading.x > 0 ? 1 : -1;
     }
   }
 
