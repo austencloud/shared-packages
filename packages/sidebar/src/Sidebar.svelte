@@ -14,6 +14,7 @@
   import { onMount } from 'svelte';
   import type { ModuleDefinition, Section, SidebarProps } from './types';
   import { createHoverIntent } from './services/hover-intent';
+  import { shouldStayOpen, isKeyboardFocus } from './services/overlay-hold';
   import { readPinState, writePinState } from './sidebar/pin-state';
   import SidebarBrand from './sidebar/SidebarBrand.svelte';
   import ModuleGroup from './sidebar/ModuleGroup.svelte';
@@ -62,9 +63,17 @@
   const collapsed = $derived(!pinned);
   let hoverExpanded = $state(false);
   let pointerInside = $state(false);
-  let focusInside = $state(false);
+  // KEYBOARD focus only. Click-focus does not hold the overlay open — see
+  // isKeyboardFocus in services/overlay-hold.
+  let keyboardFocusInside = $state(false);
   let hoverCapable = $state(false);
   const heldOpen = $derived(!!holdOpen);
+
+  // Single arbiter for every close path, so none of them can be stricter than
+  // the others and strand the overlay open.
+  const stayOpen = $derived(
+    shouldStayOpen({ pointerInside, keyboardFocusInside, heldOpen })
+  );
 
   // What the user SEES (and therefore how the sidebar behaves).
   const visuallyExpanded = $derived(pinned || hoverExpanded);
@@ -128,12 +137,18 @@
       hoverIntent.cancel();
       return;
     }
-    if (heldOpen) return; // the $effect below re-arms close when the guard clears
+    // A guard or a keyboard focus still holds it; the $effect below re-arms
+    // close when the last holder clears.
+    if (stayOpen) return;
     hoverIntent.pointerLeave();
   }
 
-  function handleSidebarFocusIn() {
-    focusInside = true;
+  function handleSidebarFocusIn(e: FocusEvent) {
+    // Clicking a module/tab focuses its button. That focus must not hold the
+    // overlay open — the pointer already governs the pointer case, and holding
+    // on click-focus is what stranded the rail open after a tab click.
+    if (!isKeyboardFocus(e.target)) return;
+    keyboardFocusInside = true;
     if (!collapsed) return;
     hoverIntent.openNow(); // keyboard users get no intent delay
   }
@@ -141,7 +156,7 @@
   function handleSidebarFocusOut(e: FocusEvent) {
     const next = e.relatedTarget as Node | null;
     if (next && sidebarElement?.contains(next)) return;
-    focusInside = false;
+    keyboardFocusInside = false;
     if (pointerInside || heldOpen) return;
     hoverIntent.closeNow();
   }
@@ -152,10 +167,10 @@
     }
   }
 
-  // When a hold-open guard clears and both pointer and focus are gone, start the
-  // close grace so the overlay doesn't hang open.
+  // When the last holder clears (guard closed, keyboard focus left, pointer
+  // gone), start the close grace so the overlay doesn't hang open.
   $effect(() => {
-    if (!heldOpen && !pointerInside && !focusInside && hoverExpanded) {
+    if (!stayOpen && hoverExpanded) {
       hoverIntent.pointerLeave();
     }
   });
@@ -174,7 +189,7 @@
     pointerInside = inside;
     if (inside) {
       hoverIntent.pointerEnter();
-    } else if (!heldOpen && !focusInside) {
+    } else if (!stayOpen) {
       hoverIntent.pointerLeave();
     }
   }
