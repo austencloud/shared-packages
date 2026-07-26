@@ -86,29 +86,38 @@ export const BASELINE_TUNING: OceanVisualTuning = {
 };
 
 /**
- * The graded look: depth reads as depth, effects are actually visible, and
- * fish are sized for a large display.
+ * The graded look: depth reads as depth, effects are actually visible, and fish
+ * are sized for a large display. These are the values signed off on 2026-07-26
+ * from the /test/ocean-visual-ab wipe — don't drift them without re-running it.
  *
  * depthTintColor matches GRADIENT_CONFIG.colors.midDepth so distant fish
  * dissolve into the water they're actually swimming in.
+ *
+ * causticIntensity stays near 1 deliberately. Caustics were the one effect NOT
+ * suffering from under-tuning (cells already run at 0.15-0.29 alpha); pushing
+ * them to 4.5 just saturated 24 soft radial blobs into obvious bokeh. Making
+ * them read as caustics needs a real interlocking-web pattern, not a multiplier.
  */
 export const GRADED_TUNING: OceanVisualTuning = {
-  fishScale: 1.55,
-  depthFadeStrength: 0.55,
+  fishScale: 1.5,
+  depthFadeStrength: 0.5,
   depthTintStrength: 0.7,
   depthTintColor: "#1a3a4a",
   depthBlurMaxPx: 3.5,
   depthBandCount: 4,
-  causticIntensity: 4.5,
-  fogIntensity: 2.6,
-  glowIntensity: 3.2,
+  causticIntensity: 1.3,
+  fogIntensity: 2.4,
+  glowIntensity: 2.4,
 };
 
 /**
  * Live tuning read by the renderers at draw time. Mutate to change the look;
  * assign a whole object to switch presets.
+ *
+ * Defaults to GRADED — that is the shipping look. The A/B harness flips this to
+ * BASELINE and back within a single frame to render its comparison.
  */
-export const oceanVisualTuning: OceanVisualTuning = { ...BASELINE_TUNING };
+export const oceanVisualTuning: OceanVisualTuning = { ...GRADED_TUNING };
 
 /** Replace the live tuning in place (keeps the shared object identity). */
 export function setOceanVisualTuning(next: Partial<OceanVisualTuning>): void {
