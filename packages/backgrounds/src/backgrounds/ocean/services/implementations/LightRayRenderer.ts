@@ -1,3 +1,4 @@
+import { oceanVisualTuning } from "../../domain/constants/ocean-visual-tuning.js";
 import type { Dimensions } from "../../../../core/domain/types.js";
 import type { LightRay, CausticsState } from "../../domain/models/OceanModels.js";
 import type { ILightRayRenderer } from "../contracts/ILightRayRenderer.js";
@@ -280,7 +281,7 @@ export class LightRayRenderer implements ILightRayRenderer {
   ): void {
     const combinedPhase = cell.phase + globalPhase;
     const pulse = 0.5 + Math.sin(combinedPhase) * 0.5;
-    const alpha = cell.intensity * pulse;
+    const alpha = cell.intensity * pulse * oceanVisualTuning.causticIntensity;
 
     if (alpha < 0.005) return;
 

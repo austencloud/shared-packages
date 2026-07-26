@@ -9,6 +9,7 @@ import { SpineChain } from "../../physics/SpineChain.js";
 import { BodyOutlineCalculator, type Point } from "../../physics/BodyOutlineCalculator.js";
 import { fishDebugConfig } from "../../domain/debug-config.js";
 import { DEPTH_TRANSITION } from "../../domain/constants/fish-constants.js";
+import { oceanVisualTuning } from "../../domain/constants/ocean-visual-tuning.js";
 
 /**
  * Fish Rendering Orchestrator
@@ -31,19 +32,115 @@ export class FishRenderer implements IFishRenderer {
     private bodyRenderer: IFishBodyRenderer
   ) {}
 
+  /** Reused offscreen layer for depth-band grading; sized on demand. */
+  private bandLayer?: HTMLCanvasElement;
+
   drawFish(ctx: CanvasRenderingContext2D, fish: FishMarineLife[]): void {
     // Sort by z value for proper z-ordering (high z = far = draw first)
     const sorted = [...fish].sort((a, b) => b.z - a.z);
 
-    for (const f of sorted) {
-      // DEBUG: Allow forcing legacy rendering via toggle
-      const useSpine = fishDebugConfig.useSpineRendering && f.useSpineChain && f.spineJoints;
-      if (useSpine) {
-        this.drawSpineChainFish(ctx, f);
-      } else {
-        this.drawSingleFish(ctx, f);
-      }
+    const bands = oceanVisualTuning.depthBandCount;
+    if (bands > 1) {
+      this.drawFishGraded(ctx, sorted, bands);
+      return;
     }
+
+    for (const f of sorted) {
+      this.drawFishByMode(ctx, f);
+    }
+  }
+
+  private drawFishByMode(
+    ctx: CanvasRenderingContext2D,
+    f: FishMarineLife
+  ): void {
+    // DEBUG: Allow forcing legacy rendering via toggle
+    const useSpine = fishDebugConfig.useSpineRendering && f.useSpineChain && f.spineJoints;
+    if (useSpine) {
+      this.drawSpineChainFish(ctx, f);
+    } else {
+      this.drawSingleFish(ctx, f);
+    }
+  }
+
+  /**
+   * Draw fish in depth bands, grading each band as a unit.
+   *
+   * Atmospheric perspective — not size — is the dominant depth cue underwater:
+   * distant subjects lose contrast and saturation and go soft as scattered
+   * light accumulates between them and the viewer. Applying that needs the
+   * fish pixels in isolation (a fog wash composited 'source-atop' over the main
+   * canvas would tint the water and everything already drawn into it), so each
+   * band renders to an offscreen layer, gets tinted/blurred/faded there, and is
+   * composited back.
+   *
+   * Banded rather than per-fish so the cost is a fixed handful of layer
+   * composites per frame instead of one offscreen buffer per fish.
+   */
+  private drawFishGraded(
+    ctx: CanvasRenderingContext2D,
+    sortedFarToNear: FishMarineLife[],
+    bandCount: number
+  ): void {
+    const { canvas } = ctx;
+    const layer = this.getBandLayer(canvas.width, canvas.height);
+    const lctx = layer.getContext("2d");
+    if (!lctx) {
+      for (const f of sortedFarToNear) this.drawFishByMode(ctx, f);
+      return;
+    }
+
+    const t = oceanVisualTuning;
+    for (let band = bandCount - 1; band >= 0; band--) {
+      const zLo = band / bandCount;
+      const zHi = (band + 1) / bandCount;
+      const inBand = sortedFarToNear.filter((f) => {
+        const z = f.z ?? 0.5;
+        return z >= zLo && (z < zHi || (band === bandCount - 1 && z <= 1));
+      });
+      if (inBand.length === 0) continue;
+
+      // Band midpoint drives how far through the water we're looking.
+      const depth = (zLo + zHi) / 2;
+
+      lctx.setTransform(1, 0, 0, 1, 0, 0);
+      lctx.clearRect(0, 0, layer.width, layer.height);
+      lctx.globalCompositeOperation = "source-over";
+      lctx.globalAlpha = 1;
+      for (const f of inBand) this.drawFishByMode(lctx, f);
+
+      // Tint the band's pixels toward the water colour. source-atop confines
+      // the wash to what was just drawn, which is why the isolated layer exists.
+      if (t.depthTintStrength > 0) {
+        lctx.globalCompositeOperation = "source-atop";
+        lctx.globalAlpha = depth * t.depthTintStrength;
+        lctx.fillStyle = t.depthTintColor;
+        lctx.fillRect(0, 0, layer.width, layer.height);
+        lctx.globalAlpha = 1;
+        lctx.globalCompositeOperation = "source-over";
+      }
+
+      ctx.save();
+      ctx.globalAlpha = Math.max(0, 1 - depth * t.depthFadeStrength);
+      if (t.depthBlurMaxPx > 0 && depth > 0) {
+        ctx.filter = `blur(${(depth * t.depthBlurMaxPx).toFixed(2)}px)`;
+      }
+      ctx.drawImage(layer, 0, 0);
+      ctx.restore();
+    }
+  }
+
+  private getBandLayer(width: number, height: number): HTMLCanvasElement {
+    let layer = this.bandLayer;
+    if (!layer) {
+      layer = document.createElement("canvas");
+      this.bandLayer = layer;
+    }
+    if (layer.width !== width || layer.height !== height) {
+      layer.width = width;
+      layer.height = height;
+    }
+    return layer;
   }
 
   /**
@@ -56,7 +153,11 @@ export class FishRenderer implements IFishRenderer {
   } {
     const z = fish.z ?? 0.5; // Default to mid-depth if z not set
     return {
-      depthScale: 1 - z * DEPTH_TRANSITION.scaleReduction,
+      // fishScale is a render-time multiplier so the scene can be sized for the
+      // display without disturbing spawn geometry, spine lengths or off-screen
+      // margins, which are all authored in world px.
+      depthScale:
+        (1 - z * DEPTH_TRANSITION.scaleReduction) * oceanVisualTuning.fishScale,
       depthOpacity: 1 - z * DEPTH_TRANSITION.opacityReduction,
     };
   }

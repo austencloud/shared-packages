@@ -1,3 +1,4 @@
+import { oceanVisualTuning } from "../../domain/constants/ocean-visual-tuning.js";
 import type { Dimensions } from "../../../../core/domain/types.js";
 import type {
   GradientState,
@@ -221,7 +222,7 @@ export class GradientRenderer implements IGradientRenderer {
 
     for (const layer of fogLayers) {
       const pulse = 0.5 + Math.sin(layer.phase) * 0.5;
-      const alpha = layer.opacity * pulse;
+      const alpha = layer.opacity * pulse * oceanVisualTuning.fogIntensity;
 
       // Fog band gradient (horizontal haze)
       const fogHeight = dimensions.height * 0.15;
@@ -258,7 +259,7 @@ export class GradientRenderer implements IGradientRenderer {
 
     for (const glow of glows) {
       const pulse = 0.3 + Math.sin(glow.phase) * 0.7;
-      const alpha = glow.intensity * pulse;
+      const alpha = glow.intensity * pulse * oceanVisualTuning.glowIntensity;
 
       if (alpha < 0.005) continue;
 

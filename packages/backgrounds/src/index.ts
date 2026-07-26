@@ -163,15 +163,22 @@ export type { FishMarineLife, FishSpecies, FinState, TailState, FishColorPalette
 export type { FishMood, FishPersonality } from "./backgrounds/ocean/domain/types/fish-personality-types.js";
 export type { OceanLayers } from "./backgrounds/ocean/services/OceanBackgroundOrchestrator.js";
 export { fishDebugConfig } from "./backgrounds/ocean/domain/debug-config.js";
+export {
+	oceanVisualTuning,
+	setOceanVisualTuning,
+	BASELINE_TUNING,
+	GRADED_TUNING,
+} from "./backgrounds/ocean/domain/constants/ocean-visual-tuning.js";
+export type { OceanVisualTuning } from "./backgrounds/ocean/domain/constants/ocean-visual-tuning.js";
 
 // ─── Cosmic System Types ────────────────────────────────────────────────────
 
 export type { UFOMood, WobbleType } from "./backgrounds/cosmic/services/UFOSystem.js";
 
-// ─── Rainbow/Pride System Types ─────────────────────────────────────────────
+// ─── Rainbow System Types ───────────────────────────────────────────────────
 
-export { PRIDE_PALETTES } from "./backgrounds/rainbow/domain/constants/rainbow-constants.js";
-export type { PridePalette } from "./backgrounds/rainbow/domain/constants/rainbow-constants.js";
+export { RAINBOW_PALETTES } from "./backgrounds/rainbow/domain/constants/rainbow-constants.js";
+export type { RainbowPalette } from "./backgrounds/rainbow/domain/constants/rainbow-constants.js";
 
 // ─── Forest Additional Types ────────────────────────────────────────────────
 
