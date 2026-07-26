@@ -35,7 +35,22 @@ const OBSERVED_ATTRS = [
   "glow-size",
 ] as const;
 
-export class BackgroundCardElement extends HTMLElement {
+/**
+ * `HTMLElement` does not exist during SSR, and `class X extends undefined`
+ * throws at module evaluation — importing this file server-side was enough to
+ * crash the render, before any custom element was ever constructed. Extending a
+ * stub off-DOM keeps the module importable; registration is guarded separately
+ * and only ever happens in a browser.
+ *
+ * Consumers previously carried this as a patch against dist. Fixed at source in
+ * 0.7.1 so the patch can be dropped.
+ */
+const HTMLElementBase: typeof HTMLElement =
+  typeof HTMLElement === "undefined"
+    ? (class {} as unknown as typeof HTMLElement)
+    : HTMLElement;
+
+export class BackgroundCardElement extends HTMLElementBase {
   static get observedAttributes(): readonly string[] {
     return OBSERVED_ATTRS;
   }
