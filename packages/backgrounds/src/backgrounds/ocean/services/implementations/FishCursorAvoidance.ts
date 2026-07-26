@@ -50,7 +50,13 @@ export class FishCursorAvoidance implements IFishCursorAvoidance {
       f.fleeIntensity = Math.max(f.fleeIntensity, flee.intensity);
 
       // Horizontal: face away, boost target speed by intensity.
-      f.direction = flee.dirX >= 0 ? 1 : -1;
+      // Only flip on a meaningful horizontal component — a cursor directly
+      // above or below a fish gives a near-vertical flee vector whose dirX
+      // sign flips on noise, and `direction` is mirrored instantly by the
+      // renderer, so each flip is a visible snap.
+      if (Math.abs(flee.dirX) > 0.2) {
+        f.direction = flee.dirX >= 0 ? 1 : -1;
+      }
       f.targetSpeed =
         f.baseSpeed * (1 + (CURSOR_FLEE.speedMultiplier - 1) * flee.intensity);
 

@@ -17,6 +17,14 @@ import {
 import { BEHAVIOR_CONFIG } from "../../domain/constants/fish-constants.js";
 
 /**
+ * Below this predator/prey separation (px), facing direction is frozen. An
+ * overlapping pair's normalized heading alternates sign every frame, and
+ * `direction` is mirrored instantly by the renderer, so letting it track the
+ * heading at close quarters reads as a buzzing twitch rather than a turn.
+ */
+const FLIP_SUPPRESS_DISTANCE = 45;
+
+/**
  * Hunting system configuration
  */
 const HUNTING_CONFIG = {
@@ -91,9 +99,18 @@ export class FishHuntingHandler implements IFishHuntingHandler {
       const predator = fishById.get(hunterId);
       const prey = fishById.get(hunt.targetId);
 
-      // Cancel if either fish is gone
+      // Cancel if either fish is gone.
+      //
+      // Whichever fish survived must have its hunt state cleared here. Deleting
+      // the hunt alone left the survivor pinned in huntState "stalking"/"chasing"
+      // forever: FishDecisionMaker short-circuits on huntState, and neither
+      // behavior switch has a case for those behaviors, so the fish got no
+      // movement handler, never re-decided, and never drifted off screen to be
+      // despawned. Measured 8 permanently frozen fish per session.
       if (!predator || !prey) {
         results.push({ hunt, outcome: "cancelled" });
+        if (predator) this.clearPredatorHuntState(predator, animationTime);
+        if (prey) this.clearPreyHuntState(prey);
         this.activeHunts.delete(hunterId);
         continue;
       }
@@ -366,14 +383,24 @@ export class FishHuntingHandler implements IFishHuntingHandler {
     prey: FishMarineLife,
     animationTime: number
   ): void {
-    // Clear predator state
+    this.clearPredatorHuntState(predator, animationTime);
+    this.clearPreyHuntState(prey);
+  }
+
+  /** Return a predator to normal cruising. Safe to call on a half-cancelled hunt. */
+  private clearPredatorHuntState(
+    predator: FishMarineLife,
+    animationTime: number
+  ): void {
     predator.huntState = "cooldown";
     predator.huntingTarget = undefined;
     predator.huntStartTime = undefined;
     predator.huntCooldownEnd = animationTime + HUNTING_CONFIG.huntCooldown;
     predator.behavior = "cruising";
+  }
 
-    // Clear prey state
+  /** Return prey to normal cruising. Safe to call on a half-cancelled hunt. */
+  private clearPreyHuntState(prey: FishMarineLife): void {
     prey.isBeingHunted = false;
     prey.hunterId = undefined;
     prey.behavior = "cruising";
@@ -396,7 +423,8 @@ export class FishHuntingHandler implements IFishHuntingHandler {
       predator,
       hunt.hunterHeading,
       predator.baseSpeed * HUNTING_CONFIG.predatorStalkSpeed,
-      deltaSeconds
+      deltaSeconds,
+      this.distance(predator, prey)
     );
   }
 
@@ -415,7 +443,13 @@ export class FishHuntingHandler implements IFishHuntingHandler {
       deltaSeconds
     );
     const chaseSpeed = predator.baseSpeed * HUNTING_CONFIG.predatorChaseSpeed;
-    this.moveAlongHeading(predator, hunt.hunterHeading, chaseSpeed, deltaSeconds);
+    this.moveAlongHeading(
+      predator,
+      hunt.hunterHeading,
+      chaseSpeed,
+      deltaSeconds,
+      this.distance(predator, prey)
+    );
     // Set high speed for visual effect (tail-beat frequency follows)
     predator.speed = chaseSpeed;
   }
@@ -454,7 +488,13 @@ export class FishHuntingHandler implements IFishHuntingHandler {
       deltaSeconds
     );
     const fleeSpeed = prey.baseSpeed * HUNTING_CONFIG.escapeSpeedBoost;
-    this.moveAlongHeading(prey, hunt.preyHeading, fleeSpeed, deltaSeconds);
+    this.moveAlongHeading(
+      prey,
+      hunt.preyHeading,
+      fleeSpeed,
+      deltaSeconds,
+      this.distance(prey, predator)
+    );
     // Set high speed for visual effect
     prey.speed = fleeSpeed;
   }
@@ -484,22 +524,36 @@ export class FishHuntingHandler implements IFishHuntingHandler {
    * up where the hunt left off instead of snapping back to the pre-hunt
    * vertical position when the hunt ends.
    *
-   * Direction only flips outside a small horizontal deadzone — when the pair
-   * overlaps, dx flips sign every frame and the sprite twitches left/right.
+   * Direction flips are gated two ways, because `direction` is a hard ±1 that
+   * the renderer mirrors instantly (ctx.scale(-direction, 1)) — every write is a
+   * visible snap, not an eased turn:
+   *
+   * 1. `heading.x` must clear a deadzone, so a near-vertical chase doesn't
+   *    flip facing on horizontal noise.
+   * 2. `partnerDistance` must exceed FLIP_SUPPRESS_DISTANCE. A deadzone on
+   *    heading.x alone does NOT cover the actual failure: once predator and prey
+   *    overlap, the steering target is a sub-pixel offset whose NORMALIZED
+   *    heading is ≈±1 and alternates sign every frame. That sailed through the
+   *    0.15 gate and produced the observed left/right buzz — measured 3562 of
+   *    3643 flips landing within one second of the same fish's previous flip,
+   *    median gap 0.017s (one frame), essentially all of them in chasing /
+   *    fleeing / stalking.
    */
   private moveAlongHeading(
     fish: FishMarineLife,
     heading: Heading,
     speed: number,
-    deltaSeconds: number
+    deltaSeconds: number,
+    partnerDistance?: number
   ): void {
     const step = speed * deltaSeconds;
     fish.x += heading.x * step;
     fish.baseY += heading.y * step;
     fish.y = fish.baseY;
 
-    // Flip facing only when the heading has meaningful horizontal component
-    if (Math.abs(heading.x) > 0.15) {
+    const overlapping =
+      partnerDistance !== undefined && partnerDistance < FLIP_SUPPRESS_DISTANCE;
+    if (!overlapping && Math.abs(heading.x) > 0.15) {
       fish.direction = heading.x > 0 ? 1 : -1;
     }
   }

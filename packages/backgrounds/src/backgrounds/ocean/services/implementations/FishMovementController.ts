@@ -17,6 +17,14 @@ import { wanderOffset } from "./fish-motion/lateral-wander.js";
 import { FishDecisionMaker } from "./FishDecisionMaker.js";
 
 /**
+ * Fraction of screen height kept clear at the top and bottom of the fish's
+ * roaming range. Shared by the ascending/descending clamp in applyBehavior and
+ * the depth band written when a vertical behavior completes — they must agree,
+ * or entering a vertical behavior teleports the fish to the tighter bound.
+ */
+const VERTICAL_ROAM_MARGIN = 0.05;
+
+/**
  * FishMovementController - Manages fish behavior state machine and movement
  *
  * Handles behavior transitions (cruising, turning, darting, schooling),
@@ -86,15 +94,22 @@ export class FishMovementController implements IFishMovementController {
         break;
     }
 
-    // Clamp to depth band (relaxed for ascending/descending)
+    // Clamp to depth band (relaxed for ascending/descending).
+    //
+    // The vertical-behavior bounds MUST be a superset of the depth band, or
+    // entering ascending/descending teleports the fish to the nearer bound.
+    // They previously used height*0.1 while transitionBehavior writes bands out
+    // to height*0.05 — so a fish sitting in either 5% sliver got yanked up to
+    // height*0.05 (72px at 1440) in a single frame, dragging its spine head with
+    // it and snapping the sprite to near-vertical. Both limits are now
+    // VERTICAL_ROAM_MARGIN, matching the band transitionBehavior writes.
     if (fish.behavior !== "ascending" && fish.behavior !== "descending") {
       fish.baseY = Math.max(
         fish.depthBand.min,
         Math.min(fish.depthBand.max, fish.baseY)
       );
     } else {
-      // Wider bounds during vertical movement
-      const margin = dimensions.height * 0.1;
+      const margin = dimensions.height * VERTICAL_ROAM_MARGIN;
       fish.baseY = Math.max(margin, Math.min(dimensions.height - margin, fish.baseY));
     }
   }
@@ -159,8 +174,14 @@ export class FishMovementController implements IFishMovementController {
       // Update depth band to center around new position
       const bandHeight = fish.depthBand.max - fish.depthBand.min;
       fish.depthBand = {
-        min: Math.max(dimensions.height * 0.05, fish.baseY - bandHeight / 2),
-        max: Math.min(dimensions.height * 0.95, fish.baseY + bandHeight / 2),
+        min: Math.max(
+          dimensions.height * VERTICAL_ROAM_MARGIN,
+          fish.baseY - bandHeight / 2
+        ),
+        max: Math.min(
+          dimensions.height * (1 - VERTICAL_ROAM_MARGIN),
+          fish.baseY + bandHeight / 2
+        ),
       };
       return;
     }
