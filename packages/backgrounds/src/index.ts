@@ -177,8 +177,8 @@ export type { UFOMood, WobbleType } from "./backgrounds/cosmic/services/UFOSyste
 
 // ─── Rainbow System Types ───────────────────────────────────────────────────
 
-export { RAINBOW_PALETTES } from "./backgrounds/rainbow/domain/constants/rainbow-constants.js";
-export type { RainbowPalette } from "./backgrounds/rainbow/domain/constants/rainbow-constants.js";
+export { RAINBOW_PALETTES } from "./backgrounds/rainbow/domain/constants/rainbow-public-palettes.js";
+export type { RainbowPalette } from "./backgrounds/rainbow/domain/constants/rainbow-public-palettes.js";
 
 // ─── Forest Additional Types ────────────────────────────────────────────────
 
