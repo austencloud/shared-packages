@@ -58,8 +58,9 @@ export interface BackgroundSystem {
   /**
    * Set the current pointer position (canvas-logical px) for interactive
    * backgrounds (e.g. fish cursor flee). active=false when pointer left.
+   * pointerType lets motion effects keep touch input flat.
    */
-  setPointer?: (x: number, y: number, active: boolean) => void;
+  setPointer?: (x: number, y: number, active: boolean, pointerType?: string) => void;
   /**
    * Tap-test the background at (x, y) in canvas-logical px. Interactive
    * backgrounds (e.g. ocean jellyfish) hit-test their elements and, on a hit,

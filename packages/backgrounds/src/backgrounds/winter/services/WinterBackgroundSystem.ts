@@ -7,12 +7,18 @@ import type { IBackgroundConfigurationService } from "../../../core/contracts/IB
 import type { IBackgroundRenderingService } from "../../../core/contracts/IBackgroundRenderingService.js";
 import type { IBackgroundSystem } from "../../../core/contracts/IBackgroundSystem.js";
 import { createShootingStarSystem } from "../../../core/services/ShootingStarSystem.js";
-import { getRenderingService, getConfigurationService } from "../../../core/services/ServiceFactory.js";
+import {
+  getRenderingService,
+  getConfigurationService,
+} from "../../../core/services/ServiceFactory.js";
 import type {
   ShootingStarState,
   Snowflake,
 } from "../domain/models/winter-models.js";
 import { createSnowflakeSystem } from "./SnowflakeSystem.js";
+import type { WinterCursorLightStats } from "./WinterCursorLightTracker.js";
+import type { WinterParallaxStats } from "./WinterParallaxTracker.js";
+import type { WinterWindStats } from "./WinterWindField.js";
 
 export interface WinterLayers {
   gradient: boolean;
@@ -59,7 +65,8 @@ export class WinterBackgroundSystem implements IBackgroundSystem {
     this.shootingStarState = this.shootingStarSystem.initialState;
     this.isInitialized = true;
     // Track whether we got real dimensions (canvas may not be laid out yet)
-    this.initializedWithValidDimensions = dimensions.width > 0 && dimensions.height > 0;
+    this.initializedWithValidDimensions =
+      dimensions.width > 0 && dimensions.height > 0;
 
     // Pre-populate: Simulate animation already running
     // Distribute snowflakes across the entire viewport height
@@ -75,7 +82,11 @@ export class WinterBackgroundSystem implements IBackgroundSystem {
     if (dimensions.width > 0 && dimensions.height > 0) {
       // Re-initialize if: not initialized, no snowflakes, OR we initially got 0x0 dimensions
       // The 0x0 case happens when canvas isn't laid out yet - all particles spawn at (0,0)
-      if (!this.isInitialized || this.snowflakes.length === 0 || !this.initializedWithValidDimensions) {
+      if (
+        !this.isInitialized ||
+        this.snowflakes.length === 0 ||
+        !this.initializedWithValidDimensions
+      ) {
         this.initialize(dimensions, this.quality);
       }
     }
@@ -84,16 +95,16 @@ export class WinterBackgroundSystem implements IBackgroundSystem {
       this.snowflakes = this.snowflakeSystem.update(
         this.snowflakes,
         dimensions,
-        frameMultiplier
+        frameMultiplier,
       );
       const { qualitySettings } = this.configurationService.getOptimizedConfig(
-        this.quality
+        this.quality,
       );
       if (qualitySettings.enableShootingStars) {
         this.shootingStarState = this.shootingStarSystem.update(
           this.shootingStarState,
           dimensions,
-          frameMultiplier
+          frameMultiplier,
         );
       }
     }
@@ -125,28 +136,42 @@ export class WinterBackgroundSystem implements IBackgroundSystem {
     this.snowflakeSystem.setQuality(quality);
   }
 
-  public setAccessibility(_settings: {
+  public setPointer(
+    x: number,
+    y: number,
+    active: boolean,
+    pointerType?: string,
+  ): void {
+    this.snowflakeSystem.setPointer(x, y, active, pointerType);
+  }
+
+  public triggerGust(direction?: -1 | 1): void {
+    this.snowflakeSystem.triggerGust(direction);
+  }
+
+  public setAccessibility(settings: {
     reducedMotion: boolean;
     highContrast: boolean;
   }): void {
-    // Accessibility settings would be used for motion reduction, etc.
+    this.snowflakeSystem.setReducedMotion(settings.reducedMotion);
   }
 
   public handleResize(
     oldDimensions: Dimensions,
-    newDimensions: Dimensions
+    newDimensions: Dimensions,
   ): void {
     this.snowflakes = this.snowflakeSystem.adjustToResize(
       this.snowflakes,
       oldDimensions,
       newDimensions,
-      this.quality
+      this.quality,
     );
 
     this.shootingStarState = this.shootingStarSystem.initialState;
   }
 
   public cleanup(): void {
+    this.snowflakeSystem.cleanup();
     this.snowflakes = [];
     this.isInitialized = false;
     this.initializedWithValidDimensions = false;
@@ -162,9 +187,17 @@ export class WinterBackgroundSystem implements IBackgroundSystem {
   /**
    * Get current scene statistics
    */
-  public getStats(): { snowflakes: number } {
+  public getStats(): {
+    snowflakes: number;
+    wind: WinterWindStats;
+    parallax: WinterParallaxStats;
+    cursorLight: WinterCursorLightStats;
+  } {
     return {
       snowflakes: this.snowflakes.length,
+      wind: this.snowflakeSystem.getWindStats(),
+      parallax: this.snowflakeSystem.getParallaxStats(),
+      cursorLight: this.snowflakeSystem.getCursorLightStats(),
     };
   }
 }

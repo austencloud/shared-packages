@@ -14,6 +14,8 @@ export interface Snowflake {
   sparkle: number; // Sparkle intensity (0-1)
   sparklePhase: number; // For sparkle animation
   depth: number; // For depth-based effects (0-1)
+  windVelocityX: number; // Smoothed horizontal response to the shared wind field
+  windVelocityY: number; // Smoothed vertical response to the shared wind field
 }
 
 export interface ShootingStar {

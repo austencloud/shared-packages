@@ -186,9 +186,9 @@ export class BackgroundController implements IBackgroundController {
     this.systemB?.setQuality(quality);
   }
 
-  setPointer(x: number, y: number, active: boolean): void {
-    this.systemA?.setPointer?.(x, y, active);
-    this.systemB?.setPointer?.(x, y, active);
+  setPointer(x: number, y: number, active: boolean, pointerType?: string): void {
+    this.systemA?.setPointer?.(x, y, active, pointerType);
+    this.systemB?.setPointer?.(x, y, active, pointerType);
   }
 
   pokeAt(x: number, y: number): { hit: boolean; pitch01: number; pan: number } | void {

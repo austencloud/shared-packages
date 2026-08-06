@@ -103,8 +103,8 @@ export interface IBackgroundController {
    */
   setQuality(quality: QualityLevel): void;
 
-  /** Forward pointer (canvas-logical px) to the active background system. */
-  setPointer(x: number, y: number, active: boolean): void;
+  /** Forward pointer input to the active background system. */
+  setPointer(x: number, y: number, active: boolean, pointerType?: string): void;
 
   /**
    * Tap the active background at (x, y) in canvas-logical px. Returns the note
