@@ -2,13 +2,6 @@ import type { Dimensions } from "../../../core/domain/types.js";
 import type { DepthParallaxOffset } from "../../../core/services/DepthParallaxTracker.js";
 
 export type AutumnPlateAspect = "wide" | "portrait";
-export type AutumnPlateRole = "far" | "middle" | "near";
-
-export interface AutumnPlateDefinition {
-  role: AutumnPlateRole;
-  depth: number;
-  path: string;
-}
 
 export interface AutumnImagePlacement {
   x: number;
@@ -17,45 +10,9 @@ export interface AutumnImagePlacement {
   height: number;
 }
 
-const WIDE_PLATES: readonly AutumnPlateDefinition[] = [
-  {
-    role: "far",
-    depth: 0.15,
-    path: "/images/backgrounds/autumn/amber-rain-far.webp",
-  },
-  {
-    role: "middle",
-    depth: 0.45,
-    path: "/images/backgrounds/autumn/amber-rain-middle.webp",
-  },
-  {
-    role: "near",
-    depth: 1,
-    path: "/images/backgrounds/autumn/amber-rain-near.webp",
-  },
-];
-
-const PORTRAIT_PLATES: readonly AutumnPlateDefinition[] = [
-  {
-    role: "far",
-    depth: 0.15,
-    path: "/images/backgrounds/autumn/amber-rain-far-portrait.webp",
-  },
-  {
-    role: "middle",
-    depth: 0.45,
-    path: "/images/backgrounds/autumn/amber-rain-middle-portrait.webp",
-  },
-  {
-    role: "near",
-    depth: 1,
-    path: "/images/backgrounds/autumn/amber-rain-near-portrait.webp",
-  },
-];
-
 const FLAT_PATHS: Record<AutumnPlateAspect, string> = {
-  wide: "/images/backgrounds/autumn/amber-rain-grove.webp",
-  portrait: "/images/backgrounds/autumn/amber-rain-grove-portrait.webp",
+  wide: "/images/backgrounds/autumn/after-rain-grove.webp",
+  portrait: "/images/backgrounds/autumn/after-rain-grove-portrait.webp",
 };
 
 export function getAutumnPlateAspect(
@@ -66,21 +23,13 @@ export function getAutumnPlateAspect(
     : "wide";
 }
 
-export function getAutumnPlateSet(
-  dimensions: Dimensions,
-): readonly AutumnPlateDefinition[] {
-  return getAutumnPlateAspect(dimensions) === "portrait"
-    ? PORTRAIT_PLATES
-    : WIDE_PLATES;
-}
-
 export function getAutumnFlatPath(dimensions: Dimensions): string {
   return FLAT_PATHS[getAutumnPlateAspect(dimensions)];
 }
 
 /**
- * Cover-crops an art plate with enough transparent overscan for its full
- * parallax range, including a one-pixel guard against sampled canvas seams.
+ * Cover-crops the authored matte with enough overscan for its full parallax
+ * range, including a one-pixel guard against sampled canvas seams.
  */
 export function getAutumnImagePlacement(
   source: Dimensions,

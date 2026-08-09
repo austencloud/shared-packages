@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  getAutumnFlatPath,
   getAutumnImagePlacement,
   getAutumnPlateAspect,
-  getAutumnPlateSet,
 } from "./autumn-plates.js";
 
 const VIEWPORTS = [
@@ -14,23 +14,18 @@ const VIEWPORTS = [
   { width: 375, height: 667 },
 ];
 
-describe("Autumn multiplane geometry", () => {
-  it("selects the authored aspect and preserves depth order", () => {
+describe("Autumn artwork geometry", () => {
+  it("selects the authored wide and portrait mattes", () => {
     expect(getAutumnPlateAspect({ width: 1440, height: 900 })).toBe("wide");
     expect(getAutumnPlateAspect({ width: 820, height: 1180 })).toBe(
       "portrait",
     );
-
-    for (const dimensions of VIEWPORTS) {
-      const plates = getAutumnPlateSet(dimensions);
-      expect(plates.map((plate) => plate.role)).toEqual([
-        "far",
-        "middle",
-        "near",
-      ]);
-      expect(plates[0]?.depth).toBeLessThan(plates[1]?.depth ?? 0);
-      expect(plates[1]?.depth).toBeLessThan(plates[2]?.depth ?? 0);
-    }
+    expect(getAutumnFlatPath({ width: 1440, height: 900 })).toBe(
+      "/images/backgrounds/autumn/after-rain-grove.webp",
+    );
+    expect(getAutumnFlatPath({ width: 820, height: 1180 })).toBe(
+      "/images/backgrounds/autumn/after-rain-grove-portrait.webp",
+    );
   });
 
   it.each(VIEWPORTS)(

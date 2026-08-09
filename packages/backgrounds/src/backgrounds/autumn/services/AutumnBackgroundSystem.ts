@@ -179,7 +179,7 @@ export class AutumnBackgroundSystem implements IBackgroundSystem {
       particleCount: this.leafSystem.leaves.length,
       warnings:
         this.scenery.getLoadedArtCount() < this.scenery.getExpectedArtCount()
-          ? ["Autumn art planes are loading"]
+          ? ["Autumn artwork is loading"]
           : [],
     };
   }
