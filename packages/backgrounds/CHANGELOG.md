@@ -1,5 +1,11 @@
 # @austencloud/backgrounds
 
+## 0.7.8
+
+### Patch Changes
+
+- c5bbc7e: Replace the Autumn scene with authored wide and portrait after-rain artwork.
+
 ## 0.7.7
 
 ### Patch Changes
