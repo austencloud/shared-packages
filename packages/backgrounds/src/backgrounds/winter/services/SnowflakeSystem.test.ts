@@ -6,6 +6,40 @@ class Path2DStub {
   lineTo(): void {}
 }
 
+function createRandom(seed: number = 123456789): () => number {
+  let state = seed >>> 0;
+  return () => {
+    state = (state * 1664525 + 1013904223) >>> 0;
+    return state / 0x1_0000_0000;
+  };
+}
+
+function createContext(
+  translations: Array<{ x: number; y: number }> = [],
+): CanvasRenderingContext2D {
+  return {
+    globalAlpha: 1,
+    globalCompositeOperation: "source-over",
+    fillStyle: "",
+    strokeStyle: "",
+    lineWidth: 1,
+    imageSmoothingEnabled: true,
+    imageSmoothingQuality: "high",
+    arc: () => undefined,
+    beginPath: () => undefined,
+    drawImage: () => undefined,
+    fill: () => undefined,
+    lineTo: () => undefined,
+    moveTo: () => undefined,
+    save: () => undefined,
+    restore: () => undefined,
+    rotate: () => undefined,
+    scale: () => undefined,
+    stroke: () => undefined,
+    translate: (x: number, y: number) => translations.push({ x, y }),
+  } as unknown as CanvasRenderingContext2D;
+}
+
 describe("SnowflakeSystem living wind integration", () => {
   beforeAll(() => {
     vi.stubGlobal("Path2D", Path2DStub);
@@ -36,7 +70,7 @@ describe("SnowflakeSystem living wind integration", () => {
       expect(Number.isFinite(flake.rotation)).toBe(true);
       expect(flake.x).toBeGreaterThanOrEqual(-50);
       expect(flake.x).toBeLessThanOrEqual(dimensions.width + 50);
-      expect(flake.y).toBeGreaterThanOrEqual(-30);
+      expect(flake.y).toBeGreaterThanOrEqual(-110);
       expect(flake.y).toBeLessThanOrEqual(dimensions.height);
       expect(
         Math.hypot(flake.windVelocityX, flake.windVelocityY),
@@ -71,6 +105,9 @@ describe("SnowflakeSystem living wind integration", () => {
         return !previous || previous.depth <= flake.depth;
       }),
     ).toBe(true);
+    expect(
+      resized.filter((flake) => flake.opticalClass === "foreground"),
+    ).toHaveLength(12);
   });
 
   it("keeps enough flakes on a narrow phone for the wind field to read", () => {
@@ -87,30 +124,18 @@ describe("SnowflakeSystem living wind integration", () => {
     const system = createSnowflakeSystem();
     let flakes = system.initialize(dimensions, "high");
     const translations: Array<{ x: number; y: number }> = [];
-    const context = {
-      globalAlpha: 1,
-      globalCompositeOperation: "source-over",
-      strokeStyle: "",
-      lineWidth: 1,
-      beginPath: () => undefined,
-      lineTo: () => undefined,
-      moveTo: () => undefined,
-      save: () => undefined,
-      restore: () => undefined,
-      rotate: () => undefined,
-      stroke: () => undefined,
-      translate: (x: number, y: number) => translations.push({ x, y }),
-    } as unknown as CanvasRenderingContext2D;
+    const context = createContext(translations);
 
     system.setPointer(dimensions.width, dimensions.height / 2, true, "mouse");
     for (let frame = 0; frame < 120; frame++) {
       flakes = system.update(flakes, dimensions, 1);
     }
     system.draw(flakes, context, dimensions);
+    const firstCrystal = system.getBandIndices().crystal[0] ?? 0;
 
     expect(system.getParallaxStats().enabled).toBe(true);
     expect(system.getCursorLightStats().enabled).toBe(true);
-    expect(translations[0]?.x).toBeLessThan(flakes[0]?.x ?? 0);
+    expect(translations[0]?.x).toBeLessThan(flakes[firstCrystal]?.x ?? 0);
 
     translations.length = 0;
     system.setPointer(300, 400, true, "touch");
@@ -118,7 +143,80 @@ describe("SnowflakeSystem living wind integration", () => {
 
     expect(system.getParallaxStats().enabled).toBe(false);
     expect(system.getCursorLightStats().enabled).toBe(false);
-    expect(translations[0]?.x).toBeCloseTo(flakes[0]?.x ?? 0, 8);
-    expect(translations[0]?.y).toBeCloseTo(flakes[0]?.y ?? 0, 8);
+    expect(translations[0]?.x).toBeCloseTo(flakes[firstCrystal]?.x ?? 0, 8);
+    expect(translations[0]?.y).toBeCloseTo(flakes[firstCrystal]?.y ?? 0, 8);
+  });
+
+  it("keeps optical choices stable and consumes no random values during draw", () => {
+    let calls = 0;
+    const seeded = createRandom(42);
+    const system = createSnowflakeSystem({
+      random: () => {
+        calls += 1;
+        return seeded();
+      },
+    });
+    const dimensions = { width: 1440, height: 900 };
+    let flakes = system.initialize(dimensions, "high");
+    const opticalBefore = flakes.map((flake) => [
+      flake.opticalClass,
+      flake.opticalVariant,
+      flake.opticalFocus,
+      flake.opticalScale,
+    ]);
+
+    for (let frame = 0; frame < 120; frame += 1) {
+      flakes = system.update(flakes, dimensions, 1);
+    }
+    expect(
+      flakes.map((flake) => [
+        flake.opticalClass,
+        flake.opticalVariant,
+        flake.opticalFocus,
+        flake.opticalScale,
+      ]),
+    ).toEqual(opticalBefore);
+
+    const callsBeforeDraw = calls;
+    system.draw(flakes, createContext(), dimensions);
+    expect(calls).toBe(callsBeforeDraw);
+  });
+
+  it("fades foreground out over twenty reduced-motion frames", () => {
+    const system = createSnowflakeSystem({ random: createRandom(7) });
+    const dimensions = { width: 1920, height: 1080 };
+    let flakes = system.initialize(dimensions, "high");
+    system.setReducedMotion(true);
+
+    for (let frame = 0; frame < 20; frame += 1) {
+      flakes = system.update(flakes, dimensions, 1);
+    }
+
+    expect(
+      flakes
+        .filter((flake) => flake.opticalClass === "foreground")
+        .every((flake) => flake.opticalAlpha <= 0.001),
+    ).toBe(true);
+    expect(system.getWindStats().gustActive).toBe(false);
+  });
+
+  it("converges quality without adding more than five percent in one frame", () => {
+    const system = createSnowflakeSystem({ random: createRandom(99) });
+    const dimensions = { width: 1920, height: 1080 };
+    let flakes = system.initialize(dimensions, "low");
+    system.setQuality("high");
+
+    const firstTarget = Math.ceil(311 * 0.05);
+    const before = flakes.length;
+    flakes = system.update(flakes, dimensions, 1);
+    expect(flakes.length - before).toBeLessThanOrEqual(firstTarget);
+
+    for (let frame = 0; frame < 80; frame += 1) {
+      flakes = system.update(flakes, dimensions, 1);
+    }
+    expect(flakes).toHaveLength(311);
+    expect(
+      flakes.filter((flake) => flake.opticalClass === "foreground"),
+    ).toHaveLength(14);
   });
 });

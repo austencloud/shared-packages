@@ -1,17 +1,35 @@
-import type { Dimensions } from "../../../core/domain/types.js";
+import type { Dimensions } from "../domain/types.js";
 
-export interface WinterParallaxOffset {
+export interface DepthParallaxOffset {
   x: number;
   y: number;
 }
 
-export interface WinterParallaxStats {
+export interface DepthParallaxStats {
   enabled: boolean;
   currentX: number;
   currentY: number;
   targetX: number;
   targetY: number;
 }
+
+export interface DepthParallaxProfile {
+  horizontalRatio: number;
+  horizontalMinimum: number;
+  horizontalMaximum: number;
+  verticalRatio: number;
+  verticalMinimum: number;
+  verticalMaximum: number;
+}
+
+const DEFAULT_PROFILE: DepthParallaxProfile = {
+  horizontalRatio: 0.014,
+  horizontalMinimum: 20,
+  horizontalMaximum: 28,
+  verticalRatio: 0.013,
+  verticalMinimum: 11,
+  verticalMaximum: 16,
+};
 
 const POINTER_DEAD_ZONE = 0.06;
 const FRAME_SMOOTHING = 0.08;
@@ -31,18 +49,22 @@ function removeDeadZone(value: number): number {
 }
 
 /**
- * Tracks a shallow camera offset for the winter snow layers.
- *
- * The sky stays anchored while nearby flakes travel farther than distant
- * flakes. This creates depth without rotating, scaling, or moving the canvas.
+ * Tracks one restrained viewpoint and resolves it at different scene depths.
+ * Backgrounds own their visual planes; this class owns the shared interaction,
+ * smoothing, accessibility, and depth-response behavior.
  */
-export class WinterParallaxTracker {
+export class DepthParallaxTracker {
+  private readonly profile: DepthParallaxProfile;
   private currentX = 0;
   private currentY = 0;
   private targetX = 0;
   private targetY = 0;
   private inputEnabled = false;
   private reducedMotion = false;
+
+  constructor(profile: Partial<DepthParallaxProfile> = {}) {
+    this.profile = { ...DEFAULT_PROFILE, ...profile };
+  }
 
   initialize(): void {
     this.currentX = 0;
@@ -77,8 +99,7 @@ export class WinterParallaxTracker {
   ): void {
     if (this.reducedMotion) return;
 
-    // Touch input stays flat. A tablet can still use depth when its current
-    // input is a mouse or trackpad, without listening to device orientation.
+    // Touch stays flat. A tablet may still use depth with a mouse or trackpad.
     if (pointerType === "touch") {
       this.resetImmediately();
       return;
@@ -94,22 +115,38 @@ export class WinterParallaxTracker {
     const normalizedX = clamp((x / dimensions.width - 0.5) * 2, -1, 1);
     const normalizedY = clamp((y / dimensions.height - 0.5) * 2, -1, 1);
 
-    // Moving the viewpoint right makes nearby snow appear to shift left.
+    // The scene travels opposite the viewpoint. Near planes travel farther.
     this.targetX = -removeDeadZone(normalizedX);
     this.targetY = -removeDeadZone(normalizedY);
   }
 
-  getOffset(depth: number, dimensions: Dimensions): WinterParallaxOffset {
+  getOffset(depth: number, dimensions: Dimensions): DepthParallaxOffset {
     if (!this.inputEnabled || this.reducedMotion) return { x: 0, y: 0 };
 
+    const limit = this.getOffsetLimit(depth, dimensions);
+    return {
+      x: this.currentX * limit.x,
+      y: this.currentY * limit.y,
+    };
+  }
+
+  getOffsetLimit(depth: number, dimensions: Dimensions): DepthParallaxOffset {
     const safeDepth = clamp(depth, 0, 1);
     const depthScale = 0.12 + Math.pow(safeDepth, 1.35) * 0.88;
-    const maxHorizontal = clamp(dimensions.width * 0.014, 20, 28);
-    const maxVertical = clamp(dimensions.height * 0.013, 11, 16);
 
     return {
-      x: this.currentX * maxHorizontal * depthScale,
-      y: this.currentY * maxVertical * depthScale,
+      x:
+        clamp(
+          dimensions.width * this.profile.horizontalRatio,
+          this.profile.horizontalMinimum,
+          this.profile.horizontalMaximum,
+        ) * depthScale,
+      y:
+        clamp(
+          dimensions.height * this.profile.verticalRatio,
+          this.profile.verticalMinimum,
+          this.profile.verticalMaximum,
+        ) * depthScale,
     };
   }
 
@@ -118,7 +155,7 @@ export class WinterParallaxTracker {
     if (reducedMotion) this.resetImmediately();
   }
 
-  getStats(): WinterParallaxStats {
+  getStats(): DepthParallaxStats {
     return {
       enabled: this.inputEnabled && !this.reducedMotion,
       currentX: this.currentX,

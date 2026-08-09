@@ -1,59 +1,89 @@
-import type { Dimensions } from "../../../core/domain/types.js";
 import { WinterConfig } from "../../../core/domain/constants.js";
-import type { Snowflake } from "../domain/models/winter-models.js";
+import type { Dimensions, QualityLevel } from "../../../core/domain/types.js";
+import { DepthParallaxTracker } from "../../../core/services/DepthParallaxTracker.js";
+import type {
+  Snowflake,
+  SnowOpticalClass,
+} from "../domain/models/winter-models.js";
+import {
+  createSnowOpticalFields,
+  getForegroundBirthX,
+  getSnowBandTargets,
+  type SnowBandTargets,
+} from "../domain/snow-optics.js";
+import {
+  SnowVolumeRenderer,
+  type SnowBandIndices,
+} from "./SnowVolumeRenderer.js";
 import { WinterCursorLightTracker } from "./WinterCursorLightTracker.js";
-import { WinterParallaxTracker } from "./WinterParallaxTracker.js";
 import { WinterWindField } from "./WinterWindField.js";
 
-export const createSnowflakeSystem = () => {
+interface SnowflakeSystemOptions {
+  random?: () => number;
+  createImage?: () => HTMLImageElement;
+}
+
+interface MutableSnowBandIndices {
+  powder: number[];
+  crystal: number[];
+  foreground: number[];
+}
+
+const WINTER_PARALLAX_PROFILE = {
+  horizontalMaximum: 64,
+  verticalMaximum: 34,
+} as const;
+const OPTICAL_FADE_PER_FRAME = 1 / 20;
+
+export const createSnowflakeSystem = (options: SnowflakeSystemOptions = {}) => {
   const config = WinterConfig;
-  const windField = new WinterWindField();
-  const parallaxTracker = new WinterParallaxTracker();
+  const random = options.random ?? Math.random;
+  const windField = new WinterWindField({ random });
+  const parallaxTracker = new DepthParallaxTracker(WINTER_PARALLAX_PROFILE);
   const cursorLightTracker = new WinterCursorLightTracker();
+  const renderer = new SnowVolumeRenderer(parallaxTracker, cursorLightTracker, {
+    createImage: options.createImage,
+  });
+  const bandIndices: MutableSnowBandIndices = {
+    powder: [],
+    crystal: [],
+    foreground: [],
+  };
   let currentDimensions: Dimensions = { width: 1, height: 1 };
+  let currentQuality: QualityLevel = "medium";
+  let reducedMotion = false;
+  let qualityConverged = true;
 
   const generateSnowflakeShape = (size: number): Path2D => {
     const path = new Path2D();
-    const branches = 6; // Classic 6-pointed snowflake
-    const complexity = Math.random() > 0.2 ? 2 : 1; // 80% chance of detailed snowflakes (was 50%)
+    const complexity = random() > 0.2 ? 2 : 1;
+    const branchLength = size * (0.8 + random() * 0.4);
 
-    // Use consistent length for all branches of this snowflake (determined once per snowflake)
-    const branchLength = size * (0.8 + Math.random() * 0.4);
-
-    for (let i = 0; i < branches; i++) {
-      const angle = (i * Math.PI * 2) / branches;
-
-      // Main branch - all branches use the same length for perfect symmetry
-      const endX = Math.cos(angle) * branchLength;
-      const endY = Math.sin(angle) * branchLength;
-
+    for (let branch = 0; branch < 6; branch += 1) {
+      const angle = (branch * Math.PI * 2) / 6;
       path.moveTo(0, 0);
-      path.lineTo(endX, endY);
+      path.lineTo(
+        Math.cos(angle) * branchLength,
+        Math.sin(angle) * branchLength,
+      );
 
-      // Add delicate side branches for more complex snowflakes
-      if (complexity > 1) {
-        for (let j = 1; j <= 2; j++) {
-          const branchPos = j / 3;
-          const branchX = Math.cos(angle) * branchLength * branchPos;
-          const branchY = Math.sin(angle) * branchLength * branchPos;
+      if (complexity === 1) continue;
+      for (let sideBranch = 1; sideBranch <= 2; sideBranch += 1) {
+        const branchPosition = sideBranch / 3;
+        const branchX = Math.cos(angle) * branchLength * branchPosition;
+        const branchY = Math.sin(angle) * branchLength * branchPosition;
+        const sideLength = size * 0.3 * (1 - branchPosition);
 
-          // Left side branch - consistent length for symmetry
-          const leftAngle = angle - Math.PI / 4;
-          const leftLength = size * 0.3 * (1 - branchPos);
-          path.moveTo(branchX, branchY);
-          path.lineTo(
-            branchX + Math.cos(leftAngle) * leftLength,
-            branchY + Math.sin(leftAngle) * leftLength,
-          );
-
-          // Right side branch - consistent length for symmetry
-          const rightAngle = angle + Math.PI / 4;
-          path.moveTo(branchX, branchY);
-          path.lineTo(
-            branchX + Math.cos(rightAngle) * leftLength,
-            branchY + Math.sin(rightAngle) * leftLength,
-          );
-        }
+        path.moveTo(branchX, branchY);
+        path.lineTo(
+          branchX + Math.cos(angle - Math.PI / 4) * sideLength,
+          branchY + Math.sin(angle - Math.PI / 4) * sideLength,
+        );
+        path.moveTo(branchX, branchY);
+        path.lineTo(
+          branchX + Math.cos(angle + Math.PI / 4) * sideLength,
+          branchY + Math.sin(angle + Math.PI / 4) * sideLength,
+        );
       }
     }
 
@@ -62,172 +92,375 @@ export const createSnowflakeSystem = () => {
 
   const randomSnowflakeColor = (): string => {
     const colors = config.snowflake.colors;
-    if (!colors.length) return "#FFFFFF";
-    return colors[Math.floor(Math.random() * colors.length)] ?? "#FFFFFF";
+    if (!colors.length) return "#ffffff";
+    return colors[Math.floor(random() * colors.length)] ?? "#ffffff";
   };
 
-  const createSnowflake = (width: number, height: number): Snowflake => {
-    const size =
-      Math.random() * (config.snowflake.maxSize - config.snowflake.minSize) +
+  const createDepth = (opticalClass: SnowOpticalClass): number => {
+    if (opticalClass === "powder") return random() * 0.46;
+    if (opticalClass === "foreground") return 0.78 + random() * 0.22;
+    return 0.24 + random() * 0.62;
+  };
+
+  const createSnowflake = (
+    width: number,
+    height: number,
+    opticalClass: SnowOpticalClass,
+    startAbove: boolean = false,
+  ): Snowflake => {
+    const baseSize =
+      random() * (config.snowflake.maxSize - config.snowflake.minSize) +
       config.snowflake.minSize;
-    const depth = Math.random(); // Depth for layering effects
+    const depth = createDepth(opticalClass);
+    const optical = createSnowOpticalFields(
+      opticalClass,
+      baseSize,
+      { width, height },
+      random,
+    );
+    const x =
+      opticalClass === "foreground"
+        ? getForegroundBirthX(width, random)
+        : random() * width;
 
     return {
-      x: Math.random() * width,
-      y: Math.random() * height,
+      x,
+      y: startAbove ? -optical.opticalScale - random() * 24 : random() * height,
       speed:
-        (Math.random() *
-          (config.snowflake.maxSpeed - config.snowflake.minSpeed) +
+        (random() * (config.snowflake.maxSpeed - config.snowflake.minSpeed) +
           config.snowflake.minSpeed) *
-        (0.5 + depth * 0.5), // Vary speed by depth
-      size: size * (0.4 + depth * 0.6), // Smaller flakes appear further away
-      sway: (Math.random() * 1 - 0.5) * (1 + depth),
-      opacity: (Math.random() * 0.6 + 0.3) * (0.6 + depth * 0.4),
-      shape: generateSnowflakeShape(size),
+        (0.5 + depth * 0.5),
+      size: baseSize * (0.4 + depth * 0.6),
+      sway: (random() - 0.5) * (1 + depth),
+      opacity: (random() * 0.6 + 0.3) * (0.6 + depth * 0.4),
+      shape: generateSnowflakeShape(baseSize),
       color: randomSnowflakeColor(),
-      rotation: Math.random() * Math.PI * 2,
-      rotationSpeed: (Math.random() - 0.5) * 0.02, // Gentle rotation
-      sparkle: Math.random() > 0.7 ? Math.random() : 0, // Only some sparkle
-      sparklePhase: Math.random() * Math.PI * 2,
+      rotation: random() * Math.PI * 2,
+      rotationSpeed: (random() - 0.5) * 0.02,
+      sparkle: random() > 0.7 ? random() : 0,
+      sparklePhase: random() * Math.PI * 2,
       depth,
       windVelocityX: 0,
       windVelocityY: 0,
+      ...optical,
     };
   };
 
   const getAdjustedDensity = (
     width: number,
     height: number,
-    quality: string,
+    quality: QualityLevel | string,
   ): number => {
     let adjustedDensity = config.snowflake.density;
     const screenArea = width * height;
     const desktopArea = 1920 * 1080;
-
-    // Preserve the spacious desktop composition without starving narrow
-    // viewports of enough flakes to make the shared wind field readable.
-    const screenSizeFactor = Math.min(
-      1,
-      Math.max(0.5, screenArea / desktopArea),
-    );
-    adjustedDensity *= screenSizeFactor;
-
+    adjustedDensity *= Math.min(1, Math.max(0.5, screenArea / desktopArea));
     if (width < 768) adjustedDensity *= 2.5;
-
-    if (quality === "low") {
+    if (
+      quality === "low" ||
+      quality === "minimal" ||
+      quality === "ultra-minimal"
+    ) {
       adjustedDensity *= 0.5;
     } else if (quality === "medium") {
       adjustedDensity *= 0.75;
     }
-
     return adjustedDensity;
   };
 
+  const getTargetCount = (
+    dimensions: Dimensions,
+    quality: QualityLevel | string,
+  ): number =>
+    Math.floor(
+      dimensions.width *
+        dimensions.height *
+        getAdjustedDensity(dimensions.width, dimensions.height, quality),
+    );
+
+  const rebuildBandIndices = (flakes: readonly Snowflake[]): void => {
+    bandIndices.powder.length = 0;
+    bandIndices.crystal.length = 0;
+    bandIndices.foreground.length = 0;
+    flakes.forEach((flake, index) =>
+      bandIndices[flake.opticalClass].push(index),
+    );
+  };
+
+  const createPopulation = (
+    dimensions: Dimensions,
+    quality: QualityLevel,
+    startAbove: boolean = false,
+  ): Snowflake[] => {
+    const total = getTargetCount(dimensions, quality);
+    const targets = getSnowBandTargets(total, dimensions, quality);
+    const flakes: Snowflake[] = [];
+    for (const opticalClass of ["powder", "crystal", "foreground"] as const) {
+      for (let index = 0; index < targets[opticalClass]; index += 1) {
+        flakes.push(
+          createSnowflake(
+            dimensions.width,
+            dimensions.height,
+            opticalClass,
+            startAbove,
+          ),
+        );
+      }
+    }
+    flakes.sort((left, right) => left.depth - right.depth);
+    rebuildBandIndices(flakes);
+    return flakes;
+  };
+
   const initialize = (
-    { width, height }: Dimensions,
-    quality: string,
+    dimensions: Dimensions,
+    quality: QualityLevel,
   ): Snowflake[] => {
     windField.initialize();
     parallaxTracker.initialize();
     cursorLightTracker.initialize();
-    currentDimensions = { width, height };
-    const adjustedDensity = getAdjustedDensity(width, height, quality);
-    const count = Math.floor(width * height * adjustedDensity);
-    const flakes = Array.from({ length: count }, () =>
-      createSnowflake(width, height),
+    currentDimensions = { ...dimensions };
+    currentQuality = quality;
+    qualityConverged = true;
+    renderer.initialize(quality);
+    return createPopulation(dimensions, quality);
+  };
+
+  const countBands = (flakes: readonly Snowflake[]): SnowBandTargets => {
+    const counts: SnowBandTargets = { powder: 0, crystal: 0, foreground: 0 };
+    for (const flake of flakes) counts[flake.opticalClass] += 1;
+    return counts;
+  };
+
+  const selectAdditionClass = (
+    counts: SnowBandTargets,
+    targets: SnowBandTargets,
+  ): SnowOpticalClass => {
+    const deficits = (["powder", "crystal", "foreground"] as const).map(
+      (opticalClass) => ({
+        opticalClass,
+        deficit: targets[opticalClass] - counts[opticalClass],
+      }),
     );
+    deficits.sort((left, right) => right.deficit - left.deficit);
+    return deficits[0]?.deficit && deficits[0].deficit > 0
+      ? deficits[0].opticalClass
+      : "crystal";
+  };
 
-    // Pre-sort by depth at initialization (depth never changes)
-    // This avoids sorting every frame in draw()
-    flakes.sort((a, b) => a.depth - b.depth);
+  const removeBalanced = (
+    flakes: Snowflake[],
+    removeCount: number,
+    targets: SnowBandTargets,
+  ): void => {
+    for (let removed = 0; removed < removeCount; removed += 1) {
+      const counts = countBands(flakes);
+      const source = (["powder", "crystal", "foreground"] as const)
+        .map((opticalClass) => ({
+          opticalClass,
+          surplus: counts[opticalClass] - targets[opticalClass],
+        }))
+        .sort((left, right) => right.surplus - left.surplus)[0]?.opticalClass;
+      let index = -1;
+      for (let candidate = flakes.length - 1; candidate >= 0; candidate -= 1) {
+        if (flakes[candidate]?.opticalClass === (source ?? "crystal")) {
+          index = candidate;
+          break;
+        }
+      }
+      flakes.splice(index >= 0 ? index : flakes.length - 1, 1);
+    }
+  };
 
-    return flakes;
+  const reclassifyTowardTargets = (
+    flakes: Snowflake[],
+    targets: SnowBandTargets,
+    changeLimit: number,
+  ): boolean => {
+    let changed = false;
+    for (let change = 0; change < changeLimit; change += 1) {
+      const counts = countBands(flakes);
+      const destination = (["foreground", "powder", "crystal"] as const).find(
+        (opticalClass) => counts[opticalClass] < targets[opticalClass],
+      );
+      if (!destination) break;
+      const source = (["powder", "crystal", "foreground"] as const).find(
+        (opticalClass) => counts[opticalClass] > targets[opticalClass],
+      );
+      if (!source) break;
+
+      const candidates = flakes
+        .map((flake, index) => ({ flake, index }))
+        .filter(({ flake }) => flake.opticalClass === source)
+        .sort((left, right) =>
+          destination === "foreground"
+            ? right.flake.depth - left.flake.depth
+            : left.flake.depth - right.flake.depth,
+        );
+      const candidate = candidates[0];
+      if (!candidate) break;
+      Object.assign(
+        candidate.flake,
+        createSnowOpticalFields(
+          destination,
+          candidate.flake.size,
+          currentDimensions,
+          random,
+        ),
+        { opticalAlpha: destination === "foreground" ? 0 : 1 },
+      );
+      changed = true;
+    }
+    return changed;
+  };
+
+  const convergeQuality = (
+    flakes: readonly Snowflake[],
+    dimensions: Dimensions,
+  ): Snowflake[] => {
+    const finalTarget = getTargetCount(dimensions, currentQuality);
+    if (qualityConverged && flakes.length === finalTarget)
+      return flakes as Snowflake[];
+    const changeLimit = Math.max(1, Math.ceil(finalTarget * 0.05));
+    let next = flakes as Snowflake[];
+    let structuralChange = false;
+
+    if (flakes.length < finalTarget) {
+      next = [...flakes];
+      const additions = Math.min(changeLimit, finalTarget - flakes.length);
+      const finalTargets = getSnowBandTargets(
+        finalTarget,
+        dimensions,
+        currentQuality,
+      );
+      const counts = countBands(next);
+      for (let index = 0; index < additions; index += 1) {
+        const opticalClass = selectAdditionClass(counts, finalTargets);
+        next.push(
+          createSnowflake(
+            dimensions.width,
+            dimensions.height,
+            opticalClass,
+            true,
+          ),
+        );
+        counts[opticalClass] += 1;
+      }
+      structuralChange = true;
+    } else if (flakes.length > finalTarget) {
+      next = [...flakes];
+      const removals = Math.min(changeLimit, flakes.length - finalTarget);
+      removeBalanced(
+        next,
+        removals,
+        getSnowBandTargets(finalTarget, dimensions, currentQuality),
+      );
+      structuralChange = true;
+    }
+
+    const currentTargets = getSnowBandTargets(
+      next.length,
+      dimensions,
+      currentQuality,
+    );
+    structuralChange =
+      reclassifyTowardTargets(next, currentTargets, changeLimit) ||
+      structuralChange;
+
+    if (structuralChange) {
+      next.sort((left, right) => left.depth - right.depth);
+      rebuildBandIndices(next);
+    }
+    const counts = countBands(next);
+    const targets = getSnowBandTargets(next.length, dimensions, currentQuality);
+    qualityConverged =
+      next.length === finalTarget &&
+      counts.powder === targets.powder &&
+      counts.crystal === targets.crystal &&
+      counts.foreground === targets.foreground;
+    return next;
   };
 
   const update = (
     flakes: Snowflake[],
-    { width, height }: Dimensions,
-    frameMultiplier: number = 1.0,
+    dimensions: Dimensions,
+    frameMultiplier: number = 1,
   ): Snowflake[] => {
-    currentDimensions = { width, height };
+    currentDimensions = { ...dimensions };
     windField.update(frameMultiplier);
     parallaxTracker.update(frameMultiplier);
     cursorLightTracker.update(frameMultiplier);
+    const activeFlakes = convergeQuality(flakes, dimensions);
 
-    return flakes.map((flake) => {
-      const wind = windField.sample(flake.x, flake.y, flake.depth, {
-        width,
-        height,
-      });
+    for (const flake of activeFlakes) {
+      const wind = windField.sample(flake.x, flake.y, flake.depth, dimensions);
       const response = 1 - Math.pow(0.86, frameMultiplier);
       const windVelocityX =
         flake.windVelocityX + (wind.x - flake.windVelocityX) * response;
       const windVelocityY =
         flake.windVelocityY + (wind.y - flake.windVelocityY) * response;
-
-      // Individual drift is now only surface texture. The shared field owns
-      // the visible motion, which lets neighboring flakes travel together.
       const microDrift =
         flake.sway * 0.12 +
         Math.sin(flake.y * 0.012 + flake.sparklePhase) * 0.08;
       const newX = flake.x + (windVelocityX + microDrift) * frameMultiplier;
       const newY =
         flake.y + Math.max(0.08, flake.speed + windVelocityY) * frameMultiplier;
-
       const windEnergy = Math.min(
         2.5,
         Math.hypot(windVelocityX, windVelocityY),
       );
-      const newRotation =
+      const rotation =
         flake.rotation +
         flake.rotationSpeed * (1 + windEnergy * 0.7) * frameMultiplier;
+      const sparklePhase = flake.sparklePhase + 0.05 * frameMultiplier;
+      const opticalTarget =
+        reducedMotion && flake.opticalClass === "foreground" ? 0 : 1;
+      const opticalStep = OPTICAL_FADE_PER_FRAME * frameMultiplier;
+      const opticalAlpha =
+        flake.opticalAlpha < opticalTarget
+          ? Math.min(opticalTarget, flake.opticalAlpha + opticalStep)
+          : Math.max(opticalTarget, flake.opticalAlpha - opticalStep);
 
-      // Update sparkle animation
-      const newSparklePhase = flake.sparklePhase + 0.05 * frameMultiplier;
-
-      if (newY > height) {
-        return {
-          ...flake,
-          y: Math.random() * -20 - 10,
-          x: Math.random() * width,
-          rotation: newRotation,
-          sparklePhase: newSparklePhase,
-          windVelocityX: 0,
-          windVelocityY: 0,
-        };
+      if (newY > dimensions.height) {
+        flake.x =
+          flake.opticalClass === "foreground"
+            ? getForegroundBirthX(dimensions.width, random)
+            : random() * dimensions.width;
+        flake.y = -flake.opticalScale - random() * 20;
+        flake.rotation = rotation;
+        flake.sparklePhase = sparklePhase;
+        flake.windVelocityX = 0;
+        flake.windVelocityY = 0;
+        flake.opticalAlpha = opticalAlpha;
+        continue;
       }
 
-      // Allow flakes to drift off-screen before recycling (buffer zone)
-      const buffer = 50;
-      if (newX > width + buffer) {
-        // Drifted off right edge - reappear from left
-        return {
-          ...flake,
-          x: -buffer + Math.random() * 10,
-          rotation: newRotation,
-          sparklePhase: newSparklePhase,
-        };
+      const buffer = Math.max(50, flake.opticalScale);
+      if (newX > dimensions.width + buffer) {
+        flake.x = -buffer + random() * 10;
+        flake.rotation = rotation;
+        flake.sparklePhase = sparklePhase;
+        flake.opticalAlpha = opticalAlpha;
+        continue;
       }
       if (newX < -buffer) {
-        // Drifted off left edge - reappear from right
-        return {
-          ...flake,
-          x: width + buffer - Math.random() * 10,
-          rotation: newRotation,
-          sparklePhase: newSparklePhase,
-        };
+        flake.x = dimensions.width + buffer - random() * 10;
+        flake.rotation = rotation;
+        flake.sparklePhase = sparklePhase;
+        flake.opticalAlpha = opticalAlpha;
+        continue;
       }
 
-      return {
-        ...flake,
-        x: newX,
-        y: newY,
-        rotation: newRotation,
-        sparklePhase: newSparklePhase,
-        windVelocityX,
-        windVelocityY,
-      };
-    });
+      flake.x = newX;
+      flake.y = newY;
+      flake.rotation = rotation;
+      flake.sparklePhase = sparklePhase;
+      flake.windVelocityX = windVelocityX;
+      flake.windVelocityY = windVelocityY;
+      flake.opticalAlpha = opticalAlpha;
+    }
+
+    return activeFlakes;
   };
 
   const draw = (
@@ -235,75 +468,18 @@ export const createSnowflakeSystem = () => {
     ctx: CanvasRenderingContext2D,
     dimensions: Dimensions,
   ): void => {
-    if (!ctx) return;
+    renderer.draw(flakes, bandIndices, ctx, dimensions);
+  };
 
-    // Flakes are pre-sorted by depth at initialization (depth never changes)
-    // so we can iterate directly without sorting each frame
-    flakes.forEach((flake) => {
-      const parallax = parallaxTracker.getOffset(flake.depth, dimensions);
-      const renderedX = flake.x + parallax.x;
-      const renderedY = flake.y + parallax.y;
-      const lightIntensity = cursorLightTracker.getIntensityAt(
-        renderedX,
-        renderedY,
-        flake.depth,
-        dimensions,
-      );
-      const facetResponse =
-        0.82 + Math.abs(Math.cos(flake.rotation * 3)) * 0.18;
-      const reflectedLight = lightIntensity * facetResponse;
-      ctx.save();
-      ctx.translate(renderedX, renderedY);
-      ctx.rotate(flake.rotation);
-
-      const depthFactor = 0.3 + flake.depth * 0.7;
-      const baseAlpha = flake.opacity * depthFactor;
-      ctx.globalAlpha = Math.min(
-        1,
-        baseAlpha + reflectedLight * (0.06 + flake.depth * 0.12),
-      );
-
-      ctx.strokeStyle = flake.color;
-      ctx.lineWidth = 0.4 + depthFactor * 0.5;
-      ctx.stroke(flake.shape);
-
-      if (reflectedLight > 0.01) {
-        // A second crisp stroke brightens only the snow. `shadowBlur` here
-        // would run an offscreen blur for every lit flake and costs too much
-        // at 4K, while a radial fill would expose the cursor as a flat circle.
-        ctx.globalCompositeOperation = "lighter";
-        ctx.globalAlpha = reflectedLight * (0.028 + flake.depth * 0.07);
-        ctx.strokeStyle = "#dff5ff";
-        ctx.lineWidth = 0.9 + flake.depth * 0.8;
-        ctx.stroke(flake.shape);
-
-        const glintPulse = Math.max(0, Math.sin(flake.sparklePhase)) ** 14;
-        const glintStrength =
-          reflectedLight *
-          flake.sparkle *
-          Math.pow(flake.depth, 1.6) *
-          glintPulse;
-
-        if (glintStrength > 0.08) {
-          const rayLength = 1.4 + glintStrength * 4.6;
-          const diagonalLength = rayLength * 0.42;
-          ctx.globalAlpha = Math.min(0.42, glintStrength * 0.55);
-          ctx.strokeStyle = "#f7fdff";
-          ctx.lineWidth = 0.45 + flake.depth * 0.4;
-          ctx.beginPath();
-          ctx.moveTo(-rayLength, 0);
-          ctx.lineTo(rayLength, 0);
-          ctx.moveTo(0, -rayLength);
-          ctx.lineTo(0, rayLength);
-          ctx.moveTo(-diagonalLength, -diagonalLength);
-          ctx.lineTo(diagonalLength, diagonalLength);
-          ctx.moveTo(-diagonalLength, diagonalLength);
-          ctx.lineTo(diagonalLength, -diagonalLength);
-          ctx.stroke();
-        }
-      }
-
-      ctx.restore();
+  const takeEvenly = (
+    flakes: readonly Snowflake[],
+    target: number,
+  ): Snowflake[] => {
+    if (flakes.length <= target) return [...flakes];
+    if (target <= 0) return [];
+    return Array.from({ length: target }, (_, index) => {
+      const sourceIndex = Math.floor((index * flakes.length) / target);
+      return flakes[sourceIndex] as Snowflake;
     });
   };
 
@@ -311,44 +487,57 @@ export const createSnowflakeSystem = () => {
     flakes: Snowflake[],
     oldDimensions: Dimensions,
     newDimensions: Dimensions,
-    quality: string,
+    quality: QualityLevel,
   ): Snowflake[] => {
     currentDimensions = { ...newDimensions };
-    const targetCount = Math.floor(
-      newDimensions.width *
-        newDimensions.height *
-        getAdjustedDensity(newDimensions.width, newDimensions.height, quality),
-    );
-
+    currentQuality = quality;
+    qualityConverged = true;
+    renderer.setQuality(quality);
     const widthScale =
       oldDimensions.width > 0 ? newDimensions.width / oldDimensions.width : 1;
     const heightScale =
       oldDimensions.height > 0
         ? newDimensions.height / oldDimensions.height
         : 1;
-    const resizedFlakes = flakes.map((flake) => ({
+    const resized = flakes.map((flake) => ({
       ...flake,
       x: flake.x * widthScale,
       y: flake.y * heightScale,
     }));
-    const currentCount = resizedFlakes.length;
+    const targetTotal = getTargetCount(newDimensions, quality);
+    const targets = getSnowBandTargets(targetTotal, newDimensions, quality);
+    const next: Snowflake[] = [];
 
-    if (targetCount > currentCount) {
-      return [
-        ...resizedFlakes,
-        ...Array.from({ length: targetCount - currentCount }, () =>
-          createSnowflake(newDimensions.width, newDimensions.height),
-        ),
-      ].sort((a, b) => a.depth - b.depth);
-    } else if (targetCount < currentCount) {
-      return resizedFlakes.slice(0, targetCount);
+    for (const opticalClass of ["powder", "crystal", "foreground"] as const) {
+      const existing = resized.filter(
+        (flake) => flake.opticalClass === opticalClass,
+      );
+      next.push(...takeEvenly(existing, targets[opticalClass]));
+      for (
+        let index = existing.length;
+        index < targets[opticalClass];
+        index += 1
+      ) {
+        next.push(
+          createSnowflake(
+            newDimensions.width,
+            newDimensions.height,
+            opticalClass,
+          ),
+        );
+      }
     }
 
-    return resizedFlakes;
+    next.sort((left, right) => left.depth - right.depth);
+    rebuildBandIndices(next);
+    return next;
   };
 
-  const setQuality = (_quality: string): void => {
-    // future: adjust density dynamically
+  const setQuality = (quality: QualityLevel): void => {
+    if (currentQuality === quality) return;
+    currentQuality = quality;
+    qualityConverged = false;
+    renderer.setQuality(quality);
   };
 
   const setPointer = (
@@ -357,30 +546,41 @@ export const createSnowflakeSystem = () => {
     active: boolean,
     pointerType?: string,
   ): void => {
-    windField.setPointer(x, y, active);
+    if (pointerType === "touch") {
+      windField.setPointer(0, 0, false);
+    } else {
+      windField.setPointer(x, y, active);
+    }
     parallaxTracker.setPointer(x, y, active, pointerType, currentDimensions);
     cursorLightTracker.setPointer(x, y, active, pointerType);
   };
 
-  const setReducedMotion = (reducedMotion: boolean): void => {
-    windField.setReducedMotion(reducedMotion);
-    parallaxTracker.setReducedMotion(reducedMotion);
-    cursorLightTracker.setReducedMotion(reducedMotion);
+  const setReducedMotion = (nextReducedMotion: boolean): void => {
+    reducedMotion = nextReducedMotion;
+    windField.setReducedMotion(nextReducedMotion);
+    parallaxTracker.setReducedMotion(nextReducedMotion);
+    cursorLightTracker.setReducedMotion(nextReducedMotion);
   };
 
   const triggerGust = (direction?: -1 | 1): void => {
     windField.triggerGust(direction);
   };
 
-  const getWindStats = () => windField.getStats();
-  const getParallaxStats = () => parallaxTracker.getStats();
-  const getCursorLightStats = () =>
-    cursorLightTracker.getStats(currentDimensions);
+  const getVolumeStats = () => ({
+    ...renderer.getStats(),
+    powder: bandIndices.powder.length,
+    crystal: bandIndices.crystal.length,
+    foreground: bandIndices.foreground.length,
+  });
 
   const cleanup = (): void => {
     windField.initialize();
     parallaxTracker.initialize();
     cursorLightTracker.initialize();
+    renderer.cleanup();
+    bandIndices.powder.length = 0;
+    bandIndices.crystal.length = 0;
+    bandIndices.foreground.length = 0;
   };
 
   return {
@@ -392,9 +592,11 @@ export const createSnowflakeSystem = () => {
     setPointer,
     setReducedMotion,
     triggerGust,
-    getWindStats,
-    getParallaxStats,
-    getCursorLightStats,
+    getWindStats: () => windField.getStats(),
+    getParallaxStats: () => parallaxTracker.getStats(),
+    getCursorLightStats: () => cursorLightTracker.getStats(currentDimensions),
+    getVolumeStats,
+    getBandIndices: (): SnowBandIndices => bandIndices,
     cleanup,
   };
 };

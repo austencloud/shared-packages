@@ -1,5 +1,7 @@
 // Winter-specific Models
 
+export type SnowOpticalClass = "powder" | "crystal" | "foreground";
+
 export interface Snowflake {
   x: number;
   y: number;
@@ -16,6 +18,11 @@ export interface Snowflake {
   depth: number; // For depth-based effects (0-1)
   windVelocityX: number; // Smoothed horizontal response to the shared wind field
   windVelocityY: number; // Smoothed vertical response to the shared wind field
+  opticalClass: SnowOpticalClass;
+  opticalVariant: number;
+  opticalFocus: number;
+  opticalScale: number;
+  opticalAlpha: number;
 }
 
 export interface ShootingStar {

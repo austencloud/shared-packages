@@ -1,7 +1,8 @@
 import type {
   Dimensions,
-  QualityLevel,
   GradientStop,
+  PerformanceMetrics,
+  QualityLevel,
 } from "../../../core/domain/types.js";
 import type { IBackgroundConfigurationService } from "../../../core/contracts/IBackgroundConfigurationService.js";
 import type { IBackgroundRenderingService } from "../../../core/contracts/IBackgroundRenderingService.js";
@@ -11,13 +12,14 @@ import {
   getRenderingService,
   getConfigurationService,
 } from "../../../core/services/ServiceFactory.js";
+import type { DepthParallaxStats } from "../../../core/services/DepthParallaxTracker.js";
 import type {
   ShootingStarState,
   Snowflake,
 } from "../domain/models/winter-models.js";
 import { createSnowflakeSystem } from "./SnowflakeSystem.js";
+import type { SnowVolumeStats } from "./SnowVolumeRenderer.js";
 import type { WinterCursorLightStats } from "./WinterCursorLightTracker.js";
-import type { WinterParallaxStats } from "./WinterParallaxTracker.js";
 import type { WinterWindStats } from "./WinterWindField.js";
 
 export interface WinterLayers {
@@ -67,15 +69,6 @@ export class WinterBackgroundSystem implements IBackgroundSystem {
     // Track whether we got real dimensions (canvas may not be laid out yet)
     this.initializedWithValidDimensions =
       dimensions.width > 0 && dimensions.height > 0;
-
-    // Pre-populate: Simulate animation already running
-    // Distribute snowflakes across the entire viewport height
-    this.snowflakes.forEach((snowflake) => {
-      // Random Y position from 0 to full height (instead of starting at top)
-      snowflake.y = Math.random() * dimensions.height;
-      // Random progress through sway animation
-      snowflake.x += Math.sin(Math.random() * Math.PI * 2) * snowflake.sway;
-    });
   }
 
   public update(dimensions: Dimensions, frameMultiplier: number = 1.0): void {
@@ -190,14 +183,30 @@ export class WinterBackgroundSystem implements IBackgroundSystem {
   public getStats(): {
     snowflakes: number;
     wind: WinterWindStats;
-    parallax: WinterParallaxStats;
+    parallax: DepthParallaxStats;
     cursorLight: WinterCursorLightStats;
+    volume: SnowVolumeStats;
   } {
     return {
       snowflakes: this.snowflakes.length,
       wind: this.snowflakeSystem.getWindStats(),
       parallax: this.snowflakeSystem.getParallaxStats(),
       cursorLight: this.snowflakeSystem.getCursorLightStats(),
+      volume: this.snowflakeSystem.getVolumeStats(),
+    };
+  }
+
+  public getMetrics(): PerformanceMetrics {
+    const volume = this.snowflakeSystem.getVolumeStats();
+    const warnings: string[] = [];
+    if (volume.atlasStatus === "loading")
+      warnings.push("winter-optics-loading");
+    if (volume.atlasStatus === "failed") warnings.push("winter-optics-failed");
+
+    return {
+      fps: 0,
+      particleCount: this.snowflakes.length,
+      warnings,
     };
   }
 }

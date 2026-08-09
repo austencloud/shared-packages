@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { WinterParallaxTracker } from "./WinterParallaxTracker.js";
+import { DepthParallaxTracker } from "./DepthParallaxTracker.js";
 
 const dimensions = { width: 1920, height: 1080 };
 
 function advance(
-  tracker: WinterParallaxTracker,
+  tracker: DepthParallaxTracker,
   frames: number,
   frameMultiplier: number = 1,
 ): void {
@@ -13,9 +13,9 @@ function advance(
   }
 }
 
-describe("WinterParallaxTracker", () => {
-  it("moves nearby snow farther than distant snow opposite the pointer", () => {
-    const tracker = new WinterParallaxTracker();
+describe("DepthParallaxTracker", () => {
+  it("moves nearby planes farther than distant planes opposite the pointer", () => {
+    const tracker = new DepthParallaxTracker();
     tracker.setPointer(
       dimensions.width,
       dimensions.height / 2,
@@ -36,8 +36,8 @@ describe("WinterParallaxTracker", () => {
     expect(Math.abs(near.x)).toBeLessThanOrEqual(28);
   });
 
-  it("returns to the anchored sky position without overshoot", () => {
-    const tracker = new WinterParallaxTracker();
+  it("returns to the anchored position without overshoot", () => {
+    const tracker = new DepthParallaxTracker();
     tracker.setPointer(0, 0, true, "mouse", dimensions);
     advance(tracker, 60);
     expect(tracker.getStats().currentX).toBeGreaterThan(0);
@@ -56,8 +56,8 @@ describe("WinterParallaxTracker", () => {
   });
 
   it("is time-corrected across different frame multipliers", () => {
-    const sixtyFps = new WinterParallaxTracker();
-    const thirtyFps = new WinterParallaxTracker();
+    const sixtyFps = new DepthParallaxTracker();
+    const thirtyFps = new DepthParallaxTracker();
     sixtyFps.setPointer(0, 0, true, "mouse", dimensions);
     thirtyFps.setPointer(0, 0, true, "mouse", dimensions);
 
@@ -75,7 +75,7 @@ describe("WinterParallaxTracker", () => {
   });
 
   it("stays flat for touch input", () => {
-    const tracker = new WinterParallaxTracker();
+    const tracker = new DepthParallaxTracker();
     tracker.setPointer(0, 0, true, "mouse", dimensions);
     advance(tracker, 30);
     expect(tracker.getStats().currentX).toBeGreaterThan(0);
@@ -87,7 +87,7 @@ describe("WinterParallaxTracker", () => {
   });
 
   it("resets immediately when reduced motion is enabled", () => {
-    const tracker = new WinterParallaxTracker();
+    const tracker = new DepthParallaxTracker();
     tracker.setPointer(0, 0, true, "pen", dimensions);
     advance(tracker, 30);
 
@@ -102,5 +102,15 @@ describe("WinterParallaxTracker", () => {
       targetX: 0,
       targetY: 0,
     });
+  });
+
+  it("reports the maximum travel for coverage calculations", () => {
+    const tracker = new DepthParallaxTracker();
+    const largeViewport = { width: 3840, height: 2160 };
+
+    const farLimit = tracker.getOffsetLimit(0, largeViewport);
+    expect(farLimit.x).toBeCloseTo(3.36);
+    expect(farLimit.y).toBeCloseTo(1.92);
+    expect(tracker.getOffsetLimit(1, largeViewport)).toEqual({ x: 28, y: 16 });
   });
 });
