@@ -1,5 +1,11 @@
 # @austencloud/backgrounds
 
+## 0.7.7
+
+### Patch Changes
+
+- 1cba684: Rebalance the Autumn scenery palette with a preserved golden focal light and richer shaded foliage.
+
 ## 0.7.6
 
 ### Patch Changes
