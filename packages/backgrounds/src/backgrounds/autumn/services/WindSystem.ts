@@ -1,118 +1,126 @@
-// WindSystem.ts - Wind gust management for autumn leaves
-// Handles periodic wind gusts that affect leaf movement
-
-import type { WindState } from "../domain/models/autumn-models.js";
-import { AUTUMN_WIND } from "../domain/constants/autumn-constants.js";
+import type {
+  AutumnWindPreset,
+  WindState,
+} from "../domain/models/autumn-models.js";
+import { AUTUMN_WIND_PRESETS } from "../domain/constants/autumn-constants.js";
 
 export interface WindSystem {
   state: WindState;
   initialize(): void;
   update(frameMultiplier: number): void;
   getWindForce(): number;
-  triggerGust(direction?: number): void;
+  setPreset(preset: AutumnWindPreset): void;
+  triggerGust(strength?: number): void;
 }
 
-export function createWindSystem(): WindSystem {
+export function getGustEnvelope(progress: number): number {
+  const clampedProgress = Math.min(1, Math.max(0, progress));
+  return Math.sin(clampedProgress * Math.PI) ** 1.25;
+}
+
+export function createWindSystem(random: () => number = Math.random): WindSystem {
+  let preset: AutumnWindPreset = "breezy";
+  let ambientPhase = 0;
+
   const state: WindState = {
     gust: {
       active: false,
       strength: 0,
       duration: 0,
+      totalDuration: 0,
       currentStrength: 0,
     },
     framesSinceLastGust: 0,
     nextGustIn: 0,
   };
 
+  function getConfig() {
+    return AUTUMN_WIND_PRESETS[preset];
+  }
+
+  function getNextGustInterval(): number {
+    const config = getConfig();
+    return (
+      config.gustIntervalMin +
+      random() * (config.gustIntervalMax - config.gustIntervalMin)
+    );
+  }
+
+  function getGustDuration(): number {
+    const config = getConfig();
+    return (
+      config.gustDurationMin +
+      random() * (config.gustDurationMax - config.gustDurationMin)
+    );
+  }
+
+  function getGustStrength(): number {
+    const config = getConfig();
+    const magnitude =
+      config.gustStrengthMin +
+      random() * (config.gustStrengthMax - config.gustStrengthMin);
+
+    return random() < 0.78 ? magnitude : -magnitude;
+  }
+
   function initialize(): void {
+    ambientPhase = random() * Math.PI * 2;
     state.framesSinceLastGust = 0;
     state.nextGustIn = getNextGustInterval();
     state.gust = {
       active: false,
       strength: 0,
       duration: 0,
+      totalDuration: 0,
       currentStrength: 0,
     };
   }
 
-  function getNextGustInterval(): number {
-    return (
-      AUTUMN_WIND.gustIntervalMin +
-      Math.random() *
-        (AUTUMN_WIND.gustIntervalMax - AUTUMN_WIND.gustIntervalMin)
-    );
-  }
-
-  function getGustDuration(): number {
-    return (
-      AUTUMN_WIND.gustDurationMin +
-      Math.random() *
-        (AUTUMN_WIND.gustDurationMax - AUTUMN_WIND.gustDurationMin)
-    );
-  }
-
-  function getGustStrength(): number {
-    const magnitude =
-      AUTUMN_WIND.gustStrengthMin +
-      Math.random() *
-        (AUTUMN_WIND.gustStrengthMax - AUTUMN_WIND.gustStrengthMin);
-    // Random direction
-    return Math.random() < 0.5 ? magnitude : -magnitude;
-  }
-
   function update(frameMultiplier: number): void {
+    ambientPhase += 0.008 * frameMultiplier;
     state.framesSinceLastGust += frameMultiplier;
 
-    // Check if it's time for a new gust
     if (!state.gust.active && state.framesSinceLastGust >= state.nextGustIn) {
       triggerGust();
     }
 
-    // Update active gust
-    if (state.gust.active) {
-      state.gust.duration -= frameMultiplier;
+    if (!state.gust.active) return;
 
-      // Ease in/out the gust strength
-      const totalDuration = getGustDuration(); // Approximate, for easing
-      const progress = 1 - state.gust.duration / totalDuration;
+    state.gust.duration = Math.max(0, state.gust.duration - frameMultiplier);
+    const elapsed = state.gust.totalDuration - state.gust.duration;
+    const progress = state.gust.totalDuration > 0
+      ? elapsed / state.gust.totalDuration
+      : 1;
+    state.gust.currentStrength =
+      state.gust.strength * getGustEnvelope(progress);
 
-      if (progress < 0.2) {
-        // Ease in
-        state.gust.currentStrength = state.gust.strength * (progress / 0.2);
-      } else if (progress > 0.7) {
-        // Ease out
-        state.gust.currentStrength =
-          state.gust.strength * ((1 - progress) / 0.3);
-      } else {
-        // Full strength
-        state.gust.currentStrength = state.gust.strength;
-      }
-
-      // Apply decay
-      state.gust.currentStrength *= 1 - AUTUMN_WIND.gustDecay * frameMultiplier;
-
-      // Check if gust is done
-      if (state.gust.duration <= 0) {
-        state.gust.active = false;
-        state.gust.currentStrength = 0;
-        state.framesSinceLastGust = 0;
-        state.nextGustIn = getNextGustInterval();
-      }
+    if (state.gust.duration <= 0) {
+      state.gust.active = false;
+      state.gust.currentStrength = 0;
+      state.framesSinceLastGust = 0;
+      state.nextGustIn = getNextGustInterval();
     }
   }
 
   function getWindForce(): number {
-    return state.gust.currentStrength;
+    const ambient = getConfig().ambientStrength * (0.78 + Math.sin(ambientPhase) * 0.22);
+    return ambient + state.gust.currentStrength;
   }
 
-  function triggerGust(direction?: number): void {
-    const strength = direction !== undefined ? direction : getGustStrength();
+  function setPreset(nextPreset: AutumnWindPreset): void {
+    preset = nextPreset;
+    state.framesSinceLastGust = 0;
+    state.nextGustIn = getNextGustInterval();
+  }
 
+  function triggerGust(strength?: number): void {
+    const duration = getGustDuration();
     state.gust = {
       active: true,
-      strength,
-      duration: getGustDuration(),
-      currentStrength: 0, // Will ramp up
+      strength: strength ?? getGustStrength(),
+      duration,
+      totalDuration: duration,
+      currentStrength: 0,
     };
   }
 
@@ -123,6 +131,7 @@ export function createWindSystem(): WindSystem {
     initialize,
     update,
     getWindForce,
+    setPreset,
     triggerGust,
   };
 }

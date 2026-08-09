@@ -1,193 +1,191 @@
-// AutumnBackgroundSystem.ts (renamed from AutumnDriftBackgroundSystem)
-// Main background system for autumn falling leaves animation
-
 import type { IBackgroundSystem } from "../../../core/contracts/IBackgroundSystem.js";
 import type {
-  Dimensions,
-  QualityLevel,
-  PerformanceMetrics,
   AccessibilitySettings,
+  Dimensions,
+  PerformanceMetrics,
+  QualityLevel,
 } from "../../../core/domain/types.js";
+import type {
+  AutumnDensityPreset,
+  AutumnWindPreset,
+} from "../domain/models/autumn-models.js";
+import {
+  AUTUMN_DENSITY_MULTIPLIERS,
+  AUTUMN_PARTICLE_COUNTS,
+} from "../domain/constants/autumn-constants.js";
 import { createLeafSystem, type LeafSystem } from "./LeafSystem.js";
 import { createWindSystem, type WindSystem } from "./WindSystem.js";
 import {
-  AUTUMN_PARTICLE_COUNTS,
-  AUTUMN_BACKGROUND,
-} from "../domain/constants/autumn-constants.js";
+  AutumnSceneryRenderer,
+  type AutumnSceneryLayers,
+} from "./AutumnSceneryRenderer.js";
 
-export interface AutumnLayers {
-  gradient: boolean;
+export interface AutumnLayers extends AutumnSceneryLayers {
   leaves: boolean;
 }
 
 export class AutumnBackgroundSystem implements IBackgroundSystem {
-  private leafSystem: LeafSystem;
-  private windSystem: WindSystem;
-
+  private readonly leafSystem: LeafSystem;
+  private readonly windSystem: WindSystem;
+  private readonly scenery: AutumnSceneryRenderer;
   private quality: QualityLevel = "medium";
+  private densityPreset: AutumnDensityPreset = "normal";
+  private windPreset: AutumnWindPreset = "breezy";
   private isInitialized = false;
   private reducedMotion = false;
   private thumbnailMode = false;
-
   private dimensions: Dimensions = { width: 0, height: 0 };
-  private frameCount = 0;
-
-  // Layer visibility
   private layers: AutumnLayers = {
-    gradient: true,
+    sky: true,
+    moon: true,
+    trees: true,
+    landscape: true,
     leaves: true,
+    owl: true,
   };
 
   constructor() {
     this.leafSystem = createLeafSystem();
     this.windSystem = createWindSystem();
+    this.scenery = new AutumnSceneryRenderer(this.quality);
   }
 
-  public initialize(dimensions: Dimensions, quality: QualityLevel): void {
+  initialize(dimensions: Dimensions, quality: QualityLevel): void {
     this.dimensions = dimensions;
     this.quality = quality;
-
-    const particleCount = this.getParticleCount();
-
     this.leafSystem.initialize({
-      particleCount,
+      particleCount: this.getParticleCount(),
       canvasWidth: dimensions.width,
       canvasHeight: dimensions.height,
     });
-
     this.windSystem.initialize();
-
+    this.windSystem.setPreset(this.windPreset);
+    this.scenery.initialize(dimensions, quality);
+    this.scenery.setReducedMotion(this.reducedMotion);
     this.isInitialized = true;
-    this.frameCount = 0;
   }
 
-  public update(dimensions: Dimensions, frameMultiplier: number = 1.0): void {
+  update(dimensions: Dimensions, frameMultiplier: number = 1): void {
     if (!this.isInitialized) return;
 
-    // Update dimensions if changed
     if (
       dimensions.width !== this.dimensions.width ||
       dimensions.height !== this.dimensions.height
     ) {
-      this.dimensions = dimensions;
-      this.leafSystem.resize(dimensions.width, dimensions.height);
+      this.handleResize(this.dimensions, dimensions);
     }
 
-    // 95% reduction for users with vestibular disorders (WCAG AAA)
-    const effectiveMultiplier = this.reducedMotion
-      ? frameMultiplier * 0.05
-      : frameMultiplier;
-
-    // Update wind system
+    this.scenery.update(frameMultiplier);
     if (!this.reducedMotion) {
-      this.windSystem.update(effectiveMultiplier);
+      this.windSystem.update(frameMultiplier);
+      this.leafSystem.update(this.windSystem.getWindForce(), frameMultiplier);
     }
-
-    // Get wind force and update leaves
-    const windForce = this.reducedMotion ? 0 : this.windSystem.getWindForce();
-    this.leafSystem.update(windForce, effectiveMultiplier);
-
-    this.frameCount++;
   }
 
-  public draw(ctx: CanvasRenderingContext2D, dimensions: Dimensions): void {
+  draw(ctx: CanvasRenderingContext2D, dimensions: Dimensions): void {
     if (!this.isInitialized) return;
 
-    // Draw background gradient
-    if (this.layers.gradient) {
-      this.drawBackground(ctx, dimensions);
-    }
-
-    // Draw leaves
-    if (this.layers.leaves) {
-      this.leafSystem.draw(ctx);
-    }
+    this.scenery.draw(ctx, dimensions, this.layers);
+    if (this.layers.leaves) this.leafSystem.draw(ctx);
   }
 
-  private drawBackground(
-    ctx: CanvasRenderingContext2D,
-    dimensions: Dimensions
-  ): void {
-    const gradient = ctx.createLinearGradient(0, 0, 0, dimensions.height);
-
-    for (const stop of AUTUMN_BACKGROUND.gradient) {
-      gradient.addColorStop(stop.stop, stop.color);
-    }
-
-    ctx.fillStyle = gradient;
-    ctx.fillRect(0, 0, dimensions.width, dimensions.height);
-  }
-
-  public setQuality(quality: QualityLevel): void {
+  setQuality(quality: QualityLevel): void {
     if (this.quality === quality) return;
-
     this.quality = quality;
 
     if (this.isInitialized) {
-      const particleCount = this.getParticleCount();
-      this.leafSystem.setParticleCount(particleCount);
+      this.leafSystem.setParticleCount(this.getParticleCount());
+      this.scenery.setQuality(quality);
     }
   }
 
   private getParticleCount(): number {
-    const baseCount =
-      AUTUMN_PARTICLE_COUNTS[this.quality] || AUTUMN_PARTICLE_COUNTS.medium;
-
-    // Thumbnail mode uses fewer particles but they're more visible
-    if (this.thumbnailMode) {
-      return Math.max(15, Math.floor(baseCount * 0.3));
-    }
-
-    return baseCount;
+    const baseCount = AUTUMN_PARTICLE_COUNTS[this.quality] ?? AUTUMN_PARTICLE_COUNTS.medium;
+    const aspect = this.dimensions.width / Math.max(this.dimensions.height, 1);
+    const portraitScale = aspect < 0.9 ? Math.max(0.58, aspect / 0.9) : 1;
+    const densityCount = Math.round(
+      baseCount * AUTUMN_DENSITY_MULTIPLIERS[this.densityPreset] * portraitScale
+    );
+    return this.thumbnailMode ? Math.max(4, Math.floor(densityCount * 0.3)) : densityCount;
   }
 
-  public cleanup(): void {
-    this.isInitialized = false;
-    this.frameCount = 0;
+  setDensityPreset(preset: AutumnDensityPreset): void {
+    this.densityPreset = preset;
+    if (this.isInitialized) this.leafSystem.setParticleCount(this.getParticleCount());
   }
 
-  public handleResize(
-    oldDimensions: Dimensions,
-    newDimensions: Dimensions
-  ): void {
+  setWindPreset(preset: AutumnWindPreset): void {
+    this.windPreset = preset;
+    this.windSystem.setPreset(preset);
+  }
+
+  triggerGust(): void {
+    if (!this.reducedMotion) this.windSystem.triggerGust();
+  }
+
+  setPointer(x: number, y: number, active: boolean, pointerType?: string): void {
+    this.scenery.setPointer(x, y, active, pointerType);
+  }
+
+  handleResize(_oldDimensions: Dimensions, newDimensions: Dimensions): void {
     this.dimensions = newDimensions;
     this.leafSystem.resize(newDimensions.width, newDimensions.height);
+    this.leafSystem.setParticleCount(this.getParticleCount());
+    this.scenery.resize(newDimensions);
   }
 
-  public setAccessibility(settings: AccessibilitySettings): void {
+  setAccessibility(settings: AccessibilitySettings): void {
     this.reducedMotion = settings.reducedMotion ?? false;
+    this.scenery.setReducedMotion(this.reducedMotion);
   }
 
-  public setThumbnailMode(enabled: boolean): void {
+  setThumbnailMode(enabled: boolean): void {
     this.thumbnailMode = enabled;
-
-    if (this.isInitialized) {
-      const particleCount = this.getParticleCount();
-      this.leafSystem.setParticleCount(particleCount);
-    }
+    if (this.isInitialized) this.leafSystem.setParticleCount(this.getParticleCount());
   }
 
-  public getMetrics(): PerformanceMetrics {
-    return {
-      fps: 0, // Would need timing to calculate
-      particleCount: this.leafSystem.leaves.length,
-      warnings: [],
+  setLayerVisibility(
+    layers: Partial<AutumnLayers> & { gradient?: boolean }
+  ): void {
+    const { gradient, ...nextLayers } = layers;
+    this.layers = {
+      ...this.layers,
+      ...nextLayers,
+      ...(gradient === undefined ? {} : { sky: gradient }),
     };
   }
 
-  /**
-   * Set layer visibility
-   */
-  public setLayerVisibility(layers: Partial<AutumnLayers>): void {
-    this.layers = { ...this.layers, ...layers };
-  }
-
-  /**
-   * Get current scene statistics
-   */
-  public getStats(): { leaves: number } {
+  getStats(): {
+    leaves: number;
+    matteLoaded: number;
+    treesLoaded: number;
+    platesLoaded: number;
+    plateTarget: number;
+  } {
+    const matteLoaded = this.scenery.getLoadedMatteCount();
+    const platesLoaded = this.scenery.getLoadedArtCount();
     return {
       leaves: this.leafSystem.leaves.length,
+      matteLoaded,
+      treesLoaded: platesLoaded,
+      platesLoaded,
+      plateTarget: this.scenery.getExpectedArtCount(),
     };
+  }
+
+  getMetrics(): PerformanceMetrics {
+    return {
+      fps: 0,
+      particleCount: this.leafSystem.leaves.length,
+      warnings:
+        this.scenery.getLoadedArtCount() < this.scenery.getExpectedArtCount()
+          ? ["Autumn art planes are loading"]
+          : [],
+    };
+  }
+
+  cleanup(): void {
+    this.isInitialized = false;
+    this.scenery.cleanup();
   }
 }

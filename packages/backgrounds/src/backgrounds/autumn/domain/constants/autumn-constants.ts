@@ -2,30 +2,37 @@
 // All tuning parameters for the autumn leaf particle system
 
 export const AUTUMN_PARTICLE_COUNTS = {
-  high: 100,
-  medium: 70,
-  low: 45,
-  minimal: 20,
-  "ultra-minimal": 10,
+  high: 24,
+  medium: 18,
+  low: 12,
+  minimal: 8,
+  "ultra-minimal": 4,
+} as const;
+
+export const AUTUMN_DENSITY_MULTIPLIERS = {
+  sparse: 0.35,
+  normal: 1,
+  dense: 1.35,
+  storm: 1.8,
 } as const;
 
 export const AUTUMN_PHYSICS = {
   // Base falling speed (faster than cherry blossom's 0.2 for heavier feel)
-  baseSpeed: 0.5,
-  speedVariance: 0.7,
+  baseSpeed: 0.24,
+  speedVariance: 0.38,
   // Horizontal drift
-  baseDrift: 0.15,
-  driftVariance: 0.2,
+  baseDrift: 0.08,
+  driftVariance: 0.13,
   // Rotation (faster than cherry blossom for tumbling effect)
-  rotationSpeed: { min: 0.02, max: 0.06 },
+  rotationSpeed: { min: 0.012, max: 0.038 },
   // Secondary rotation axis for 3D tumble
-  tumbleSpeed: { min: 0.015, max: 0.045 },
+  tumbleSpeed: { min: 0.01, max: 0.032 },
   // Size affects speed (larger = slower)
   sizeSpeedFactor: 0.6,
   // Spiral descent chance
-  spiralChance: 0.25,
-  spiralSpeed: 0.03,
-  spiralRadius: 0.4,
+  spiralChance: 0.14,
+  spiralSpeed: 0.022,
+  spiralRadius: 0.24,
 } as const;
 
 export const AUTUMN_WIND = {
@@ -42,35 +49,69 @@ export const AUTUMN_WIND = {
   gustDecay: 0.02,
 } as const;
 
+export const AUTUMN_WIND_PRESETS = {
+  calm: {
+    ambientStrength: 0.025,
+    gustIntervalMin: 480,
+    gustIntervalMax: 720,
+    gustDurationMin: 90,
+    gustDurationMax: 130,
+    gustStrengthMin: 0.18,
+    gustStrengthMax: 0.34,
+  },
+  breezy: {
+    ambientStrength: 0.09,
+    gustIntervalMin: 250,
+    gustIntervalMax: 430,
+    gustDurationMin: 75,
+    gustDurationMax: 115,
+    gustStrengthMin: 0.36,
+    gustStrengthMax: 0.72,
+  },
+  windy: {
+    ambientStrength: 0.2,
+    gustIntervalMin: 155,
+    gustIntervalMax: 280,
+    gustDurationMin: 70,
+    gustDurationMax: 110,
+    gustStrengthMin: 0.68,
+    gustStrengthMax: 1.08,
+  },
+  gusty: {
+    ambientStrength: 0.13,
+    gustIntervalMin: 90,
+    gustIntervalMax: 175,
+    gustDurationMin: 60,
+    gustDurationMax: 100,
+    gustStrengthMin: 0.95,
+    gustStrengthMax: 1.5,
+  },
+} as const;
+
 export const AUTUMN_COLORS = {
-  // Warm golds (30% chance)
-  golds: ["#D4A017", "#C9A227", "#B8860B", "#DAA520", "#E6B422"],
-  // Burnt oranges (30% chance)
-  oranges: ["#CC5500", "#E25822", "#D2691E", "#FF6B35", "#CD853F"],
-  // Deep reds (25% chance)
-  reds: ["#8B0000", "#A52A2A", "#CD5C5C", "#B22222", "#C41E3A"],
-  // Browns (10% chance)
-  browns: ["#8B4513", "#A0522D", "#6B4423", "#5D4037", "#704214"],
-  // Transitional greens (5% chance - leaves still turning)
-  greens: ["#556B2F", "#6B8E23", "#808000"],
+  golds: ["#f0a848", "#d98a35", "#c7782f", "#b66927"],
+  oranges: ["#c9652a", "#ad4f22", "#e07a2d", "#8a3f20"],
+  reds: ["#873522", "#6f2b20", "#a84426", "#5a261e"],
+  browns: ["#654027", "#51311f", "#7a4929", "#3a2418"],
+  greens: ["#4b4328", "#3d3928"],
 } as const;
 
 export const AUTUMN_LEAF_SIZES = {
-  maple: { min: 18, max: 32 },
-  curved: { min: 16, max: 28 },
-  oak: { min: 18, max: 30 },
-  rounded: { min: 14, max: 24 },
-  double: { min: 20, max: 34 },
-  nature: { min: 16, max: 28 },
+  maple: { min: 10, max: 18 },
+  curved: { min: 9, max: 17 },
+  oak: { min: 10, max: 18 },
+  rounded: { min: 8, max: 15 },
+  double: { min: 11, max: 19 },
+  nature: { min: 9, max: 17 },
 } as const;
 
 export const AUTUMN_LEAF_DISTRIBUTION = {
-  maple: 0.25, // 25% - iconic autumn leaf
-  curved: 0.18, // 18%
-  oak: 0.2, // 20% - classic lobed shape
-  rounded: 0.15, // 15%
-  double: 0.1, // 10% - less common, adds variety
-  nature: 0.12, // 12%
+  maple: 0.12,
+  curved: 0.28,
+  oak: 0.24,
+  rounded: 0.22,
+  double: 0.05,
+  nature: 0.09,
 } as const;
 
 // Real SVG leaf paths from UXWing (free commercial use, no attribution)
@@ -111,10 +152,10 @@ export const AUTUMN_LEAF_PATHS = {
 export type LeafType = keyof typeof AUTUMN_LEAF_PATHS;
 
 export const AUTUMN_OPACITY = {
-  min: 0.7,
-  max: 1.0,
+  min: 0.34,
+  max: 0.72,
   // Depth affects opacity (further = more transparent)
-  depthFactor: 0.3,
+  depthFactor: 0.18,
 } as const;
 
 export const AUTUMN_BOUNDS = {

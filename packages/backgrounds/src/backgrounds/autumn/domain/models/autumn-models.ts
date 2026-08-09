@@ -16,6 +16,7 @@ export interface Leaf {
 
   // Velocity
   vx: number; // horizontal velocity (affected by wind)
+  baseVx: number; // natural drift before the wind envelope is applied
   vy: number; // vertical velocity (falling)
 
   // Visual properties
@@ -44,6 +45,7 @@ export interface WindGust {
   active: boolean;
   strength: number; // positive = right, negative = left
   duration: number; // frames remaining
+  totalDuration: number; // fixed duration used by the easing envelope
   currentStrength: number; // decaying value applied to leaves
 }
 
@@ -63,3 +65,6 @@ export interface AutumnConfig {
   quality: "high" | "medium" | "low" | "minimal";
   reducedMotion?: boolean;
 }
+
+export type AutumnDensityPreset = "sparse" | "normal" | "dense" | "storm";
+export type AutumnWindPreset = "calm" | "breezy" | "windy" | "gusty";
