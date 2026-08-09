@@ -25,6 +25,9 @@ export interface AutumnSceneryLayers {
 type AutumnArtworkKey = AutumnPlateRole | "flat";
 type AutumnArtwork = Partial<Record<AutumnArtworkKey, HTMLImageElement>>;
 
+const FAR_ARTWORK_FILTER = "saturate(0.8) brightness(0.98) contrast(1.03)";
+const MIDDLE_ARTWORK_FILTER = "saturate(0.9)";
+
 export class AutumnSceneryRenderer {
   private dimensions: Dimensions = { width: 0, height: 0 };
   private composition: AutumnComposition = getAutumnComposition(
@@ -130,6 +133,7 @@ export class AutumnSceneryRenderer {
   private drawFarGrove(ctx: CanvasRenderingContext2D): void {
     if (this.usesMultiplaneArtwork() && this.artwork.far) {
       this.drawPlate(ctx, "far");
+      this.drawFarPaletteBalance(ctx);
       return;
     }
 
@@ -141,7 +145,8 @@ export class AutumnSceneryRenderer {
         { x: 0, y: 0 },
         { x: 0, y: 0 },
       );
-      this.drawImage(ctx, flat, placement);
+      this.drawImage(ctx, flat, placement, 1, FAR_ARTWORK_FILTER);
+      this.drawFarPaletteBalance(ctx);
       return;
     }
 
@@ -174,7 +179,13 @@ export class AutumnSceneryRenderer {
       offset,
       offsetLimit,
     );
-    this.drawImage(ctx, image, placement);
+    const filter =
+      role === "far"
+        ? FAR_ARTWORK_FILTER
+        : role === "middle"
+          ? MIDDLE_ARTWORK_FILTER
+          : "none";
+    this.drawImage(ctx, image, placement, 1, filter);
   }
 
   private getPlateDefinition(
@@ -190,9 +201,11 @@ export class AutumnSceneryRenderer {
     image: HTMLImageElement,
     placement: { x: number; y: number; width: number; height: number },
     opacity: number = 1,
+    filter: string = "none",
   ): void {
     ctx.save();
     ctx.globalAlpha = opacity;
+    ctx.filter = filter;
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = "high";
     ctx.drawImage(
@@ -202,6 +215,35 @@ export class AutumnSceneryRenderer {
       placement.width,
       placement.height,
     );
+    ctx.restore();
+  }
+
+  private drawFarPaletteBalance(ctx: CanvasRenderingContext2D): void {
+    const { width, height } = this.dimensions;
+    const { glow } = this.composition;
+    const edgeTone = ctx.createRadialGradient(
+      glow.x,
+      glow.y,
+      Math.min(width, height) * 0.2,
+      glow.x,
+      glow.y,
+      Math.max(width, height) * 0.88,
+    );
+    edgeTone.addColorStop(0, "rgba(86, 62, 35, 0)");
+    edgeTone.addColorStop(0.56, "rgba(77, 44, 43, 0.025)");
+    edgeTone.addColorStop(1, "rgba(48, 55, 30, 0.1)");
+
+    const canopyTone = ctx.createLinearGradient(0, 0, 0, height);
+    canopyTone.addColorStop(0, "rgba(74, 31, 45, 0.085)");
+    canopyTone.addColorStop(0.52, "rgba(78, 49, 35, 0.018)");
+    canopyTone.addColorStop(1, "rgba(55, 58, 31, 0.045)");
+
+    ctx.save();
+    ctx.globalCompositeOperation = "multiply";
+    ctx.fillStyle = edgeTone;
+    ctx.fillRect(0, 0, width, height);
+    ctx.fillStyle = canopyTone;
+    ctx.fillRect(0, 0, width, height);
     ctx.restore();
   }
 
