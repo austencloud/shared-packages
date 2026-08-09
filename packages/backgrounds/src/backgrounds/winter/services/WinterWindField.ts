@@ -38,6 +38,7 @@ interface PointerWake {
   velocityX: number;
   velocityY: number;
   life: number;
+  influence: number;
   spin: -1 | 1;
 }
 
@@ -133,6 +134,7 @@ export class WinterWindField {
     this.pointer.velocityY *= pointerDecay;
     const wakeDecay = Math.pow(0.94, step);
     const wakeVelocityDecay = Math.pow(0.985, step);
+    const wakeInfluenceRise = 1 - Math.pow(0.84, step);
     this.pointerWakes = this.pointerWakes
       .map((wake) => ({
         ...wake,
@@ -141,6 +143,7 @@ export class WinterWindField {
         velocityX: wake.velocityX * wakeVelocityDecay,
         velocityY: wake.velocityY * wakeVelocityDecay,
         life: wake.life * wakeDecay,
+        influence: wake.influence + (1 - wake.influence) * wakeInfluenceRise,
       }))
       .filter((wake) => wake.life > 0.02);
 
@@ -268,6 +271,7 @@ export class WinterWindField {
         velocityX,
         velocityY,
         life: 1,
+        influence: 0.37,
         spin: this.nextPointerWakeSpin,
       });
       this.nextPointerWakeSpin = this.nextPointerWakeSpin === 1 ? -1 : 1;
@@ -335,6 +339,7 @@ export class WinterWindField {
       100,
       220,
     );
+    const coreRadius = radius * 0.12;
     let forceX = 0;
     let forceY = 0;
 
@@ -349,18 +354,23 @@ export class WinterWindField {
 
       const directionX = wake.velocityX / speed;
       const directionY = wake.velocityY / speed;
-      const normalX = distance > 1 ? offsetX / distance : -directionY;
-      const normalY = distance > 1 ? offsetY / distance : directionX;
+      const radialScale = clamp(distance / coreRadius, 0, 1);
+      const normalX = distance > 0.001 ? (offsetX / distance) * radialScale : 0;
+      const normalY = distance > 0.001 ? (offsetY / distance) * radialScale : 0;
       const tangentX = -normalY * wake.spin;
       const tangentY = normalX * wake.spin;
       const falloff = (1 - distance / radius) ** 2;
       const speedScale = clamp(speed / 10, 0.18, 1);
       const strength =
-        falloff * speedScale * wake.life * (0.55 + depthScale * 0.95);
+        falloff *
+        speedScale *
+        wake.life *
+        wake.influence *
+        (0.55 + depthScale * 0.95);
 
-      // Adjacent pockets rotate in opposite directions, like the paired curls
-      // behind an object moving through air. The snow reveals the S-shaped
-      // wake for a moment without drawing a trail over the scene.
+      // A new pocket gathers strength over a few frames, and its center stays
+      // soft. Without both transitions, a flake under the pointer can visibly
+      // snap as the next curl appears or the pointer crosses its center.
       forceX +=
         directionX * strength * 0.48 +
         normalX * strength * 0.62 +

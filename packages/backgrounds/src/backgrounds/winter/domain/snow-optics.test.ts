@@ -6,6 +6,7 @@ import {
   getForegroundBirthX,
   getSnowBandTargets,
   getSnowGustStretch,
+  getSnowWindTilt,
 } from "./snow-optics.js";
 
 function createRandom(seed: number = 123456789): () => number {
@@ -58,6 +59,15 @@ describe("winter snow optics", () => {
     expect(getSnowGustStretch(0, 0)).toBe(1);
     expect(getSnowGustStretch(1, 1)).toBeGreaterThan(1);
     expect(getSnowGustStretch(100, 100)).toBe(1.35);
+  });
+
+  it("keeps foreground wind tilt continuous when direction crosses left", () => {
+    const justAboveLeft = getSnowWindTilt(-1, -0.001);
+    const justBelowLeft = getSnowWindTilt(-1, 0.001);
+
+    expect(Math.abs(justAboveLeft - justBelowLeft)).toBeLessThan(0.001);
+    expect(Math.abs(getSnowWindTilt(0, 100))).toBeLessThan(0.19);
+    expect(Math.abs(getSnowWindTilt(0, -100))).toBeLessThan(0.19);
   });
 
   it("keeps atlas metadata and optical fields inside their render bounds", () => {

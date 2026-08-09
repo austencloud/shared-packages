@@ -7,6 +7,13 @@ function magnitude(vector: { x: number; y: number }): number {
   return Math.hypot(vector.x, vector.y);
 }
 
+function subtract(
+  first: { x: number; y: number },
+  second: { x: number; y: number },
+): { x: number; y: number } {
+  return { x: first.x - second.x, y: first.y - second.y };
+}
+
 function advance(field: WinterWindField, frames: number): void {
   for (let frame = 0; frame < frames; frame++) field.update(1);
 }
@@ -63,6 +70,60 @@ describe("WinterWindField", () => {
     expect(Math.hypot(faded.x - baseline.x, faded.y - baseline.y)).toBeLessThan(
       0.02,
     );
+  });
+
+  it("eases a new pointer wake in instead of snapping nearby flakes", () => {
+    const field = new WinterWindField({ seed: 21, random: () => 0.5 });
+    const ambient = new WinterWindField({ seed: 21, random: () => 0.5 });
+    field.setPointer(100, 300, true);
+    field.setPointer(180, 300, true);
+
+    advance(field, 1);
+    advance(ambient, 1);
+    const firstFrame = magnitude(
+      subtract(
+        field.sample(140, 330, 1, dimensions),
+        ambient.sample(140, 330, 1, dimensions),
+      ),
+    );
+
+    advance(field, 3);
+    advance(ambient, 3);
+    const settled = magnitude(
+      subtract(
+        field.sample(140, 330, 1, dimensions),
+        ambient.sample(140, 330, 1, dimensions),
+      ),
+    );
+
+    expect(firstFrame).toBeGreaterThan(0.05);
+    expect(firstFrame).toBeLessThan(settled * 0.9);
+  });
+
+  it("keeps the wake force continuous through its center", () => {
+    const field = new WinterWindField({ seed: 27, random: () => 0.5 });
+    const ambient = new WinterWindField({ seed: 27, random: () => 0.5 });
+    field.setPointer(100, 300, true);
+    field.setPointer(180, 300, true);
+    advance(field, 8);
+    advance(ambient, 8);
+
+    const wakeForces = Array.from({ length: 91 }, (_, index) => {
+      const x = 100 + index;
+      return subtract(
+        field.sample(x, 300, 1, dimensions),
+        ambient.sample(x, 300, 1, dimensions),
+      );
+    });
+    const largestOnePixelChange = Math.max(
+      ...wakeForces
+        .slice(1)
+        .map((force, index) =>
+          magnitude(subtract(force, wakeForces[index] ?? force)),
+        ),
+    );
+
+    expect(largestOnePixelChange).toBeLessThan(0.12);
   });
 
   it("leaves a readable ribbon that parts snow along the pointer path", () => {

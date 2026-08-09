@@ -5,6 +5,7 @@ import {
   SNOW_LIGHT_RESPONSES,
   SNOW_OPTICS_URL,
   getSnowGustStretch,
+  getSnowWindTilt,
 } from "../domain/snow-optics.js";
 import type { Snowflake } from "../domain/models/winter-models.js";
 import type { WinterCursorLightTracker } from "./WinterCursorLightTracker.js";
@@ -83,20 +84,8 @@ export class SnowVolumeRenderer {
 
     const parallaxEnabled = this.parallax.getStats().enabled;
 
-    this.drawPowder(
-      flakes,
-      bands.powder,
-      ctx,
-      dimensions,
-      parallaxEnabled,
-    );
-    this.drawCrystals(
-      flakes,
-      bands.crystal,
-      ctx,
-      dimensions,
-      parallaxEnabled,
-    );
+    this.drawPowder(flakes, bands.powder, ctx, dimensions, parallaxEnabled);
+    this.drawCrystals(flakes, bands.crystal, ctx, dimensions, parallaxEnabled);
     this.drawForeground(
       flakes,
       bands.foreground,
@@ -334,7 +323,7 @@ export class SnowVolumeRenderer {
       );
       const rotation =
         flake.rotation +
-        Math.atan2(flake.windVelocityY, flake.windVelocityX || 0.0001) * 0.08;
+        getSnowWindTilt(flake.windVelocityX, flake.windVelocityY);
       const alpha =
         clamp(0.12 + flake.opacity * 0.16 + light * 0.1, 0.1, 0.3) *
         flake.opticalAlpha;

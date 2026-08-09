@@ -110,6 +110,16 @@ export function getSnowGustStretch(
   return 1 + Math.min(0.35, Math.hypot(windVelocityX, windVelocityY) * 0.12);
 }
 
+export function getSnowWindTilt(
+  windVelocityX: number,
+  windVelocityY: number,
+): number {
+  // A stretched snowflake has an axis, not a forward-facing direction. Using
+  // the unsigned horizontal speed avoids the 180-degree angle seam that would
+  // otherwise make a foreground flake pop when its wind crosses that seam.
+  return Math.atan2(windVelocityY, Math.abs(windVelocityX) + 0.35) * 0.12;
+}
+
 export function createSnowOpticalFields(
   opticalClass: SnowOpticalClass,
   baseSize: number,
