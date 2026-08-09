@@ -131,7 +131,7 @@ export function createSnowOpticalFields(
       dimensions.width >= 900 && dimensions.width >= dimensions.height;
     const minimum = wide ? 20 : 16;
     const maximum = wide ? 84 : 48;
-    const focusRow = 2;
+    const focusRow = random() < 0.7 ? 2 : 3;
     const variant = focusRow * 4 + Math.floor(random() * 4);
     const sizeBias = Math.pow(random(), 0.58);
 

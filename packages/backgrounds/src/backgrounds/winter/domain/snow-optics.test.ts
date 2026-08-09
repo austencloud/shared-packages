@@ -63,22 +63,31 @@ describe("winter snow optics", () => {
   it("keeps atlas metadata and optical fields inside their render bounds", () => {
     const random = createRandom(42);
     const dimensions = { width: 3840, height: 2160 };
-    const foreground = Array.from({ length: 200 }, () =>
+    const foreground = Array.from({ length: 5_000 }, () =>
       createSnowOpticalFields("foreground", 8, dimensions, random),
     );
+    const mediumSoftCount = foreground.filter(
+      (profile) => profile.opticalVariant < 12,
+    ).length;
+    const mediumSoftShare = mediumSoftCount / foreground.length;
 
     expect(SNOW_ATLAS_CELLS).toHaveLength(16);
     expect(
       foreground.every(
         (profile) =>
           profile.opticalVariant >= 8 &&
-          profile.opticalVariant < 12 &&
+          profile.opticalVariant < 16 &&
           profile.opticalFocus >= 0 &&
           profile.opticalFocus <= 1 &&
           profile.opticalScale >= 20 &&
           profile.opticalScale <= 84,
       ),
     ).toBe(true);
+    expect(
+      new Set(foreground.map((profile) => profile.opticalVariant)).size,
+    ).toBe(8);
+    expect(mediumSoftShare).toBeGreaterThan(0.68);
+    expect(mediumSoftShare).toBeLessThan(0.72);
     expect(SNOW_LIGHT_RESPONSES).toEqual({
       powder: 0.55,
       crystal: 1,
