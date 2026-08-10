@@ -1,5 +1,11 @@
 # @austencloud/backgrounds
 
+## 0.7.9
+
+### Patch Changes
+
+- d2b34e9: Replace Autumn's full-screen image plate with a quiet layered silhouette scene.
+
 ## 0.7.8
 
 ### Patch Changes
