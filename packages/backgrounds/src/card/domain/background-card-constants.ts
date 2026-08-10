@@ -120,10 +120,10 @@ export const BACKGROUND_CARD_REGISTRY: ReadonlyArray<BackgroundCardMetadata> = [
   {
     type: "celestial",
     label: "Celestial",
-    gradient: "linear-gradient(135deg, #0a1a4a, #b89050, #ffd080)",
-    accentColor: "#ffd080",
+    gradient: "linear-gradient(135deg, #2070c8, #4a9ae8, #8dc4e8, #d4c8a0)",
+    accentColor: "#4a9ae8",
     iconSvg: FA_SUN,
-    themeColors: ["#0a1a4a", "#b89050", "#ffd080"],
+    themeColors: ["#2070c8", "#4a9ae8", "#8dc4e8", "#d4c8a0"],
   },
   {
     type: "void",
