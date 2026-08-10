@@ -1,5 +1,11 @@
 # @austencloud/backgrounds
 
+## 0.7.12
+
+### Patch Changes
+
+- 320af7e: Replace Celestial's old island scene with a bright animated cloud sky.
+
 ## 0.7.11
 
 ### Patch Changes
