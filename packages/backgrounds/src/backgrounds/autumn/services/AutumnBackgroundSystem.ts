@@ -174,12 +174,14 @@ export class AutumnBackgroundSystem implements IBackgroundSystem {
     platesLoaded: number;
     plateTarget: number;
   } {
+    const matteLoaded = this.scenery.getLoadedMatteCount();
+    const platesLoaded = this.scenery.getLoadedArtCount();
     return {
       leaves: this.leafSystem.leaves.length,
-      matteLoaded: 0,
-      treesLoaded: this.scenery.getTreeCount(),
-      platesLoaded: 0,
-      plateTarget: 0,
+      matteLoaded,
+      treesLoaded: platesLoaded,
+      platesLoaded,
+      plateTarget: this.scenery.getExpectedArtCount(),
     };
   }
 
@@ -188,7 +190,9 @@ export class AutumnBackgroundSystem implements IBackgroundSystem {
       fps: 0,
       particleCount: this.leafSystem.leaves.length,
       warnings:
-        this.scenery.getTreeCount() === 0 ? ["Autumn trees are loading"] : [],
+        this.scenery.getLoadedArtCount() < this.scenery.getExpectedArtCount()
+          ? ["Autumn art planes are loading"]
+          : [],
     };
   }
 

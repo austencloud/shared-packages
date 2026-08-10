@@ -2,11 +2,11 @@
 // All tuning parameters for the autumn leaf particle system
 
 export const AUTUMN_PARTICLE_COUNTS = {
-  high: 16,
-  medium: 12,
-  low: 8,
-  minimal: 5,
-  "ultra-minimal": 3,
+  high: 24,
+  medium: 18,
+  low: 12,
+  minimal: 8,
+  "ultra-minimal": 4,
 } as const;
 
 export const AUTUMN_DENSITY_MULTIPLIERS = {
@@ -152,8 +152,8 @@ export const AUTUMN_LEAF_PATHS = {
 export type LeafType = keyof typeof AUTUMN_LEAF_PATHS;
 
 export const AUTUMN_OPACITY = {
-  min: 0.28,
-  max: 0.58,
+  min: 0.34,
+  max: 0.72,
   // Depth affects opacity (further = more transparent)
   depthFactor: 0.18,
 } as const;
@@ -163,4 +163,14 @@ export const AUTUMN_BOUNDS = {
   respawnBuffer: 30,
   // Horizontal wrap margin
   wrapMargin: 50,
+} as const;
+
+export const AUTUMN_BACKGROUND = {
+  // Gradient stops for the dusk sky
+  gradient: [
+    { stop: 0, color: "#1a1520" }, // Deep purple-brown sky
+    { stop: 0.3, color: "#2d1f28" }, // Warm purple
+    { stop: 0.6, color: "#3d2a1f" }, // Amber-brown
+    { stop: 1.0, color: "#2a1810" }, // Dark earth
+  ],
 } as const;
