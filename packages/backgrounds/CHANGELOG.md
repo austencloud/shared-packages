@@ -1,5 +1,11 @@
 # @austencloud/backgrounds
 
+## 0.7.11
+
+### Patch Changes
+
+- Publish the restored Autumn grove from the committed package snapshot.
+
 ## 0.7.10
 
 ### Patch Changes
