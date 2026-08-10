@@ -156,3 +156,18 @@ export interface RGB {
 export interface TreeColors {
   silhouette: RGB;
 }
+
+export interface TreeSilhouetteStyle {
+  farSilhouette: RGB;
+  nearSilhouette: RGB;
+  rimLight: RGB | null;
+  farBaseRatio: number;
+  nearBaseRatio: number;
+  rimOpacity: readonly [number, number];
+  rimBlur: readonly [number, number];
+}
+
+export interface TreeSilhouetteSystemOptions {
+  layerConfigs?: readonly LayerConfig[];
+  style?: Partial<TreeSilhouetteStyle>;
+}

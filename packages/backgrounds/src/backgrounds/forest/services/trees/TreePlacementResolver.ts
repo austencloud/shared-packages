@@ -40,7 +40,7 @@ export interface ITreePlacementResolver {
     x: number,
     layer: number,
     placedTrees: PlacedTree[],
-    canvasWidth: number
+    canvasWidth: number,
   ): boolean;
 
   /** Find a valid position by nudging from ideal, returns null if none found */
@@ -48,21 +48,23 @@ export interface ITreePlacementResolver {
     idealX: number,
     layer: number,
     placedTrees: PlacedTree[],
-    canvasWidth: number
+    canvasWidth: number,
   ): number | null;
 
   /** Find nearest hero anchor to a position (if within snap distance) */
   getNearestHeroAnchor(
     x: number,
     canvasWidth: number,
-    usedAnchors: Set<number>
+    usedAnchors: Set<number>,
   ): number | null;
 
   /** Reset the seeded random generator */
   resetSeed(): void;
 }
 
-export function createTreePlacementResolver(): ITreePlacementResolver {
+export function createTreePlacementResolver(
+  layerCount: number = NUM_LAYERS,
+): ITreePlacementResolver {
   let placementConfig: PlacementConfig = { ...DEFAULT_PLACEMENT };
   let seed = Date.now();
 
@@ -118,8 +120,9 @@ export function createTreePlacementResolver(): ITreePlacementResolver {
 
   function getMinSpacing(layer: number, canvasWidth: number): number {
     const constants = getPlacementConstants();
-    // Interpolate: layer 0 uses far spacing, layer NUM_LAYERS-1 uses near spacing
-    const t = layer / (NUM_LAYERS - 1);
+    // Interpolate across the active scene profile, which may use fewer layers
+    // than the full Forest background.
+    const t = layer / Math.max(layerCount - 1, 1);
     const farSpacing = constants.MIN_SPACING.far;
     const nearSpacing = constants.MIN_SPACING.near;
     const spacing = farSpacing + (nearSpacing - farSpacing) * t;
@@ -130,7 +133,7 @@ export function createTreePlacementResolver(): ITreePlacementResolver {
     x: number,
     layer: number,
     placedTrees: PlacedTree[],
-    canvasWidth: number
+    canvasWidth: number,
   ): boolean {
     const constants = getPlacementConstants();
     const minSpacing = getMinSpacing(layer, canvasWidth);
@@ -155,7 +158,7 @@ export function createTreePlacementResolver(): ITreePlacementResolver {
     idealX: number,
     layer: number,
     placedTrees: PlacedTree[],
-    canvasWidth: number
+    canvasWidth: number,
   ): number | null {
     const constants = getPlacementConstants();
 
@@ -197,7 +200,7 @@ export function createTreePlacementResolver(): ITreePlacementResolver {
   function getNearestHeroAnchor(
     x: number,
     canvasWidth: number,
-    usedAnchors: Set<number>
+    usedAnchors: Set<number>,
   ): number | null {
     const constants = getPlacementConstants();
 

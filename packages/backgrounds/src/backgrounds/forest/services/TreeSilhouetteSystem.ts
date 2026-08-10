@@ -17,8 +17,13 @@ import type {
   RenderedTree,
   PlacementConfig,
   EcologicalPattern,
+  TreeSilhouetteSystemOptions,
 } from "../domain/models/tree-silhouette-models.js";
-import { NUM_LAYERS, ECOLOGICAL_PATTERNS } from "../domain/constants/tree-silhouette-constants.js";
+import {
+  NUM_LAYERS,
+  LAYER_CONFIGS,
+  ECOLOGICAL_PATTERNS,
+} from "../domain/constants/tree-silhouette-constants.js";
 import {
   createTreeSilhouetteImageLoader,
   type TreeSilhouetteImageLoader,
@@ -56,23 +61,38 @@ interface Tree extends RenderedTree {}
  * Creates forest silhouettes rising from the bottom of the screen.
  * Trees are dark shapes against the sky - no ground layers needed.
  */
-export function createTreeSilhouetteSystem() {
+export function createTreeSilhouetteSystem(
+  options: TreeSilhouetteSystemOptions = {},
+) {
   // ===================
   // COMPOSED SERVICES
   // ===================
 
-  const imageLoader: TreeSilhouetteImageLoader = createTreeSilhouetteImageLoader();
-  const placementResolver: ITreePlacementResolver = createTreePlacementResolver();
-  const patternProvider: IEcologicalPatternProvider = createEcologicalPatternProvider();
-  const renderer: ITreeSilhouetteRenderer = createTreeSilhouetteRenderer(imageLoader);
-  const generator: ITreeGenerator = createTreeGenerator(placementResolver, patternProvider);
+  const layerConfigs = options.layerConfigs ?? LAYER_CONFIGS;
+  const layerCount = layerConfigs.length;
+  const imageLoader: TreeSilhouetteImageLoader =
+    createTreeSilhouetteImageLoader();
+  const placementResolver: ITreePlacementResolver =
+    createTreePlacementResolver(layerCount);
+  const patternProvider: IEcologicalPatternProvider =
+    createEcologicalPatternProvider();
+  const renderer: ITreeSilhouetteRenderer = createTreeSilhouetteRenderer(
+    imageLoader,
+    layerCount,
+    options.style,
+  );
+  const generator: ITreeGenerator = createTreeGenerator(
+    placementResolver,
+    patternProvider,
+    layerConfigs,
+  );
 
   // ===================
   // CACHE STATE
   // ===================
 
   // One cached canvas per layer for interleaved rendering with grass
-  let layerCanvases: (OffscreenCanvas | null)[] = Array(NUM_LAYERS).fill(null);
+  let layerCanvases: (OffscreenCanvas | null)[] = Array(layerCount).fill(null);
   let cachedDimensions: Dimensions | null = null;
 
   // Store current trees for inspection and deletion
@@ -115,7 +135,7 @@ export function createTreeSilhouetteSystem() {
     currentTrees = trees;
 
     // Create separate canvas for each layer
-    for (let layer = 0; layer < NUM_LAYERS; layer++) {
+    for (let layer = 0; layer < layerCount; layer++) {
       const canvas = new OffscreenCanvas(dimensions.width, dimensions.height);
       const ctx = canvas.getContext("2d");
       if (!ctx) continue;
@@ -137,7 +157,7 @@ export function createTreeSilhouetteSystem() {
           tree.height,
           tree.type,
           tree.layer,
-          tree.seed
+          tree.seed,
         );
         // Track which image was used for this tree
         if (imageFilename) {
@@ -160,7 +180,7 @@ export function createTreeSilhouetteSystem() {
     renderer.clearUsedImages();
 
     // Create separate canvas for each layer
-    for (let layer = 0; layer < NUM_LAYERS; layer++) {
+    for (let layer = 0; layer < layerCount; layer++) {
       const canvas = new OffscreenCanvas(dimensions.width, dimensions.height);
       const ctx = canvas.getContext("2d");
       if (!ctx) continue;
@@ -181,7 +201,7 @@ export function createTreeSilhouetteSystem() {
           tree.height,
           tree.type,
           tree.layer,
-          tree.seed
+          tree.seed,
         );
         if (imageFilename) {
           tree.imageFilename = imageFilename;
@@ -231,7 +251,7 @@ export function createTreeSilhouetteSystem() {
   function drawLayer(
     ctx: CanvasRenderingContext2D,
     dimensions: Dimensions,
-    layer: number
+    layer: number,
   ): void {
     // Only initialize if cache doesn't exist OR dimensions changed
     if (!layerCanvases[0] || dimensionsChanged(dimensions)) {
@@ -250,7 +270,7 @@ export function createTreeSilhouetteSystem() {
 
   function handleResize(
     _oldDimensions: Dimensions,
-    newDimensions: Dimensions
+    newDimensions: Dimensions,
   ): void {
     // Skip if dimensions haven't actually changed
     if (!dimensionsChanged(newDimensions)) {
@@ -264,7 +284,7 @@ export function createTreeSilhouetteSystem() {
   }
 
   function cleanup(): void {
-    layerCanvases = Array(NUM_LAYERS).fill(null);
+    layerCanvases = Array(layerCount).fill(null);
     cachedDimensions = null;
   }
 
@@ -292,7 +312,9 @@ export function createTreeSilhouetteSystem() {
 
   function removeTreesByImage(imageFilename: string): number {
     const initialCount = currentTrees.length;
-    currentTrees = currentTrees.filter((t) => t.imageFilename !== imageFilename);
+    currentTrees = currentTrees.filter(
+      (t) => t.imageFilename !== imageFilename,
+    );
     const removedCount = initialCount - currentTrees.length;
 
     if (removedCount > 0 && cachedDimensions) {
@@ -303,7 +325,7 @@ export function createTreeSilhouetteSystem() {
   }
 
   function getTreeCounts(): { total: number; byLayer: number[] } {
-    const byLayer = Array(NUM_LAYERS).fill(0);
+    const byLayer = Array(layerCount).fill(0);
     for (const tree of currentTrees) {
       byLayer[tree.layer]++;
     }
@@ -341,12 +363,14 @@ export function createTreeSilhouetteSystem() {
     getEcologicalPatternId: () => patternProvider.getEcologicalPatternId(),
     getEcologicalPattern: () => patternProvider.getEcologicalPattern(),
     getAvailablePatterns: () => patternProvider.getAvailablePatterns(),
-    setRandomEcologicalPattern: () => patternProvider.setRandomEcologicalPattern(),
+    setRandomEcologicalPattern: () =>
+      patternProvider.setRandomEcologicalPattern(),
 
     // Tree management API
     getRenderedTrees,
     removeTree,
     removeTreesByImage,
     getTreeCounts,
+    getLayerCount: () => layerCount,
   };
 }

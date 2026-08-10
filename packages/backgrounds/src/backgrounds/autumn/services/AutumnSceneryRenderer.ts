@@ -1,11 +1,14 @@
 import type { Dimensions, QualityLevel } from "../../../core/domain/types.js";
 import { DepthParallaxTracker } from "../../../core/services/DepthParallaxTracker.js";
 import {
-  getAutumnFlatPath,
-  getAutumnImagePlacement,
-  getAutumnPlateAspect,
-  type AutumnPlateAspect,
-} from "../domain/autumn-plates.js";
+  AUTUMN_GROUND_STOPS,
+  AUTUMN_SKY_STOPS,
+  AUTUMN_TREE_LAYER_CONFIGS,
+  AUTUMN_TREE_PLACEMENT,
+  AUTUMN_TREE_STYLE,
+  AUTUMN_TREE_VISIBILITY,
+} from "../domain/autumn-silhouette-profile.js";
+import { createTreeSilhouetteSystem } from "../../forest/services/TreeSilhouetteSystem.js";
 
 export interface AutumnSceneryLayers {
   sky: boolean;
@@ -15,50 +18,34 @@ export interface AutumnSceneryLayers {
   owl: boolean;
 }
 
-const MATTE_DEPTH = 0.16;
+const TREE_PARALLAX_DEPTHS = [0.04, 0.1, 0.18, 0.3, 0.46] as const;
 
 export class AutumnSceneryRenderer {
   private dimensions: Dimensions = { width: 0, height: 0 };
   private readonly parallax = new DepthParallaxTracker({
-    horizontalRatio: 0.012,
-    horizontalMinimum: 18,
-    horizontalMaximum: 48,
-    verticalRatio: 0.01,
-    verticalMinimum: 10,
-    verticalMaximum: 28,
+    horizontalRatio: 0.008,
+    horizontalMinimum: 10,
+    horizontalMaximum: 30,
+    verticalRatio: 0.005,
+    verticalMinimum: 4,
+    verticalMaximum: 14,
   });
-  private artwork?: HTMLImageElement;
-  private activeAspect: AutumnPlateAspect | null = null;
-  private loadGeneration = 0;
+  private readonly trees = createTreeSilhouetteSystem({
+    layerConfigs: AUTUMN_TREE_LAYER_CONFIGS,
+    style: AUTUMN_TREE_STYLE,
+  });
 
-  constructor(_quality: QualityLevel = "medium") {}
+  constructor(_quality: QualityLevel = "medium") {
+    this.trees.setTreeVisibility(AUTUMN_TREE_VISIBILITY);
+    this.trees.setEcologicalPattern("autumn-clearing");
+    this.trees.setPlacementConfig(AUTUMN_TREE_PLACEMENT);
+  }
 
   initialize(dimensions: Dimensions, quality: QualityLevel): void {
     this.dimensions = dimensions;
     void quality;
     this.parallax.initialize();
-    this.loadArtwork(true);
-  }
-
-  private loadArtwork(force: boolean = false): void {
-    if (typeof window === "undefined") return;
-
-    const aspect = getAutumnPlateAspect(this.dimensions);
-    if (!force && aspect === this.activeAspect) return;
-
-    const generation = ++this.loadGeneration;
-    this.activeAspect = aspect;
-    this.artwork = undefined;
-
-    const image = new Image();
-    image.decoding = "async";
-    image.onload = () => {
-      if (generation === this.loadGeneration) this.artwork = image;
-    };
-    image.onerror = () => {
-      if (generation === this.loadGeneration) this.artwork = undefined;
-    };
-    image.src = getAutumnFlatPath(this.dimensions);
+    this.trees.initialize(dimensions);
   }
 
   update(frameMultiplier: number): void {
@@ -77,59 +64,99 @@ export class AutumnSceneryRenderer {
       this.resize(dimensions);
     }
 
-    if (layers.sky) this.drawMatte(ctx);
+    if (layers.sky) this.drawSky(ctx);
+    if (layers.landscape) this.drawGround(ctx);
+    if (layers.trees) this.drawTrees(ctx, layers.landscape);
   }
 
-  private drawMatte(ctx: CanvasRenderingContext2D): void {
-    const image = this.artwork;
-    if (image?.naturalWidth && image.naturalHeight) {
-      const offset = this.parallax.getOffset(MATTE_DEPTH, this.dimensions);
-      const offsetLimit = this.parallax.getOffsetLimit(
-        MATTE_DEPTH,
-        this.dimensions,
-      );
-      const placement = getAutumnImagePlacement(
-        { width: image.naturalWidth, height: image.naturalHeight },
-        this.dimensions,
-        offset,
-        offsetLimit,
-      );
-      this.drawImage(ctx, image, placement);
-      return;
+  private drawSky(ctx: CanvasRenderingContext2D): void {
+    const gradient = ctx.createLinearGradient(0, 0, 0, this.dimensions.height);
+    for (const stop of AUTUMN_SKY_STOPS) {
+      gradient.addColorStop(stop.stop, stop.color);
     }
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, this.dimensions.width, this.dimensions.height);
 
-    const fallback = ctx.createLinearGradient(0, 0, 0, this.dimensions.height);
-    fallback.addColorStop(0, "#2a1c16");
-    fallback.addColorStop(0.5, "#7a4b24");
-    fallback.addColorStop(1, "#17110e");
-    ctx.fillStyle = fallback;
+    const glow = ctx.createRadialGradient(
+      this.dimensions.width * 0.58,
+      this.dimensions.height * 0.42,
+      0,
+      this.dimensions.width * 0.58,
+      this.dimensions.height * 0.42,
+      Math.max(this.dimensions.width, this.dimensions.height) * 0.34,
+    );
+    glow.addColorStop(0, "rgba(128, 104, 82, 0.09)");
+    glow.addColorStop(1, "rgba(128, 104, 82, 0)");
+    ctx.fillStyle = glow;
     ctx.fillRect(0, 0, this.dimensions.width, this.dimensions.height);
   }
 
-  private drawImage(
-    ctx: CanvasRenderingContext2D,
-    image: HTMLImageElement,
-    placement: { x: number; y: number; width: number; height: number },
-  ): void {
-    ctx.save();
-    ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = "high";
-    ctx.drawImage(
-      image,
-      placement.x,
-      placement.y,
-      placement.width,
-      placement.height,
+  private drawGround(ctx: CanvasRenderingContext2D): void {
+    const groundTop = this.dimensions.height * 0.74;
+    const gradient = ctx.createLinearGradient(
+      0,
+      groundTop,
+      0,
+      this.dimensions.height,
     );
-    ctx.restore();
+    for (const stop of AUTUMN_GROUND_STOPS) {
+      gradient.addColorStop(stop.stop, stop.color);
+    }
+    ctx.fillStyle = gradient;
+    ctx.fillRect(
+      0,
+      groundTop,
+      this.dimensions.width,
+      this.dimensions.height - groundTop,
+    );
+  }
+
+  private drawTrees(
+    ctx: CanvasRenderingContext2D,
+    drawAtmosphere: boolean,
+  ): void {
+    for (let layer = 0; layer < this.trees.getLayerCount(); layer += 1) {
+      const depth = TREE_PARALLAX_DEPTHS[layer] ?? 0.46;
+      const offset = this.parallax.getOffset(depth, this.dimensions);
+      ctx.save();
+      ctx.translate(offset.x, offset.y);
+      this.trees.drawLayer(ctx, this.dimensions, layer);
+      ctx.restore();
+
+      if (drawAtmosphere && (layer === 0 || layer === 2)) {
+        this.drawMistBand(ctx, layer);
+      }
+    }
+  }
+
+  private drawMistBand(ctx: CanvasRenderingContext2D, layer: number): void {
+    const centerY = this.dimensions.height * (layer === 0 ? 0.74 : 0.84);
+    const bandHeight = this.dimensions.height * (layer === 0 ? 0.12 : 0.09);
+    const gradient = ctx.createLinearGradient(
+      0,
+      centerY - bandHeight,
+      0,
+      centerY + bandHeight,
+    );
+    gradient.addColorStop(0, "rgba(119, 117, 112, 0)");
+    gradient.addColorStop(
+      0.5,
+      `rgba(119, 117, 112, ${layer === 0 ? 0.1 : 0.055})`,
+    );
+    gradient.addColorStop(1, "rgba(119, 117, 112, 0)");
+    ctx.fillStyle = gradient;
+    ctx.fillRect(
+      0,
+      centerY - bandHeight,
+      this.dimensions.width,
+      bandHeight * 2,
+    );
   }
 
   resize(dimensions: Dimensions): void {
-    const previousAspect = getAutumnPlateAspect(this.dimensions);
+    const previousDimensions = this.dimensions;
     this.dimensions = dimensions;
-    if (getAutumnPlateAspect(dimensions) !== previousAspect) {
-      this.loadArtwork();
-    }
+    this.trees.handleResize(previousDimensions, dimensions);
   }
 
   setQuality(_quality: QualityLevel): void {}
@@ -147,22 +174,24 @@ export class AutumnSceneryRenderer {
     this.parallax.setReducedMotion(reducedMotion);
   }
 
+  getTreeCount(): number {
+    return this.trees.getTreeCounts().total;
+  }
+
   getLoadedArtCount(): number {
-    return this.artwork ? 1 : 0;
+    return 0;
   }
 
   getExpectedArtCount(): number {
-    return 1;
+    return 0;
   }
 
   getLoadedMatteCount(): number {
-    return this.getLoadedArtCount() >= this.getExpectedArtCount() ? 1 : 0;
+    return 0;
   }
 
   cleanup(): void {
-    this.loadGeneration += 1;
-    this.artwork = undefined;
-    this.activeAspect = null;
+    this.trees.cleanup();
     this.parallax.initialize();
   }
 }

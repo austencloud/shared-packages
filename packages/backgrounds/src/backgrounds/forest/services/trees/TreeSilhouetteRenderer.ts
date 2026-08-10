@@ -5,16 +5,24 @@
  * perspective (tinting) and rim light effects.
  */
 
-import type { TreeType, RGB, TreeColors } from "../../domain/models/tree-silhouette-models.js";
-import type { TreeCategory, TreeSilhouetteImageLoader } from "../TreeSilhouetteImageLoader.js";
+import type {
+  TreeType,
+  RGB,
+  TreeColors,
+  TreeSilhouetteStyle,
+} from "../../domain/models/tree-silhouette-models.js";
+import type {
+  TreeCategory,
+  TreeSilhouetteImageLoader,
+} from "../TreeSilhouetteImageLoader.js";
 import {
   NUM_LAYERS,
-  FAR_SILHOUETTE,
-  NEAR_SILHOUETTE,
-  RIM_LIGHT,
+  DEFAULT_TREE_SILHOUETTE_STYLE,
 } from "../../domain/constants/tree-silhouette-constants.js";
 
-type RenderContext = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
+type RenderContext =
+  | CanvasRenderingContext2D
+  | OffscreenCanvasRenderingContext2D;
 
 export interface ITreeSilhouetteRenderer {
   /** Preload tree silhouette images */
@@ -39,7 +47,7 @@ export interface ITreeSilhouetteRenderer {
     height: number,
     treeType: TreeType,
     layer: number,
-    seed: number
+    seed: number,
   ): string | null;
 
   /** Get silhouette color for a tree based on its layer depth */
@@ -54,8 +62,14 @@ export interface ITreeSilhouetteRenderer {
 }
 
 export function createTreeSilhouetteRenderer(
-  imageLoader: TreeSilhouetteImageLoader
+  imageLoader: TreeSilhouetteImageLoader,
+  layerCount: number = NUM_LAYERS,
+  styleOverrides: Partial<TreeSilhouetteStyle> = {},
 ): ITreeSilhouetteRenderer {
+  const style: TreeSilhouetteStyle = {
+    ...DEFAULT_TREE_SILHOUETTE_STYLE,
+    ...styleOverrides,
+  };
   let imagesLoaded = false;
   let usedImages: Set<string> = new Set();
 
@@ -96,26 +110,24 @@ export function createTreeSilhouetteRenderer(
   }
 
   function getTreeColors(layer: number): TreeColors {
-    // Interpolate based on layer position (0 = farthest, NUM_LAYERS-1 = nearest)
-    const t = layer / (NUM_LAYERS - 1);
+    // Interpolate based on layer position, from farthest to nearest.
+    const t = layer / Math.max(layerCount - 1, 1);
     // Ease-out curve: trees get dark quickly, only far layers stay light
     // t^0.4 makes mid-layers much darker while preserving the far->near gradient
     const easedT = Math.pow(t, 0.4);
     return {
-      silhouette: lerpColor(FAR_SILHOUETTE, NEAR_SILHOUETTE, easedT),
+      silhouette: lerpColor(style.farSilhouette, style.nearSilhouette, easedT),
     };
   }
 
   function getLayerBaseY(layer: number, canvasHeight: number): number {
     // Far trees (layer 0): base at ~82% down (below horizon at 78%, so they stand on ground)
     // Near trees (layer 6): base at 101% (extends below viewport)
-    const farBaseRatio = 0.82;
-    const nearBaseRatio = 1.01;
-
-    const t = layer / (NUM_LAYERS - 1);
+    const t = layer / Math.max(layerCount - 1, 1);
     // Ease-out curve so the depth effect is more pronounced for far layers
     const easedT = 1 - Math.pow(1 - t, 1.5);
-    const baseRatio = farBaseRatio + (nearBaseRatio - farBaseRatio) * easedT;
+    const baseRatio =
+      style.farBaseRatio + (style.nearBaseRatio - style.farBaseRatio) * easedT;
 
     return canvasHeight * baseRatio;
   }
@@ -128,13 +140,13 @@ export function createTreeSilhouetteRenderer(
     height: number,
     treeType: TreeType,
     layer: number,
-    seed: number
+    seed: number,
   ): string | null {
     // Use unique selector to prevent duplicate trees in the same scene
     const treeImage = imageLoader.getUniqueFromCategory(
       treeType as TreeCategory,
       usedImages,
-      seed
+      seed,
     );
     if (!treeImage) return null;
 
@@ -155,7 +167,7 @@ export function createTreeSilhouetteRenderer(
     // Create a temporary canvas for tinting
     const tempCanvas = new OffscreenCanvas(
       Math.ceil(targetWidth),
-      Math.ceil(targetHeight)
+      Math.ceil(targetHeight),
     );
     const tempCtx = tempCanvas.getContext("2d");
     if (!tempCtx) return null;
@@ -170,7 +182,7 @@ export function createTreeSilhouetteRenderer(
       0,
       0,
       targetWidth,
-      targetHeight
+      targetHeight,
     );
 
     // Apply darkness-based tint using composite operation
@@ -184,14 +196,19 @@ export function createTreeSilhouetteRenderer(
 
     // Apply rim light effect
     // For images, we draw a subtle glow behind
-    const t = layer / (NUM_LAYERS - 1);
-    const rimOpacity = 0.15 + t * 0.2;
-    ctx.globalCompositeOperation = "destination-over";
-    ctx.shadowColor = rgbToString(RIM_LIGHT, rimOpacity);
-    ctx.shadowBlur = 2 + t * 3;
-    ctx.drawImage(tempCanvas as CanvasImageSource, drawX, drawY);
-    ctx.shadowBlur = 0;
-    ctx.globalCompositeOperation = "source-over";
+    if (style.rimLight) {
+      const t = layer / Math.max(layerCount - 1, 1);
+      const rimOpacity =
+        style.rimOpacity[0] + t * (style.rimOpacity[1] - style.rimOpacity[0]);
+      const rimBlur =
+        style.rimBlur[0] + t * (style.rimBlur[1] - style.rimBlur[0]);
+      ctx.globalCompositeOperation = "destination-over";
+      ctx.shadowColor = rgbToString(style.rimLight, rimOpacity);
+      ctx.shadowBlur = rimBlur;
+      ctx.drawImage(tempCanvas as CanvasImageSource, drawX, drawY);
+      ctx.shadowBlur = 0;
+      ctx.globalCompositeOperation = "source-over";
+    }
 
     return treeImage.filename;
   }

@@ -100,18 +100,24 @@ export class AutumnBackgroundSystem implements IBackgroundSystem {
   }
 
   private getParticleCount(): number {
-    const baseCount = AUTUMN_PARTICLE_COUNTS[this.quality] ?? AUTUMN_PARTICLE_COUNTS.medium;
+    const baseCount =
+      AUTUMN_PARTICLE_COUNTS[this.quality] ?? AUTUMN_PARTICLE_COUNTS.medium;
     const aspect = this.dimensions.width / Math.max(this.dimensions.height, 1);
     const portraitScale = aspect < 0.9 ? Math.max(0.58, aspect / 0.9) : 1;
     const densityCount = Math.round(
-      baseCount * AUTUMN_DENSITY_MULTIPLIERS[this.densityPreset] * portraitScale
+      baseCount *
+        AUTUMN_DENSITY_MULTIPLIERS[this.densityPreset] *
+        portraitScale,
     );
-    return this.thumbnailMode ? Math.max(4, Math.floor(densityCount * 0.3)) : densityCount;
+    return this.thumbnailMode
+      ? Math.max(4, Math.floor(densityCount * 0.3))
+      : densityCount;
   }
 
   setDensityPreset(preset: AutumnDensityPreset): void {
     this.densityPreset = preset;
-    if (this.isInitialized) this.leafSystem.setParticleCount(this.getParticleCount());
+    if (this.isInitialized)
+      this.leafSystem.setParticleCount(this.getParticleCount());
   }
 
   setWindPreset(preset: AutumnWindPreset): void {
@@ -123,7 +129,12 @@ export class AutumnBackgroundSystem implements IBackgroundSystem {
     if (!this.reducedMotion) this.windSystem.triggerGust();
   }
 
-  setPointer(x: number, y: number, active: boolean, pointerType?: string): void {
+  setPointer(
+    x: number,
+    y: number,
+    active: boolean,
+    pointerType?: string,
+  ): void {
     this.scenery.setPointer(x, y, active, pointerType);
   }
 
@@ -141,11 +152,12 @@ export class AutumnBackgroundSystem implements IBackgroundSystem {
 
   setThumbnailMode(enabled: boolean): void {
     this.thumbnailMode = enabled;
-    if (this.isInitialized) this.leafSystem.setParticleCount(this.getParticleCount());
+    if (this.isInitialized)
+      this.leafSystem.setParticleCount(this.getParticleCount());
   }
 
   setLayerVisibility(
-    layers: Partial<AutumnLayers> & { gradient?: boolean }
+    layers: Partial<AutumnLayers> & { gradient?: boolean },
   ): void {
     const { gradient, ...nextLayers } = layers;
     this.layers = {
@@ -162,14 +174,12 @@ export class AutumnBackgroundSystem implements IBackgroundSystem {
     platesLoaded: number;
     plateTarget: number;
   } {
-    const matteLoaded = this.scenery.getLoadedMatteCount();
-    const platesLoaded = this.scenery.getLoadedArtCount();
     return {
       leaves: this.leafSystem.leaves.length,
-      matteLoaded,
-      treesLoaded: platesLoaded,
-      platesLoaded,
-      plateTarget: this.scenery.getExpectedArtCount(),
+      matteLoaded: 0,
+      treesLoaded: this.scenery.getTreeCount(),
+      platesLoaded: 0,
+      plateTarget: 0,
     };
   }
 
@@ -178,9 +188,7 @@ export class AutumnBackgroundSystem implements IBackgroundSystem {
       fps: 0,
       particleCount: this.leafSystem.leaves.length,
       warnings:
-        this.scenery.getLoadedArtCount() < this.scenery.getExpectedArtCount()
-          ? ["Autumn artwork is loading"]
-          : [],
+        this.scenery.getTreeCount() === 0 ? ["Autumn trees are loading"] : [],
     };
   }
 

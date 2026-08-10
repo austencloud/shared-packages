@@ -11,9 +11,9 @@ import type {
   TreeTypeVisibility,
   RenderedTree,
   PlacedTree,
+  LayerConfig,
 } from "../../domain/models/tree-silhouette-models.js";
 import {
-  NUM_LAYERS,
   LAYER_CONFIGS,
   TREE_TYPE_SCALES,
 } from "../../domain/constants/tree-silhouette-constants.js";
@@ -38,7 +38,8 @@ export interface ITreeGenerator {
 
 export function createTreeGenerator(
   placementResolver: ITreePlacementResolver,
-  patternProvider: IEcologicalPatternProvider
+  patternProvider: IEcologicalPatternProvider,
+  layerConfigs: readonly LayerConfig[] = LAYER_CONFIGS,
 ): ITreeGenerator {
   let currentVisibility: TreeTypeVisibility = {
     pine: true,
@@ -104,7 +105,7 @@ export function createTreeGenerator(
     const usedHeroAnchors = new Set<number>();
 
     // Generate trees layer by layer (far to near)
-    LAYER_CONFIGS.forEach((layerConfig, layerIndex) => {
+    layerConfigs.forEach((layerConfig, layerIndex) => {
       const { columns, heightPresets, widthRange } = layerConfig;
       const [minWidth, maxWidth] = widthRange;
 
@@ -116,11 +117,11 @@ export function createTreeGenerator(
         let heightBoost = 1;
 
         // For mid-to-near layers (second half), check for hero anchor snapping
-        if (layerIndex >= Math.floor(NUM_LAYERS / 2)) {
+        if (layerIndex >= Math.floor(layerConfigs.length / 2)) {
           const heroAnchor = placementResolver.getNearestHeroAnchor(
             idealX,
             width,
-            usedHeroAnchors
+            usedHeroAnchors,
           );
           if (heroAnchor !== null) {
             // Snap to hero position and mark as used
@@ -135,7 +136,7 @@ export function createTreeGenerator(
           idealX,
           layerIndex,
           placedTrees,
-          width
+          width,
         );
 
         // Skip tree if no valid position found
@@ -146,7 +147,7 @@ export function createTreeGenerator(
         const treeType = patternProvider.pickTypeForPosition(
           normalizedX,
           enabledTypes,
-          seededRandom
+          seededRandom,
         );
         const typeScale = TREE_TYPE_SCALES[treeType];
 
@@ -158,7 +159,10 @@ export function createTreeGenerator(
           typeScale.heightMin +
           seededRandom() * (typeScale.heightMax - typeScale.heightMin);
         const finalHeight =
-          height * (baseHeight + heightVariation) * heightBoost * speciesHeightScale;
+          height *
+          (baseHeight + heightVariation) *
+          heightBoost *
+          speciesHeightScale;
 
         // Calculate width with species scaling
         const baseWidth = minWidth + seededRandom() * (maxWidth - minWidth);

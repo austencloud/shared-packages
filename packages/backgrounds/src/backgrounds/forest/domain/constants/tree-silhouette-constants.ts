@@ -11,6 +11,7 @@ import type {
   EcologicalPattern,
   PlacementConfig,
   RGB,
+  TreeSilhouetteStyle,
 } from "../models/tree-silhouette-models.js";
 
 // ===================
@@ -131,6 +132,16 @@ export const NEAR_SILHOUETTE: RGB = { r: 0, g: 0, b: 0 }; // Pure black silhouet
 /** Rim light color - subtle moonlight edge glow */
 export const RIM_LIGHT: RGB = { r: 35, g: 45, b: 55 };
 
+export const DEFAULT_TREE_SILHOUETTE_STYLE: TreeSilhouetteStyle = {
+  farSilhouette: FAR_SILHOUETTE,
+  nearSilhouette: NEAR_SILHOUETTE,
+  rimLight: RIM_LIGHT,
+  farBaseRatio: 0.82,
+  nearBaseRatio: 1.01,
+  rimOpacity: [0.15, 0.35],
+  rimBlur: [2, 5],
+};
+
 // ===================
 // ECOLOGICAL PATTERNS
 // ===================
@@ -227,6 +238,28 @@ export const ECOLOGICAL_PATTERNS: EcologicalPattern[] = [
         startX: 0,
         endX: 1,
         weights: { dead: 8, oak: 1, pine: 1 },
+      },
+    ],
+  },
+  {
+    id: "autumn-clearing",
+    name: "Autumn Clearing",
+    description: "Broadleaf and bare trees frame a quiet center",
+    zones: [
+      {
+        startX: 0,
+        endX: 0.28,
+        weights: { maple: 5, oak: 3, dead: 2, poplar: 1 },
+      },
+      {
+        startX: 0.28,
+        endX: 0.72,
+        weights: { maple: 2, oak: 2, dead: 3 },
+      },
+      {
+        startX: 0.72,
+        endX: 1,
+        weights: { maple: 5, oak: 3, dead: 2, poplar: 1 },
       },
     ],
   },
