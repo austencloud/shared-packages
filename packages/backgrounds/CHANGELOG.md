@@ -1,5 +1,11 @@
 # @austencloud/backgrounds
 
+## 0.7.10
+
+### Patch Changes
+
+- 5fe8731: Restore Autumn's amber grove with responsive parallax plates.
+
 ## 0.7.9
 
 ### Patch Changes
