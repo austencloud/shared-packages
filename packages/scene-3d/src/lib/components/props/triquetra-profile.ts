@@ -2,11 +2,11 @@
  * Triquetra silhouette profile
  *
  * The 3D triquetra is not an approximation of the 2D prop — it IS the 2D
- * artwork, given depth. These contours are a direct transcription of the
- * filled path in `static/images/props/triquetra.svg` (viewBox 290.3x169.6):
- * every cubic below comes from that path, with its elliptical arcs converted
- * to beziers. One closed outline plus four holes — the two lower lobes, the
- * core triangle, and the upper lobe's ring interior.
+ * artwork, given depth. These contours are a direct transcription of one knot
+ * from `static/images/props/triquetra.svg` (viewBox 290.3x169.6): every cubic
+ * below comes from that file, with its elliptical arcs converted to beziers.
+ * One closed outline plus four holes — the two near lobes, the core triangle,
+ * and the far lobe's ring interior.
  *
  * Coordinates are normalized to the STAFF's drawn span (252.8 SVG units, the
  * shared unit across every prop drawing) and rotated into prop-local 2D space,
@@ -15,11 +15,15 @@
  *   x = (svgY - 84.8)  / 252.8    across the prop, spans [-0.335, 0.335]
  *   y = (svgX - 150.5) / 252.8    along the prop,  spans [-0.060, 0.553]
  *
- * The origin is the hand. The 2D prop's hand point is its viewBox centre
- * (`prop-svg-loader.ts`), which for this artwork lands 5.35 SVG units short of
- * the material; the transcription snaps it onto the plate's near cusp instead,
- * so the prop touches the hand the way Hoop3D's ring does. That is a 2cm
- * correction at default size and it moves nothing about the shape itself.
+ * The origin is the hand, and the table is written with the knot's near cusp
+ * sitting exactly on it. The artwork actually stands the cusp off the hand by
+ * `TRIQUETRA_CUSP_GAP`, which the builders add back — see that constant.
+ *
+ * One knot is not the whole prop. `triquetra.svg` draws TWO of them, mirrored
+ * about the hand, reaching in opposite directions: a double-ended prop just
+ * under a metre long, held in the middle where the two knots meet.
+ * `triquetra2.svg` draws a single knot held through the middle of the weave.
+ * Both are built from this one table.
  */
 
 import { Path, Shape } from "three";
@@ -109,81 +113,166 @@ const HOLE_FAR_LOBE: Contour = {
 export const TRIQUETRA_RIBBON_WIDTH = 0.0542;
 
 /**
- * The grip wrap, sized against the plate rather than guessed at.
+ * How far the knot's near cusp stands off the hand in the artwork, normalized
+ * to staff length — 5.35 SVG units, 1.8cm at default size.
  *
- * The hand sits at the origin, which is the cusp tip where the two near lobes
- * cross — the outline touches it exactly, so there is no material at or below
- * y = 0 near x = 0 and the wrap has to start there and run outward. Sampling
- * the silhouette on a grid gives the widest band the plate can hold at each
- * height, and the plate narrows fast: 2.2cm tall leaves room for a 9.7cm wrap,
- * while 3.6cm tall is already down to 7.6cm as the two near lobes' interiors
- * close in. Tape proportions win — a band as tall as it is deep reads as a
- * wrap around the crossing, where a squarer one reads as a badge stuck on the
- * face.
+ * The contour table above is written with the cusp on the origin, so every
+ * builder adds this back to restore the drawing. On the double prop it opens a
+ * 3.7cm channel between the two knots' cusps, and that channel is not an error
+ * in the drawing: it is where the handle goes. The grip band fills it and
+ * laps onto both knots, which is what joins them into one prop.
  */
-const GRIP_HALF_WIDTH = 0.056;
-const GRIP_HALF_HEIGHT = 0.013;
-const GRIP_CORNER = 0.006;
-
-/** Centre of the grip wrap along the prop, normalized to staff length. */
-export const TRIQUETRA_GRIP_CENTER_Y = GRIP_HALF_HEIGHT;
+export const TRIQUETRA_CUSP_GAP = 0.02117;
 
 /**
- * Ceiling on the wrap's own rolled edge. Unlike the plate, the binding
+ * The grip band, sized against the plate rather than guessed at. Width is set
+ * by the hand — 9.7cm — and is the same on both props. Height and placement
+ * are not, because the two bands do different jobs.
+ *
+ * On the double prop the band is structural and centred on the hand: 4.8cm
+ * spans the 3.7cm channel between the two cusps and still laps 0.55cm onto
+ * solid material at the narrowest point (x = 0), where sampling the silhouette
+ * puts the plate's edge at 1.8cm and unbroken material from there out to
+ * 7.9cm. The plate holds far more than 9.7cm of width at that height — 34cm
+ * before it runs out — so the band cannot overhang.
+ *
+ * On the single knot the band is a wrap, seated just past the hand on the
+ * ribbon dividing the core from the far lobe. That ribbon is 4.75cm thick but
+ * it is an ARC, so a straight band as tall as the ribbon runs off it at both
+ * ends: at 4.8cm tall the plate only carries 4.4cm of width, less than half
+ * the hand. Tape proportions are what fit — 2.2cm tall leaves room for 24.7cm,
+ * so the 9.7cm band sits well inside the material across its whole length.
+ */
+const GRIP_HALF_WIDTH = 0.056;
+
+interface GripBand {
+  /** Half-extent along the prop, normalized to staff length. */
+  readonly halfHeight: number;
+  /** Centre along the prop, normalized to staff length. */
+  readonly centerY: number;
+}
+
+/** Structural band bridging the two knots of the double prop. */
+export const TRIQUETRA_GRIP: GripBand = { halfHeight: 0.028, centerY: 0 };
+
+/** Wrap seated on the ribbon the single knot hangs from. */
+export const TRIQUETRA2_GRIP: GripBand = { halfHeight: 0.013, centerY: 0.013 };
+
+/**
+ * Ceiling on the band's own rolled edge. Unlike the plate, the binding
  * constraint here is the band's half-height, not a narrow feature of the
  * silhouette: a bevel that insets further than the band is thin folds the roll
  * through itself along the whole length of the wrap.
  */
-export const TRIQUETRA_GRIP_MAX_BEVEL = GRIP_HALF_HEIGHT * 0.4;
+export function triquetraGripMaxBevel(grip: GripBand): number {
+  return grip.halfHeight * 0.4;
+}
+
+/**
+ * How far along the prop the single-knot variant grips, normalized to staff
+ * length.
+ *
+ * triquetra2 is not a second drawing — measured against this profile it is one
+ * of the double prop's knots to within drawing noise, in a square viewBox that
+ * places the hand somewhere else entirely. Its viewBox centre lands at
+ * y = 0.21558 here, which is 0.79cm inside the core hole; the nearest material
+ * beyond it is y = 0.22468, exactly the core's far bound. So the hand hangs on
+ * the inner edge of the ribbon dividing the core from the far lobe — you put
+ * your hand through the middle of the weave rather than holding a junction.
+ * Snapping onto that edge is the one correction this variant needs: the prop
+ * has to touch the hand.
+ */
+export const TRIQUETRA2_GRIP_OFFSET = 0.22468;
+
+interface Placement {
+  /** Point in the contour table's own frame that is brought to the hand. */
+  readonly offset: number;
+  /** Reflect the knot back along the prop, for the double's second half. */
+  readonly mirror?: boolean;
+}
 
 function trace<T extends Shape | Path>(
   target: T,
   contour: Contour,
-  scale: number
+  scale: number,
+  place: Placement
 ): T {
-  target.moveTo(contour.start[0] * scale, contour.start[1] * scale);
+  const sy = place.mirror ? -scale : scale;
+  const shift = place.offset;
+  const px = (x: number) => x * scale;
+  const py = (y: number) => (y - shift) * sy;
+
+  target.moveTo(px(contour.start[0]), py(contour.start[1]));
   for (const [c1x, c1y, c2x, c2y, x, y] of contour.curves) {
-    target.bezierCurveTo(
-      c1x * scale,
-      c1y * scale,
-      c2x * scale,
-      c2y * scale,
-      x * scale,
-      y * scale
-    );
+    target.bezierCurveTo(px(c1x), py(c1y), px(c2x), py(c2y), px(x), py(y));
   }
   target.closePath();
   return target;
 }
 
-/**
- * Build the triquetra silhouette as a Three.js shape, sized against a staff of
- * `staffLength` units and lying in the XY plane ready to extrude, with the hand
- * at the origin and the prop reaching along +Y.
- */
-export function buildTriquetraShape(staffLength: number): Shape {
-  const shape = trace(new Shape(), OUTLINE, staffLength);
+function buildKnot(staffLength: number, place: Placement): Shape {
+  const shape = trace(new Shape(), OUTLINE, staffLength, place);
   shape.holes = [
-    trace(new Path(), HOLE_LEFT_LOBE, staffLength),
-    trace(new Path(), HOLE_RIGHT_LOBE, staffLength),
-    trace(new Path(), HOLE_CORE, staffLength),
-    trace(new Path(), HOLE_FAR_LOBE, staffLength),
+    trace(new Path(), HOLE_LEFT_LOBE, staffLength, place),
+    trace(new Path(), HOLE_RIGHT_LOBE, staffLength, place),
+    trace(new Path(), HOLE_CORE, staffLength, place),
+    trace(new Path(), HOLE_FAR_LOBE, staffLength, place),
   ];
   return shape;
 }
 
 /**
- * Build the grip wrap as a rounded rectangle in the same space as the plate,
- * centred on `TRIQUETRA_GRIP_CENTER_Y`. Extruding it rather than boxing it is
- * what makes it read as tape wrapped around plate stock: the rolled edge
- * catches the same highlight the plate's rim does, where a hard box face sits
- * on the artwork like a sticker.
+ * Build the double triquetra — two knots mirrored about the hand — sized
+ * against a staff of `staffLength` units and lying in the XY plane ready to
+ * extrude, with the hand at the origin and the prop reaching along both ±Y.
+ *
+ * The two knots interlock: their near lobes overlap across a lens either side
+ * of the junction, about 9% of the plate's area. That needs no boolean union
+ * to render. Both are extruded to identical depth in the same plane, so every
+ * face one knot contributes inside the other is exactly coplanar with it and
+ * every rim it contributes there sits at or below that plane — the depth test
+ * resolves the pair into the union's silhouette on its own.
  */
-export function buildTriquetraGripShape(staffLength: number): Shape {
+export function buildTriquetraShapes(staffLength: number): Shape[] {
+  // The table puts the cusp on the origin; bringing the point one gap SHORT of
+  // it to the hand stands both cusps back off by the gap, as drawn.
+  const place = { offset: -TRIQUETRA_CUSP_GAP };
+  return [
+    buildKnot(staffLength, place),
+    buildKnot(staffLength, { ...place, mirror: true }),
+  ];
+}
+
+/**
+ * Build a single triquetra knot gripped `gripOffset` along its length — the
+ * triquetra2 variant. The shape is the same one the double prop is made of;
+ * only where the hand meets it changes.
+ */
+export function buildTriquetraShape(
+  staffLength: number,
+  gripOffset: number
+): Shape {
+  return buildKnot(staffLength, { offset: gripOffset });
+}
+
+/**
+ * Build the grip band as a rounded rectangle in the same space as the plate,
+ * centred `centerY` along the prop. Extruding it rather than boxing it is what
+ * makes it read as a wrap around plate stock: the rolled edge catches the same
+ * highlight the plate's rim does, where a hard box face sits on the artwork
+ * like a sticker.
+ */
+export function buildTriquetraGripShape(
+  staffLength: number,
+  grip: GripBand
+): Shape {
   const w = GRIP_HALF_WIDTH * staffLength;
-  const h = GRIP_HALF_HEIGHT * staffLength;
-  const r = GRIP_CORNER * staffLength;
-  const cy = TRIQUETRA_GRIP_CENTER_Y * staffLength;
+  const h = grip.halfHeight * staffLength;
+  // A corner tied to the band's own thickness keeps the roll reading the same
+  // on both bands, where one radius shared between them would swallow the
+  // thinner one.
+  const r = h * 0.45;
+  const cy = grip.centerY * staffLength;
 
   const shape = new Shape();
   shape.moveTo(-w + r, cy - h);

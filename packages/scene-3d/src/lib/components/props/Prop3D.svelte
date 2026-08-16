@@ -104,8 +104,17 @@
   {:else if propType === PropType.TRIGENG}
     <Buugeng3D {propState} {color} {visible} {isActivePlayer} {length} />
 
-  {:else if propType === PropType.TRIQUETRA || propType === PropType.TRIQUETRA2}
+  {:else if propType === PropType.TRIQUETRA}
     <Triquetra3D {propState} {color} {visible} {isActivePlayer} {length} />
+  {:else if propType === PropType.TRIQUETRA2}
+    <Triquetra3D
+      {propState}
+      {color}
+      {visible}
+      {isActivePlayer}
+      {length}
+      variant="triquetra2"
+    />
 
   {:else if propType === PropType.SWORD}
     <Sword3D {propState} {color} {visible} {isActivePlayer} {length} />

@@ -13,9 +13,15 @@
   import {
     buildTriquetraGripShape,
     buildTriquetraShape,
-    TRIQUETRA_GRIP_MAX_BEVEL,
+    buildTriquetraShapes,
+    triquetraGripMaxBevel,
+    TRIQUETRA2_GRIP,
+    TRIQUETRA2_GRIP_OFFSET,
+    TRIQUETRA_GRIP,
     TRIQUETRA_RIBBON_WIDTH,
   } from "./triquetra-profile";
+
+  type TriquetraVariant = "triquetra" | "triquetra2";
 
   interface TriquetraGeometrySet {
     plate: BufferGeometry;
@@ -61,7 +67,7 @@
    * which is what keeps face and rim on separate materials.
    */
   function bullnose(
-    shape: Shape,
+    shape: Shape | Shape[],
     depth: number,
     maxInset: number
   ): BufferGeometry {
@@ -88,24 +94,29 @@
 
   function getTriquetraGeometrySet(
     length: number,
-    depth: number
+    depth: number,
+    variant: TriquetraVariant
   ): TriquetraGeometrySet {
-    const key = `${length}:${depth}`;
+    const key = `${length}:${depth}:${variant}`;
     const cached = geometrySets.get(key);
     if (cached) return cached;
 
+    const single = variant === "triquetra2";
+    const grip = single ? TRIQUETRA2_GRIP : TRIQUETRA_GRIP;
     const geometry = {
       plate: bullnose(
-        buildTriquetraShape(length),
+        single
+          ? buildTriquetraShape(length, TRIQUETRA2_GRIP_OFFSET)
+          : buildTriquetraShapes(length),
         depth,
         length * MAX_BEVEL_INSET
       ),
-      // The wrap stands proud of the plate on both faces, so it reads as
+      // The band stands proud of the plate on both faces, so it reads as
       // something added to the prop rather than printed on it.
       gripBand: bullnose(
-        buildTriquetraGripShape(length),
+        buildTriquetraGripShape(length, grip),
         depth * 1.3,
-        length * TRIQUETRA_GRIP_MAX_BEVEL
+        length * triquetraGripMaxBevel(grip)
       ),
     };
     geometrySets.set(key, geometry);
@@ -183,9 +194,11 @@
    * four holes are transcribed from the prop's SVG in `triquetra-profile.ts`,
    * so the 3D prop and the pictograph prop are the same shape by construction.
    *
-   * The hand sits at the cusp where the two near lobes meet and the prop
-   * reaches out along +Y from there — the hoop-family grip the 2D artwork
-   * encodes, not a centre hub.
+   * The default prop is DOUBLE, because the drawing is: two knots mirrored
+   * about the hand, reaching in opposite directions, joined by the grip band
+   * that fills the channel between their cusps. `variant="triquetra2"` is a
+   * single one of those knots, held through the middle of the weave — the only
+   * thing that drawing changes is where the hand meets the plate.
    *
    * Extrusion emits two material groups: group 0 is the pair of faces, group 1
    * is the rim, which is how the plate gets a darker turned edge.
@@ -205,7 +218,8 @@
     thickness,
     isActivePlayer = false,
     scale = 1,
-  }: Prop3DProps = $props();
+    variant = "triquetra",
+  }: Prop3DProps & { variant?: TriquetraVariant } = $props();
 
   const propLayer = $derived(isActivePlayer ? LAYER_PLAYER_BODY : LAYER_WORLD);
 
@@ -225,7 +239,7 @@
   const plateDepth = $derived(baseRadius * 1.4);
 
   const geometry = $derived(
-    getTriquetraGeometrySet(effectiveLength, plateDepth)
+    getTriquetraGeometrySet(effectiveLength, plateDepth, variant)
   );
   const materials = $derived(getTriquetraMaterialSet(color));
 
@@ -242,9 +256,10 @@
 
     <!--
       Every prop marks the hand with white. A ring would hoop out of a plate
-      this flat, so the triquetra wears its grip as a wrap seated on the cusp
-      where the two near lobes meet — sized to the material there, so it never
-      hangs off the ribbon into the notch behind it.
+      this flat, so the triquetra wears a band instead — and on the double prop
+      that band is structural, bridging the channel between the two knots and
+      lapping onto both. Sized to the material it lands on, so it never
+      overhangs into a hole.
     -->
     <T.Mesh
       geometry={geometry.gripBand}
