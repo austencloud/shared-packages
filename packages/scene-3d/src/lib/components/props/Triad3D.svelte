@@ -1,28 +1,56 @@
+<script module lang="ts">
+  import type { BufferGeometry } from "three";
+  import { buildTriadShape, TRIAD_ARM_WIDTH } from "./triad-profile";
+  import { bullnosePlate } from "./plate-extrude";
+  import { getPlateMaterials, PLATE_TRAIL_GEOMETRY } from "./plate-materials";
+
+  const plates = new Map<string, BufferGeometry>();
+
+  /**
+   * Ceiling on how far the bevel may eat into the silhouette — roughly a third
+   * of an arm's half-width, past which the rolled edge folds through itself at
+   * the notches where two arms meet.
+   */
+  const MAX_BEVEL_INSET = TRIAD_ARM_WIDTH / 6.8;
+
+  function getTriadPlate(length: number, depth: number): BufferGeometry {
+    const key = `${length}:${depth}`;
+    const cached = plates.get(key);
+    if (cached) return cached;
+
+    const plate = bullnosePlate(
+      buildTriadShape(length),
+      depth,
+      length * MAX_BEVEL_INSET
+    );
+    plates.set(key, plate);
+    return plate;
+  }
+</script>
+
 <script lang="ts">
   /**
    * Triad3D Component
    *
-   * Renders a 3D triad (Y-shaped prop with 3 arms radiating from a center hub):
-   * - Center hub: sphere slightly larger than arm thickness
-   * - Three arms at 120° intervals in the XY plane
-   * - One arm points along +Y, others at ±120° from that
-   * - Small sphere caps at each arm tip
-   * - Grip is at the center hub
-   * - Trail indicator sphere for path visualization
+   * Three straight arms of equal width meeting at a hub, 120 degrees apart,
+   * each ending in a round cap — the exact silhouette of the 2D triad,
+   * extruded into a bullnose plate. The outline comes from the drawing itself
+   * in `triad-profile.ts`, so the 3D prop and the pictograph prop are the same
+   * shape by construction.
    *
-   * Each arm is ~45% of staffLength. The Y-shape lies flat so the arms
-   * spread in the local XY plane from the center hub.
+   * The hand takes the hub, with one arm running away from it and two behind.
+   * There is no separate handle and no hub boss — the artwork does not draw
+   * either, so neither does this.
+   *
+   * Extrusion emits two material groups: group 0 is the pair of faces, group 1
+   * is the rim, which is how the plate gets a darker turned edge.
    */
 
   import { T } from "@threlte/core";
   import type { Prop3DProps } from "./Prop3DProps";
-  import { PROP_COLORS } from "./Prop3DProps";
   import { computePropRotation } from "./prop3d-transforms";
   import { userProportionsState } from "../../state/user-proportions-state.svelte";
-  import {
-    LAYER_WORLD,
-    LAYER_PLAYER_BODY,
-  } from "../../layers/layer-constants";
+  import { LAYER_WORLD, LAYER_PLAYER_BODY } from "../../layers/layer-constants";
 
   let {
     propState,
@@ -36,117 +64,41 @@
 
   const propLayer = $derived(isActivePlayer ? LAYER_PLAYER_BODY : LAYER_WORLD);
 
-  // Each arm is ~45% of staff length
-  const ARM_LENGTH_RATIO = 0.45;
-
-  const armLength = $derived(
-    (length ?? userProportionsState.staffLength) * ARM_LENGTH_RATIO * scale
+  const effectiveLength = $derived(
+    (length ?? userProportionsState.staffLength) * scale
   );
   const baseRadius = $derived(
     (thickness ?? userProportionsState.dimensions.staffRadius) * scale
   );
 
-  const palette = $derived(PROP_COLORS[color]);
+  /**
+   * Flat spinning props are plate stock, not tube. The triad's arms run about
+   * 8cm across at default size — the widest stock in the flat family — so the
+   * plate sits a little under 2cm: thick enough to hold a rolled edge and to
+   * read edge-on, thin enough that a tilted arm still shows mostly face.
+   */
+  const plateDepth = $derived(baseRadius * 1.4);
+
+  const plate = $derived(getTriadPlate(effectiveLength, plateDepth));
+  const materials = $derived(getPlateMaterials(color));
 
   const rotation = $derived(computePropRotation(propState));
-
-  // Arm thickness is 2x the base staff radius
-  const armRadius = $derived(baseRadius * 2);
-
-  // Hub sphere is slightly larger than arm thickness so the arms blend into it
-  const hubRadius = $derived(armRadius * 1.4);
-
-  // Sphere cap radius at each arm tip
-  const tipCapRadius = $derived(armRadius * 1.2);
-
-  // Three arms at 120° intervals.
-  // Arm 0: along +Y (up in local space)
-  // Arm 1: 120° clockwise from +Y
-  // Arm 2: 240° clockwise from +Y
-  //
-  // Each arm's center is offset by half its length along its direction.
-  // The cylinder is vertical by default (along Y), so we rotate each arm
-  // around Z to point it in the correct direction within the XY plane.
-  const arms = $derived.by(() => {
-    const result: Array<{
-      centerX: number;
-      centerY: number;
-      tipX: number;
-      tipY: number;
-      rotationZ: number;
-    }> = [];
-
-    for (let i = 0; i < 3; i++) {
-      // Angle from +Y axis, measured clockwise in XY plane
-      // Arm 0 = 0°, Arm 1 = 120°, Arm 2 = 240°
-      const angle = (i * 2 * Math.PI) / 3;
-
-      // Direction vector in XY plane (from +Y, rotating clockwise)
-      const dirX = Math.sin(angle);
-      const dirY = Math.cos(angle);
-
-      // Cylinder center (halfway along the arm)
-      const halfArm = armLength / 2;
-      const centerX = dirX * halfArm;
-      const centerY = dirY * halfArm;
-
-      // Tip position (end of arm)
-      const tipX = dirX * armLength;
-      const tipY = dirY * armLength;
-
-      // Rotation around Z to orient the cylinder along this direction.
-      // Default cylinder is along +Y, so we rotate by -angle around Z.
-      const rotationZ = -angle;
-
-      result.push({ centerX, centerY, tipX, tipY, rotationZ });
-    }
-
-    return result;
-  });
 </script>
 
 {#if visible}
   <T.Group {rotation} layers={propLayer}>
-    <!-- Center hub sphere -->
-    <T.Mesh>
-      <T.SphereGeometry args={[hubRadius, 16, 16]} />
-      <T.MeshStandardMaterial
-        color={palette.main}
-        roughness={0.3}
-        metalness={0.2}
-      />
-    </T.Mesh>
-
-    <!-- Three arms at 120° intervals -->
-    {#each arms as arm}
-      <!-- Arm cylinder -->
-      <T.Mesh
-        position={[arm.centerX, arm.centerY, 0]}
-        rotation={[0, 0, arm.rotationZ]}
-      >
-        <T.CylinderGeometry args={[armRadius, armRadius, armLength, 16, 1]} />
-        <T.MeshStandardMaterial
-          color={palette.main}
-          roughness={0.3}
-          metalness={0.2}
-        />
-      </T.Mesh>
-
-      <!-- Arm tip cap -->
-      <T.Mesh position={[arm.tipX, arm.tipY, 0]}>
-        <T.SphereGeometry args={[tipCapRadius, 12, 12]} />
-        <T.MeshStandardMaterial
-          color={palette.dark}
-          roughness={0.3}
-          metalness={0.2}
-        />
-      </T.Mesh>
-    {/each}
+    <T.Mesh
+      geometry={plate}
+      material={[materials.face, materials.edge]}
+      dispose={false}
+    />
   </T.Group>
 
-  <!-- Trail indicator sphere -->
-  <T.Mesh layers={propLayer}>
-    <T.SphereGeometry args={[0.015, 8, 8]} />
-    <T.MeshBasicMaterial color={palette.main} opacity={0.3} transparent />
-  </T.Mesh>
+  <!-- Trail indicator (small sphere at prop position for path visualization) -->
+  <T.Mesh
+    geometry={PLATE_TRAIL_GEOMETRY}
+    material={materials.trail}
+    layers={propLayer}
+    dispose={false}
+  />
 {/if}
