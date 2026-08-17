@@ -134,8 +134,8 @@ export class AvatarAnimator implements IAvatarAnimator {
   private leftPalmLocal: Vector3 | null = null;
   private rightPalmLocal: Vector3 | null = null;
   private gripCalibrated = false;
-  // Smoothed wrist local quaternions - persistent so a staff-axis sign
-  // flip reads as a natural regrasp instead of an instant 180 snap.
+  // Smoothed wrist local quaternions - persistent across frames so the
+  // directed staff-axis goal is followed continuously, never snapped to.
   private leftWristQuat = new Quaternion();
   private rightWristQuat = new Quaternion();
   private leftWristInit = false;
@@ -1055,9 +1055,13 @@ export class AvatarAnimator implements IAvatarAnimator {
   /**
    * Rotate the hand so its knuckle line lies along the staff axis - the
    * wrist orientation goal. Swing-only (no roll about the staff), clamped
-   * to anatomical range, sign-disambiguated (staff ends are
-   * interchangeable, pick the smaller swing), and smoothed so a sign flip
-   * reads as a regrasp rather than a snap.
+   * to anatomical range, and THUMB-LOCKED: the staff ends are NOT
+   * interchangeable. The knuckle line (Index1->Pinky1, pinky-ward) tracks
+   * the staff's pinky end (-Y) as a directed constraint, so the hand can
+   * never take the flipped solution - a real grip cannot swap which end
+   * the thumb faces without regrasping. Demand beyond the anatomical
+   * clamp reads as strain; absorbing it is the body's job (plane sweep,
+   * hand travel, stance yaw), not the wrist's.
    */
   private applyWristOrientation(
     side: "left" | "right",
@@ -1079,9 +1083,9 @@ export class AvatarAnimator implements IAvatarAnimator {
     eff.getWorldQuaternion(this._q1);
     this._v1.copy(gripAxis).applyQuaternion(this._q1);
 
-    // Staff long axis in world space (+Y of the prop cylinder)
-    this._v2.set(0, 1, 0).applyQuaternion(staffQuat);
-    if (this._v1.dot(this._v2) < 0) this._v2.negate();
+    // Staff PINKY end in world space (-Y; +Y is the thumb end / T-bar).
+    // Directed on purpose: no nearest-end negate, ever.
+    this._v2.set(0, -1, 0).applyQuaternion(staffQuat);
 
     // Swing-only correction, clamped to anatomical range
     this._q2.setFromUnitVectors(this._v1, this._v2);
