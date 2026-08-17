@@ -1,0 +1,120 @@
+/**
+ * Assembled-prop finish
+ *
+ * Props that are built rather than cut — a hub with spines and wicks, a torch —
+ * are made of several real materials at once, and the finish has to say which
+ * is which: kevlar reads dry and matte, a steel spine reads hard and bright, a
+ * printed hub reads soft and matte, a glow head reads lit from inside.
+ *
+ * Two builds of the same prop, matching what people actually own:
+ *
+ *   fire  — steel frame, bare spines, unburnt kevlar wicks, a chrome finger
+ *           ring. Colour lives on the spines, which is the only part long
+ *           enough to tell blue from red across a dark stage.
+ *   day   — a printed hub with a fat finger ring, textured grip tube, and
+ *           translucent heads. The heads glow in the prop's colour, because an
+ *           LED practice prop does exactly that and it doubles as identity.
+ *
+ * Metalness stays low on the big coloured parts for the same reason as
+ * `plate-materials.ts`: a metal's diffuse response is black, so in these dark
+ * scenes a metallic body goes muddy while the staffs beside it stay saturated.
+ * Real metal is reserved for the small steel bits, where it belongs.
+ */
+
+import {
+  Color,
+  MeshBasicMaterial,
+  MeshPhysicalMaterial,
+  MeshStandardMaterial,
+} from "three";
+
+export type FrameVariant = "fire" | "day";
+
+export interface FrameMaterialSet {
+  /** The long rod between hub and tip. Carries the prop's colour. */
+  readonly spine: MeshPhysicalMaterial;
+  /** The centre piece the spines run out of. */
+  readonly hub: MeshStandardMaterial;
+  /** The finger ring. */
+  readonly ring: MeshStandardMaterial;
+  /** Short sleeves where a spine enters the hub or the tip. */
+  readonly collar: MeshStandardMaterial;
+  /** The business end: kevlar wick, or translucent glow head. */
+  readonly tip: MeshStandardMaterial;
+  /** Path-visualization marker at the prop's position. */
+  readonly trail: MeshBasicMaterial;
+}
+
+const PALETTES = {
+  blue: { main: "#3b82f6", dark: "#1d4ed8" },
+  red: { main: "#ef4444", dark: "#b91c1c" },
+} as const;
+
+/** Unburnt kevlar, which is a pale sand — not the black of a used wick. */
+const KEVLAR = "#efe0b4";
+/** Polished spine steel. */
+const STEEL = "#c8ced8";
+/** The near-black of a moulded sleeve. */
+const SLEEVE = "#26262a";
+
+const materialSets = new Map<string, FrameMaterialSet>();
+
+export function getFrameMaterials(
+  color: "blue" | "red",
+  variant: FrameVariant
+): FrameMaterialSet {
+  const key = `${color}:${variant}`;
+  const cached = materialSets.get(key);
+  if (cached) return cached;
+
+  const palette = PALETTES[color];
+  const fire = variant === "fire";
+
+  const materials: FrameMaterialSet = {
+    spine: new MeshPhysicalMaterial({
+      color: palette.main,
+      // A bare fire spine is hard and bright; a day grip is wrapped in
+      // textured tube, which kills the highlight almost completely.
+      roughness: fire ? 0.24 : 0.62,
+      metalness: fire ? 0.18 : 0.04,
+      clearcoat: fire ? 0.8 : 0,
+      clearcoatRoughness: 0.14,
+    }),
+    hub: new MeshStandardMaterial({
+      color: fire ? STEEL : palette.dark,
+      roughness: fire ? 0.28 : 0.58,
+      metalness: fire ? 0.62 : 0.05,
+    }),
+    ring: new MeshStandardMaterial({
+      color: fire ? STEEL : palette.dark,
+      roughness: fire ? 0.2 : 0.58,
+      metalness: fire ? 0.7 : 0.05,
+    }),
+    collar: new MeshStandardMaterial({
+      color: SLEEVE,
+      roughness: 0.78,
+      metalness: 0.05,
+    }),
+    tip: fire
+      ? new MeshStandardMaterial({
+          color: KEVLAR,
+          roughness: 0.95,
+          metalness: 0,
+        })
+      : new MeshStandardMaterial({
+          color: "#f7f7fa",
+          roughness: 0.46,
+          metalness: 0,
+          emissive: new Color(palette.main),
+          emissiveIntensity: 0.55,
+        }),
+    trail: new MeshBasicMaterial({
+      color: palette.main,
+      opacity: 0.3,
+      transparent: true,
+    }),
+  };
+
+  materialSets.set(key, materials);
+  return materials;
+}

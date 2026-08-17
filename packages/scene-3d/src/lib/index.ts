@@ -71,6 +71,7 @@ export { LAYER_WORLD, LAYER_PLAYER_BODY, LAYER_VIEWMODEL, getCameraLayers, shoul
 
 // State
 export { userProportionsState } from "./state/user-proportions-state.svelte";
+export { propFinishState, type PropFinish } from "./state/prop-finish-state.svelte";
 
 // Context
 export { setViewer3DContext, getViewer3DContext, tryGetViewer3DContext } from "./context/viewer-3d-context";

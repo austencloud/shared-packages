@@ -1,49 +1,96 @@
 <script module lang="ts">
-  import type { BufferGeometry } from "three";
-  import { buildTriadShape, TRIAD_ARM_WIDTH } from "./triad-profile";
-  import { bullnosePlate } from "./plate-extrude";
-  import { getPlateMaterials, PLATE_TRAIL_GEOMETRY } from "./plate-materials";
+  import { BufferGeometry, TorusGeometry } from "three";
+  import {
+    TRIAD_ARM_LENGTH,
+    TRIAD_DAY,
+    TRIAD_FIRE,
+    type TriadFrame,
+    type TriadSection,
+  } from "./triad-frame";
+  import { roundedCylinder } from "./prop-lathe";
+  import { getFrameMaterials, type FrameVariant } from "./frame-materials";
+  import { PLATE_TRAIL_GEOMETRY } from "./plate-materials";
 
-  const plates = new Map<string, BufferGeometry>();
+  const FRAMES: Record<FrameVariant, TriadFrame> = {
+    fire: TRIAD_FIRE,
+    day: TRIAD_DAY,
+  };
 
-  /**
-   * Ceiling on how far the bevel may eat into the silhouette — roughly a third
-   * of an arm's half-width, past which the rolled edge folds through itself at
-   * the notches where two arms meet.
-   */
-  const MAX_BEVEL_INSET = TRIAD_ARM_WIDTH / 6.8;
+  /** One turned part, placed on the arm axis. */
+  interface Part {
+    readonly geometry: BufferGeometry;
+    /** Centre of the part, measured out along the arm in scene units. */
+    readonly at: number;
+  }
 
-  function getTriadPlate(length: number, depth: number): BufferGeometry {
-    const key = `${length}:${depth}`;
-    const cached = plates.get(key);
+  interface TriadParts {
+    readonly hubArm: Part;
+    readonly innerCollar: Part;
+    readonly spine: Part;
+    readonly outerCollar?: Part;
+    readonly tip: Part;
+    readonly ring: BufferGeometry;
+  }
+
+  const builds = new Map<string, TriadParts>();
+
+  function turn(section: TriadSection, arm: number, fillet: number): Part {
+    return {
+      geometry: roundedCylinder({
+        length: (section.to - section.from) * arm,
+        radius: section.radius * arm,
+        radiusEnd: section.radiusEnd ? section.radiusEnd * arm : undefined,
+        fillet: fillet * arm,
+      }),
+      at: ((section.from + section.to) / 2) * arm,
+    };
+  }
+
+  function getTriadParts(length: number, variant: FrameVariant): TriadParts {
+    const key = `${length}:${variant}`;
+    const cached = builds.get(key);
     if (cached) return cached;
 
-    const plate = bullnosePlate(
-      buildTriadShape(length),
-      depth,
-      length * MAX_BEVEL_INSET
-    );
-    plates.set(key, plate);
-    return plate;
+    const frame = FRAMES[variant];
+    const arm = TRIAD_ARM_LENGTH * length;
+    const parts: TriadParts = {
+      hubArm: turn(frame.hubArm, arm, frame.fillet),
+      innerCollar: turn(frame.innerCollar, arm, frame.fillet * 0.5),
+      spine: turn(frame.spine, arm, frame.fillet * 0.3),
+      outerCollar: frame.outerCollar
+        ? turn(frame.outerCollar, arm, frame.fillet * 0.5)
+        : undefined,
+      tip: turn(frame.tip, arm, frame.fillet),
+      ring: new TorusGeometry(
+        frame.ringRadius * arm,
+        frame.ringTube * arm,
+        12,
+        28
+      ),
+    };
+    builds.set(key, parts);
+    return parts;
   }
+
+  /** One arm pointing +Y, the other two swung back 120 degrees each. */
+  const ARM_ANGLES = [0, (2 * Math.PI) / 3, (4 * Math.PI) / 3];
 </script>
 
 <script lang="ts">
   /**
    * Triad3D Component
    *
-   * Three straight arms of equal width meeting at a hub, 120 degrees apart,
-   * each ending in a round cap — the exact silhouette of the 2D triad,
-   * extruded into a bullnose plate. The outline comes from the drawing itself
-   * in `triad-profile.ts`, so the 3D prop and the pictograph prop are the same
-   * shape by construction.
+   * A hub with a finger ring, three spines out of it at 120 degrees, and a wick
+   * on the end of each — the object people actually hold, not the pictograph's
+   * silhouette given depth. `triad-frame.ts` carries the dimensions and the
+   * reason there are two builds of it.
    *
-   * The hand takes the hub, with one arm running away from it and two behind.
-   * There is no separate handle and no hub boss — the artwork does not draw
-   * either, so neither does this.
+   * `variant="fire"` is the steel-and-kevlar prop. `variant="day"` is the
+   * printed-hub practice build with glow heads. Both keep the artwork's reach
+   * to the last decimal, so the mandala a triad draws is the same either way.
    *
-   * Extrusion emits two material groups: group 0 is the pair of faces, group 1
-   * is the rim, which is how the plate gets a darker turned edge.
+   * The hand goes through the ring at the hub, which is the origin — the same
+   * point the pictograph puts the hand on.
    */
 
   import { T } from "@threlte/core";
@@ -57,41 +104,64 @@
     color,
     visible = true,
     length,
-    thickness,
     isActivePlayer = false,
     scale = 1,
-  }: Prop3DProps = $props();
+    variant = "fire",
+  }: Prop3DProps & { variant?: FrameVariant } = $props();
 
   const propLayer = $derived(isActivePlayer ? LAYER_PLAYER_BODY : LAYER_WORLD);
 
   const effectiveLength = $derived(
     (length ?? userProportionsState.staffLength) * scale
   );
-  const baseRadius = $derived(
-    (thickness ?? userProportionsState.dimensions.staffRadius) * scale
-  );
 
-  /**
-   * Flat spinning props are plate stock, not tube. The triad's arms run about
-   * 8cm across at default size — the widest stock in the flat family — so the
-   * plate sits a little under 2cm: thick enough to hold a rolled edge and to
-   * read edge-on, thin enough that a tilted arm still shows mostly face.
-   */
-  const plateDepth = $derived(baseRadius * 1.4);
-
-  const plate = $derived(getTriadPlate(effectiveLength, plateDepth));
-  const materials = $derived(getPlateMaterials(color));
+  const parts = $derived(getTriadParts(effectiveLength, variant));
+  const materials = $derived(getFrameMaterials(color, variant));
 
   const rotation = $derived(computePropRotation(propState));
 </script>
 
 {#if visible}
   <T.Group {rotation} layers={propLayer}>
-    <T.Mesh
-      geometry={plate}
-      material={[materials.face, materials.edge]}
-      dispose={false}
-    />
+    {#each ARM_ANGLES as angle}
+      <T.Group rotation={[0, 0, angle]}>
+        <T.Mesh
+          geometry={parts.hubArm.geometry}
+          material={materials.hub}
+          position={[0, parts.hubArm.at, 0]}
+          dispose={false}
+        />
+        <T.Mesh
+          geometry={parts.innerCollar.geometry}
+          material={materials.collar}
+          position={[0, parts.innerCollar.at, 0]}
+          dispose={false}
+        />
+        <T.Mesh
+          geometry={parts.spine.geometry}
+          material={materials.spine}
+          position={[0, parts.spine.at, 0]}
+          dispose={false}
+        />
+        {#if parts.outerCollar}
+          <T.Mesh
+            geometry={parts.outerCollar.geometry}
+            material={materials.collar}
+            position={[0, parts.outerCollar.at, 0]}
+            dispose={false}
+          />
+        {/if}
+        <T.Mesh
+          geometry={parts.tip.geometry}
+          material={materials.tip}
+          position={[0, parts.tip.at, 0]}
+          dispose={false}
+        />
+      </T.Group>
+    {/each}
+
+    <!-- Finger ring, lying in the prop's plane so the finger goes through it -->
+    <T.Mesh geometry={parts.ring} material={materials.ring} dispose={false} />
   </T.Group>
 
   <!-- Trail indicator (small sphere at prop position for path visualization) -->

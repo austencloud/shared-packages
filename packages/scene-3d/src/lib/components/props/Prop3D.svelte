@@ -13,6 +13,7 @@
   import { PropType } from "../../domain/enums/PropType";
   import type { PropState3D } from "../../domain/models/PropState3D";
   import { resolvePropModel } from "./prop-model-registry";
+  import { propFinishState } from "../../state/prop-finish-state.svelte";
   import GltfProp3D from "./GltfProp3D.svelte";
 
   // Procedural fallback geometry components
@@ -87,9 +88,17 @@
     <Fan3D {propState} {color} {visible} {isActivePlayer} {length} scale={BIG_SCALE} />
 
   {:else if propType === PropType.TRIAD}
-    <Triad3D {propState} {color} {visible} {isActivePlayer} {length} />
+    <Triad3D {propState} {color} {visible} {isActivePlayer} {length} variant={propFinishState.finish} />
   {:else if propType === PropType.BIGTRIAD}
-    <Triad3D {propState} {color} {visible} {isActivePlayer} {length} scale={BIG_SCALE} />
+    <Triad3D
+      {propState}
+      {color}
+      {visible}
+      {isActivePlayer}
+      {length}
+      scale={BIG_SCALE}
+      variant={propFinishState.finish}
+    />
 
   {:else if propType === PropType.MINIHOOP}
     <Hoop3D {propState} {color} {visible} {isActivePlayer} {length} />
