@@ -1,42 +1,18 @@
 <script module lang="ts">
-  import {
-    BoxGeometry,
-    type BufferGeometry,
-    Color,
-    ExtrudeGeometry,
-    MeshBasicMaterial,
-    MeshPhysicalMaterial,
-    MeshStandardMaterial,
-    SphereGeometry,
-  } from "three";
-  import { mergeVertices } from "three/examples/jsm/utils/BufferGeometryUtils.js";
+  import { BoxGeometry, type BufferGeometry } from "three";
   import {
     buildDoublestarShape,
     DOUBLESTAR_WAIST_HALF_WIDTH,
   } from "./doublestar-profile";
+  import { bullnosePlate } from "./plate-extrude";
+  import { getPlateMaterials, PLATE_TRAIL_GEOMETRY } from "./plate-materials";
 
   interface DoublestarGeometrySet {
     plate: BufferGeometry;
     gripBand: BoxGeometry;
   }
 
-  interface DoublestarMaterialSet {
-    face: MeshPhysicalMaterial;
-    edge: MeshStandardMaterial;
-    grip: MeshStandardMaterial;
-    trail: MeshBasicMaterial;
-  }
-
   const geometrySets = new Map<string, DoublestarGeometrySet>();
-  const materialSets = new Map<"blue" | "red", DoublestarMaterialSet>();
-
-  /**
-   * The extruded plate carries a bullnose edge: a shallow straight section with
-   * a generous rounded bevel on each face, so the rim reads as a turned edge
-   * catching light rather than a laser-cut card.
-   */
-  const STRAIGHT_FRACTION = 0.16;
-  const BEVEL_FRACTION = 0.42;
 
   /**
    * Ceiling on how far the bevel may eat into the silhouette, normalized to
@@ -56,38 +32,12 @@
     const cached = geometrySets.get(key);
     if (cached) return cached;
 
-    // Bevel thickness runs along z, where there is nothing to collide with.
-    // Bevel SIZE eats inward across the silhouette, and this outline has narrow
-    // features — the waist bar and the holes' concave notches — where an inset
-    // larger than the local half-width folds the wall through itself and
-    // scribbles stray edges across the face. Clamp it to what the waist can
-    // take; the bullnose ends up slightly flatter in plane than in depth, which
-    // reads as a rolled edge rather than a defect.
-    const bevel = depth * BEVEL_FRACTION;
-    const extruded = new ExtrudeGeometry(buildDoublestarShape(length), {
-      depth: depth * STRAIGHT_FRACTION,
-      bevelEnabled: true,
-      bevelThickness: bevel,
-      bevelSize: Math.min(bevel, length * MAX_BEVEL_INSET),
-      bevelOffset: 0,
-      bevelSegments: 5,
-      curveSegments: 12,
-    });
-    // Extrusion runs from z = -bevel to z = depth + bevel, so its middle sits
-    // at depth/2. Recentre it: the plate has to spin around its own plane.
-    extruded.translate(0, 0, -(depth * STRAIGHT_FRACTION) / 2);
-
-    // ExtrudeGeometry is unindexed, so its normals come out per-triangle and
-    // the bullnose rim shades as a stack of facets. Weld the seams and derive
-    // normals across them — the whole profile is tangent-continuous, so a
-    // single smooth shell is the honest surface. Groups survive the weld
-    // (triangle order is untouched), which is what keeps face and rim on
-    // separate materials.
-    extruded.deleteAttribute("normal");
-    extruded.deleteAttribute("uv");
-    const plate = mergeVertices(extruded);
-    plate.computeVertexNormals();
-    extruded.dispose();
+    const plate = bullnosePlate(
+      buildDoublestarShape(length),
+      depth,
+      length * MAX_BEVEL_INSET,
+      12
+    );
 
     const bandWidth = length * DOUBLESTAR_WAIST_HALF_WIDTH * 2.24;
     const geometry = {
@@ -102,60 +52,6 @@
     return geometry;
   }
 
-  function getDoublestarMaterialSet(
-    color: "blue" | "red"
-  ): DoublestarMaterialSet {
-    const cached = materialSets.get(color);
-    if (cached) return cached;
-
-    const palette =
-      color === "blue"
-        ? { main: "#3b82f6", dark: "#1d4ed8" }
-        : { main: "#ef4444", dark: "#b91c1c" };
-    const materials = {
-      // Faces read as polished anodized plate: a clearcoat lobe on top of the
-      // base specular keeps a crisp highlight travelling across the star as it
-      // turns, which is what sells the shape in motion.
-      //
-      // Metalness stays low on purpose. A metal's diffuse response is black —
-      // it can only show what the environment reflects — and these scenes run
-      // dark with few lights, so a metallic plate goes muddy while the staffs
-      // beside it stay saturated. Keep the base dielectric like Staff3D and let
-      // the clearcoat carry the shine.
-      face: new MeshPhysicalMaterial({
-        color: palette.main,
-        roughness: 0.26,
-        metalness: 0.12,
-        clearcoat: 0.7,
-        clearcoatRoughness: 0.16,
-      }),
-      // The rim tells the eye this is solid plate rather than a sticker, so it
-      // sits clearly below the face — but only part way to the palette's dark
-      // endpoint. On arms this narrow the rim covers a lot of the silhouette
-      // whenever the plate tilts, and the full dark red turns the whole prop
-      // murky while the same treatment in blue barely shows. Meeting the face
-      // 60% of the way down keeps both colours reading as themselves.
-      edge: new MeshStandardMaterial({
-        color: new Color(palette.main).lerp(new Color(palette.dark), 0.6),
-        roughness: 0.42,
-        metalness: 0.1,
-      }),
-      grip: new MeshStandardMaterial({
-        color: "white",
-        roughness: 0.4,
-        metalness: 0.1,
-      }),
-      trail: new MeshBasicMaterial({
-        color: palette.main,
-        opacity: 0.3,
-        transparent: true,
-      }),
-    };
-    materialSets.set(color, materials);
-    return materials;
-  }
-
-  const trailGeometry = new SphereGeometry(0.015, 8, 8);
 </script>
 
 <script lang="ts">
@@ -216,7 +112,7 @@
   const geometry = $derived(
     getDoublestarGeometrySet(effectiveLength, plateDepth)
   );
-  const materials = $derived(getDoublestarMaterialSet(color));
+  const materials = $derived(getPlateMaterials(color));
 
   const rotation = $derived(computePropRotation(propState));
 </script>
@@ -243,7 +139,7 @@
 
   <!-- Trail indicator (small sphere at prop position for path visualization) -->
   <T.Mesh
-    geometry={trailGeometry}
+    geometry={PLATE_TRAIL_GEOMETRY}
     material={materials.trail}
     layers={propLayer}
     dispose={false}

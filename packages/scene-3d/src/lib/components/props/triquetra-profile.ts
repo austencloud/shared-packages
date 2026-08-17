@@ -27,6 +27,7 @@
  */
 
 import { Path, Shape } from "three";
+import type { GripBand } from "./plate-extrude";
 
 /** [c1x, c1y, c2x, c2y, endX, endY] */
 type Cubic = readonly [number, number, number, number, number, number];
@@ -143,30 +144,20 @@ export const TRIQUETRA_CUSP_GAP = 0.02117;
  * the hand. Tape proportions are what fit — 2.2cm tall leaves room for 24.7cm,
  * so the 9.7cm band sits well inside the material across its whole length.
  */
-const GRIP_HALF_WIDTH = 0.056;
+/** Both bands span the same width across the prop. */
+const GRIP_HALF_ACROSS = 0.056;
 
-interface GripBand {
-  /** Half-extent along the prop, normalized to staff length. */
-  readonly halfHeight: number;
-  /** Centre along the prop, normalized to staff length. */
-  readonly centerY: number;
-}
-
-/** Structural band bridging the two knots of the double prop. */
-export const TRIQUETRA_GRIP: GripBand = { halfHeight: 0.028, centerY: 0 };
+export const TRIQUETRA_GRIP: GripBand = {
+  halfAcross: GRIP_HALF_ACROSS,
+  halfAlong: 0.028,
+};
 
 /** Wrap seated on the ribbon the single knot hangs from. */
-export const TRIQUETRA2_GRIP: GripBand = { halfHeight: 0.013, centerY: 0.013 };
-
-/**
- * Ceiling on the band's own rolled edge. Unlike the plate, the binding
- * constraint here is the band's half-height, not a narrow feature of the
- * silhouette: a bevel that insets further than the band is thin folds the roll
- * through itself along the whole length of the wrap.
- */
-export function triquetraGripMaxBevel(grip: GripBand): number {
-  return grip.halfHeight * 0.4;
-}
+export const TRIQUETRA2_GRIP: GripBand = {
+  halfAcross: GRIP_HALF_ACROSS,
+  halfAlong: 0.013,
+  centerAlong: 0.013,
+};
 
 /**
  * How far along the prop the single-knot variant grips, normalized to staff
@@ -253,37 +244,4 @@ export function buildTriquetraShape(
   gripOffset: number
 ): Shape {
   return buildKnot(staffLength, { offset: gripOffset });
-}
-
-/**
- * Build the grip band as a rounded rectangle in the same space as the plate,
- * centred `centerY` along the prop. Extruding it rather than boxing it is what
- * makes it read as a wrap around plate stock: the rolled edge catches the same
- * highlight the plate's rim does, where a hard box face sits on the artwork
- * like a sticker.
- */
-export function buildTriquetraGripShape(
-  staffLength: number,
-  grip: GripBand
-): Shape {
-  const w = GRIP_HALF_WIDTH * staffLength;
-  const h = grip.halfHeight * staffLength;
-  // A corner tied to the band's own thickness keeps the roll reading the same
-  // on both bands, where one radius shared between them would swallow the
-  // thinner one.
-  const r = h * 0.45;
-  const cy = grip.centerY * staffLength;
-
-  const shape = new Shape();
-  shape.moveTo(-w + r, cy - h);
-  shape.lineTo(w - r, cy - h);
-  shape.quadraticCurveTo(w, cy - h, w, cy - h + r);
-  shape.lineTo(w, cy + h - r);
-  shape.quadraticCurveTo(w, cy + h, w - r, cy + h);
-  shape.lineTo(-w + r, cy + h);
-  shape.quadraticCurveTo(-w, cy + h, -w, cy + h - r);
-  shape.lineTo(-w, cy - h + r);
-  shape.quadraticCurveTo(-w, cy - h, -w + r, cy - h);
-  shape.closePath();
-  return shape;
 }

@@ -1,14 +1,85 @@
+<script module lang="ts">
+  import type { BufferGeometry } from "three";
+  import {
+    buildBuugengShape,
+    buildTrigengShape,
+    BUUGENG_GRIP,
+    GENG_BLADE_WIDTH,
+    TRIGENG_GRIP,
+  } from "./geng-profile";
+  import {
+    bullnosePlate,
+    gripBandMaxBevel,
+    gripBandShape,
+  } from "./plate-extrude";
+  import { getPlateMaterials, PLATE_TRAIL_GEOMETRY } from "./plate-materials";
+
+  type GengVariant = "buugeng" | "trigeng";
+
+  interface GengGeometrySet {
+    plate: BufferGeometry;
+    gripBand: BufferGeometry;
+  }
+
+  const geometrySets = new Map<string, GengGeometrySet>();
+
+  /**
+   * Ceiling on how far the bevel may eat into the silhouette. The blade runs
+   * about 4.6cm across at default size, and an inset past roughly a third of
+   * its half-width folds the rolled edge through itself where the arms meet.
+   */
+  const MAX_BEVEL_INSET = GENG_BLADE_WIDTH / 6.8;
+
+  function getGengGeometrySet(
+    length: number,
+    depth: number,
+    variant: GengVariant
+  ): GengGeometrySet {
+    const key = `${length}:${depth}:${variant}`;
+    const cached = geometrySets.get(key);
+    if (cached) return cached;
+
+    const tri = variant === "trigeng";
+    const grip = tri ? TRIGENG_GRIP : BUUGENG_GRIP;
+    const geometry = {
+      plate: bullnosePlate(
+        tri ? buildTrigengShape(length) : buildBuugengShape(length),
+        depth,
+        length * MAX_BEVEL_INSET
+      ),
+      // The band stands proud of the plate on both faces, so it reads as
+      // something wrapped around the blade rather than printed on it.
+      gripBand: bullnosePlate(
+        gripBandShape(length, grip),
+        depth * 1.3,
+        length * gripBandMaxBevel(grip)
+      ),
+    };
+    geometrySets.set(key, geometry);
+    return geometry;
+  }
+</script>
+
 <script lang="ts">
+  /**
+   * Buugeng3D Component
+   *
+   * The geng family: a flat blade bent into circular arcs. `variant="buugeng"`
+   * is the S — two arcs meeting at the hand, reaching in opposite directions.
+   * `variant="trigeng"` is the same blade run three ways out of one hub, held
+   * at the hub. Both outlines are transcribed from the props' SVGs in
+   * `geng-profile.ts`, so the 3D prop and the pictograph prop are the same
+   * shape by construction.
+   *
+   * Extrusion emits two material groups: group 0 is the pair of faces, group 1
+   * is the rim, which is how the blade gets a darker turned edge.
+   */
+
   import { T } from "@threlte/core";
-  import { CatmullRomCurve3, Vector3 } from "three";
   import type { Prop3DProps } from "./Prop3DProps";
-  import { PROP_COLORS } from "./Prop3DProps";
   import { computePropRotation } from "./prop3d-transforms";
   import { userProportionsState } from "../../state/user-proportions-state.svelte";
-  import {
-    LAYER_WORLD,
-    LAYER_PLAYER_BODY,
-  } from "../../layers/layer-constants";
+  import { LAYER_WORLD, LAYER_PLAYER_BODY } from "../../layers/layer-constants";
 
   let {
     propState,
@@ -18,89 +89,64 @@
     thickness,
     isActivePlayer = false,
     scale = 1,
-  }: Prop3DProps = $props();
+    variant = "buugeng",
+  }: Prop3DProps & { variant?: GengVariant } = $props();
 
   const propLayer = $derived(isActivePlayer ? LAYER_PLAYER_BODY : LAYER_WORLD);
 
-  const BUUGENG_LENGTH_RATIO = 0.9;
-
+  /**
+   * No length ratio here: the profile is normalized to the staff's own span, so
+   * the artwork already carries how big a geng is next to a staff — the buugeng
+   * reaches a little past one staff length tip to tip.
+   */
   const effectiveLength = $derived(
-    (length ?? userProportionsState.staffLength) * BUUGENG_LENGTH_RATIO * scale
+    (length ?? userProportionsState.staffLength) * scale
   );
   const baseRadius = $derived(
     (thickness ?? userProportionsState.dimensions.staffRadius) * scale
   );
 
-  const palette = $derived(PROP_COLORS[color]);
+  /**
+   * Flat spinning props are plate stock, not tube. The blade runs about 4.6cm
+   * across at default size, so it sits a little under 2cm thick — enough to
+   * hold a rolled edge and to read edge-on, thin enough that a tilted blade
+   * still shows mostly face rather than rim.
+   */
+  const plateDepth = $derived(baseRadius * 1.4);
+
+  const geometry = $derived(
+    getGengGeometrySet(effectiveLength, plateDepth, variant)
+  );
+  const materials = $derived(getPlateMaterials(color));
+
   const rotation = $derived(computePropRotation(propState));
-
-  const tubeRadius = $derived(baseRadius * 1.8);
-
-  // Smooth S-curve: one full sine period sampled at 24 points.
-  // Bottom arc bows left (-X), upper arc bows right (+X).
-  // Amplitude ~25% of length gives proportions matching real buugeng.
-  const curve = $derived.by(() => {
-    const halfLen = effectiveLength / 2;
-    const amplitude = effectiveLength * 0.25;
-    const N = 24;
-    const points: Vector3[] = [];
-
-    for (let i = 0; i <= N; i++) {
-      const t = i / N;
-      const y = effectiveLength * (t - 0.5);
-      const x = -amplitude * Math.sin(t * Math.PI * 2);
-      points.push(new Vector3(x, y, 0));
-    }
-
-    return new CatmullRomCurve3(points, false, "centripetal", 0.5);
-  });
-
-  const lowerTip = $derived(curve.getPoint(0));
-  const upperTip = $derived(curve.getPoint(1));
-
-  const tipCapRadius = $derived(tubeRadius * 1.15);
-
-  const gripOuterRadius = $derived(baseRadius * 1.3);
-  const gripTubeRadius = $derived(baseRadius * 0.15);
 </script>
 
 {#if visible}
   <T.Group {rotation} layers={propLayer}>
-    <T.Mesh>
-      <T.TubeGeometry args={[curve, 64, tubeRadius, 16, false]} />
-      <T.MeshStandardMaterial
-        color={palette.main}
-        roughness={0.3}
-        metalness={0.2}
-      />
-    </T.Mesh>
+    <T.Mesh
+      geometry={geometry.plate}
+      material={[materials.face, materials.edge]}
+      dispose={false}
+    />
 
-    <T.Mesh position={[lowerTip.x, lowerTip.y, lowerTip.z]}>
-      <T.SphereGeometry args={[tipCapRadius, 12, 12]} />
-      <T.MeshStandardMaterial
-        color={palette.dark}
-        roughness={0.3}
-        metalness={0.2}
-      />
-    </T.Mesh>
-
-    <T.Mesh position={[upperTip.x, upperTip.y, upperTip.z]}>
-      <T.SphereGeometry args={[tipCapRadius, 12, 12]} />
-      <T.MeshStandardMaterial
-        color={palette.dark}
-        roughness={0.3}
-        metalness={0.2}
-      />
-    </T.Mesh>
-
-    <T.Mesh>
-      <T.TorusGeometry args={[gripOuterRadius, gripTubeRadius, 12, 24]} />
-      <T.MeshStandardMaterial color="white" roughness={0.4} metalness={0.1} />
-    </T.Mesh>
+    <!--
+      Every prop marks the hand with white. A ring would hoop out of a blade
+      this flat, so the geng wears a band instead, sized to the material it
+      lands on so it never overhangs where the blade curves away.
+    -->
+    <T.Mesh
+      geometry={geometry.gripBand}
+      material={[materials.grip, materials.gripEdge]}
+      dispose={false}
+    />
   </T.Group>
 
-  <T.Mesh layers={propLayer}>
-    <T.SphereGeometry args={[0.015, 8, 8]} />
-    <T.MeshBasicMaterial color={palette.main} opacity={0.3} transparent />
-  </T.Mesh>
+  <!-- Trail indicator (small sphere at prop position for path visualization) -->
+  <T.Mesh
+    geometry={PLATE_TRAIL_GEOMETRY}
+    material={materials.trail}
+    layers={propLayer}
+    dispose={false}
+  />
 {/if}

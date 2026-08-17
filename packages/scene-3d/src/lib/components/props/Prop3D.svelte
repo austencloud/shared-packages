@@ -102,7 +102,7 @@
     <Buugeng3D {propState} {color} {visible} {isActivePlayer} {length} scale={BIG_SCALE} />
 
   {:else if propType === PropType.TRIGENG}
-    <Buugeng3D {propState} {color} {visible} {isActivePlayer} {length} />
+    <Buugeng3D {propState} {color} {visible} {isActivePlayer} {length} variant="trigeng" />
 
   {:else if propType === PropType.TRIQUETRA}
     <Triquetra3D {propState} {color} {visible} {isActivePlayer} {length} />
