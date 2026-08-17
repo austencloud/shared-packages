@@ -360,6 +360,25 @@ export class AvatarAnimator implements IAvatarAnimator {
     return out;
   }
 
+  /**
+   * Achieved pinky-ward knuckle line (Index1->Pinky1) in world space,
+   * AFTER this frame's solve - the direction a gripped staff's pinky end
+   * (-Y) actually points given the wrist clamps. This is the render-side
+   * weld target: rotate the prop onto this line and it sits in the fist
+   * exactly as the wrist managed to hold it.
+   */
+  getKnuckleLineWorld(side: "left" | "right", out: Vector3): Vector3 | null {
+    const gripAxis =
+      side === "left" ? this.leftGripAxisLocal : this.rightGripAxisLocal;
+    const chain =
+      side === "left"
+        ? this.skeleton.getLeftArmChain()
+        : this.skeleton.getRightArmChain();
+    if (!gripAxis || !chain) return null;
+    chain.effector.getWorldQuaternion(this._q1);
+    return out.copy(gripAxis).applyQuaternion(this._q1).normalize();
+  }
+
   setLeftHandTarget(target: HandPose): void {
     this.targetPose.leftHand = { ...target };
     this.targetPose.timestamp = Date.now();

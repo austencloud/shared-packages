@@ -127,6 +127,14 @@
     bluePropCorrectionRef?: import("three").Group;
     /** Contact-lock correction group nested inside the red PropAnchor. */
     redPropCorrectionRef?: import("three").Group;
+    /** Grip weld: render the prop locked into the ACHIEVED fist. The
+     *  correction group is rotated about the grip point onto the hand's
+     *  post-solve knuckle line and translated (unclamped) so the grip
+     *  point sits at the palm - the staff can never render outside the
+     *  hand, and the thumb end always exits the thumb side. Wrist-clamp
+     *  deficit then shows as the prop lagging its commanded angle instead
+     *  of floating. Default false = legacy clamped position-only lock. */
+    weldGrip?: boolean;
     /** Stance yaw input track (radians): sustained torso facing offset
      *  distributed across the spine, feet planted. Planner-shaped - the
      *  caller decides the stance, the animator applies it. */
@@ -188,6 +196,7 @@
     redPropAnchorRef,
     bluePropCorrectionRef,
     redPropCorrectionRef,
+    weldGrip = false,
     stanceYaw = 0,
     disableSpineTwist = false,
     stepNumber = 0,
@@ -308,6 +317,11 @@
   const CONTACT_LOCK_MAX = 0.06;
   const _palmWorld = new Vector3();
   const _corrLocal = new Vector3();
+  // Grip-weld scratch (no per-frame allocation)
+  const _knuckleWorld = new Vector3();
+  const _staffPinkyWorld = new Vector3();
+  const _weldDelta = new Quaternion();
+  const _anchorWorldQuat = new Quaternion();
 
   function composeStaffWorldQuat(
     anchorRef: import("three").Group | undefined,
@@ -335,7 +349,8 @@
     side: "left" | "right",
     anchorRef: import("three").Group | undefined,
     correctionRef: import("three").Group | undefined,
-    active: boolean
+    active: boolean,
+    staffQuat: Quaternion | null
   ): void {
     if (!correctionRef) return;
     const palm =
@@ -344,13 +359,43 @@
         : null;
     if (!palm || !anchorRef) {
       correctionRef.position.set(0, 0, 0);
+      correctionRef.quaternion.identity();
       return;
     }
+
+    // Grip weld (orientation): rotate the rendered prop about its grip
+    // point so the shaft lies along the ACHIEVED knuckle line - the staff
+    // renders exactly as the fist holds it, never at an angle the wrist
+    // didn't reach. Directed on both sides: commanded staff -Y onto the
+    // achieved pinky-ward knuckle line, so the thumb end (+Y / T-bar)
+    // always exits the thumb side of the fist. Minimal rotation preserves
+    // the staff's roll about its own shaft.
+    if (weldGrip && staffQuat && animationService?.getKnuckleLineWorld) {
+      const knuckle = animationService.getKnuckleLineWorld(side, _knuckleWorld);
+      if (knuckle) {
+        _staffPinkyWorld.set(0, -1, 0).applyQuaternion(staffQuat);
+        _weldDelta.setFromUnitVectors(_staffPinkyWorld, knuckle);
+        anchorRef.getWorldQuaternion(_anchorWorldQuat);
+        correctionRef.quaternion
+          .copy(_anchorWorldQuat)
+          .invert()
+          .multiply(_weldDelta)
+          .multiply(_anchorWorldQuat);
+      } else {
+        correctionRef.quaternion.identity();
+      }
+    } else {
+      correctionRef.quaternion.identity();
+    }
+
     anchorRef.updateWorldMatrix(true, false);
     _corrLocal.copy(palm);
     anchorRef.worldToLocal(_corrLocal);
     const len = _corrLocal.length();
-    if (len > CONTACT_LOCK_MAX) {
+    // Welded grips are unclamped - a staff never leaves the hand, so
+    // rendering it in the fist at the wrong place is more honest than
+    // floating at the right one. The legacy lock keeps the small clamp.
+    if (!weldGrip && len > CONTACT_LOCK_MAX) {
       _corrLocal.multiplyScalar(CONTACT_LOCK_MAX / len);
     }
     correctionRef.position.copy(_corrLocal);
@@ -861,13 +906,15 @@
       "left",
       bluePropAnchorRef,
       bluePropCorrectionRef,
-      !!(blueVisible && bluePropState)
+      !!(blueVisible && bluePropState),
+      _propOrientations.blue
     );
     applyContactLock(
       "right",
       redPropAnchorRef,
       redPropCorrectionRef,
-      !!(redVisible && redPropState)
+      !!(redVisible && redPropState),
+      _propOrientations.red
     );
 
     // 2b. Collision detection - run after IK so bones are at final positions

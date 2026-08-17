@@ -184,6 +184,14 @@ export interface IAvatarAnimator {
   getPalmWorldPoint?(side: "left" | "right", out: Vector3): Vector3 | null;
 
   /**
+   * Achieved pinky-ward knuckle line in world space after this frame's
+   * solve - the direction the gripped staff's pinky end (-Y) actually
+   * points given the wrist clamps. Used by the grip weld to rotate the
+   * rendered prop into the fist.
+   */
+  getKnuckleLineWorld?(side: "left" | "right", out: Vector3): Vector3 | null;
+
+  /**
    * Enable/disable smooth blending between poses
    */
   setSmoothBlending(enabled: boolean): void;

@@ -135,6 +135,11 @@
      *  Planner-shaped - the caller (heuristic today, offline execution
      *  planner later) decides the stance; the rig just carries it. */
     stanceYaw?: number;
+    /** Grip weld, forwarded to Avatar3D: render each prop locked into the
+     *  ACHIEVED fist (rotated onto the post-solve knuckle line, grip point
+     *  at the palm, unclamped). Default false = legacy clamped
+     *  position-only contact lock. */
+    weldGrip?: boolean;
     /** Avatar mesh opacity 0-1, forwarded to Avatar3D for swap cross-fades.
      *  1 = fully opaque (default). */
     avatarOpacity?: number;
@@ -173,6 +178,7 @@
     enableFootPlanting = false,
     turnRequestOverride,
     stanceYaw = 0,
+    weldGrip = false,
     avatarOpacity = 1,
     onAvatarSwapped,
     gridSlot,
@@ -340,6 +346,7 @@
       bluePropCorrectionRef={bluePropCorrectionRef}
       redPropCorrectionRef={redPropCorrectionRef}
       stanceYaw={stanceYaw}
+      weldGrip={weldGrip}
       disableSpineTwist={isDualWheel}
       stepNumber={avatarState.currentStepIndex}
       beatProgress={avatarState.progress}
