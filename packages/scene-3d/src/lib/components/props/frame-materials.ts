@@ -27,6 +27,7 @@ import {
   MeshPhysicalMaterial,
   MeshStandardMaterial,
 } from "three";
+import { HOOP_TUBE_DIAMETER_M } from "./hoop-geometry";
 
 export type FrameVariant = "fire" | "day";
 
@@ -261,5 +262,60 @@ export function getClubMaterials(color: "blue" | "red"): ClubMaterialSet {
   };
 
   clubSets.set(color, materials);
+  return materials;
+}
+
+export interface HoopMaterialSet {
+  /** The tube. One material for the whole ring, because a hoop is one tube. */
+  readonly tube: MeshPhysicalMaterial;
+  /** Path-visualization marker at the prop's position. */
+  readonly trail: MeshBasicMaterial;
+}
+
+const hoopSets = new Map<string, HoopMaterialSet>();
+
+/**
+ * A mini hoop is a single extrusion of coloured HDPE bent into a circle, so it
+ * gets ONE material — there is no band structure to describe the way a club's
+ * knob, handle and body need one. Vendors do sell grips (sanded inside, an inner
+ * line, spiral tape), but those are options on an otherwise uniform ring and the
+ * stock product photos show the ring bare.
+ *
+ * The finish comes off those photos: a bright, tight specular line runs the whole
+ * inner curve of the tube with the body colour reading through underneath, which
+ * is a glossy translucent plastic and not a painted one. Hence a low roughness
+ * with clearcoat on top, and `transmission` low but non-zero so the tube picks up
+ * a little light through itself instead of going flat where it turns away.
+ *
+ * Metalness stays near zero for the same reason as the rest of this module: a
+ * metal's diffuse response is black, and these are dark scenes.
+ */
+export function getHoopMaterials(color: "blue" | "red"): HoopMaterialSet {
+  const cached = hoopSets.get(color);
+  if (cached) return cached;
+
+  const palette = PALETTES[color];
+
+  const materials: HoopMaterialSet = {
+    tube: new MeshPhysicalMaterial({
+      color: palette.main,
+      roughness: 0.22,
+      metalness: 0.02,
+      clearcoat: 0.85,
+      clearcoatRoughness: 0.1,
+      // Extruded HDPE is not clear, but it is not opaque either — the photos
+      // show the colour lifting where the tube thins toward its silhouette.
+      transmission: 0.12,
+      thickness: HOOP_TUBE_DIAMETER_M,
+      ior: 1.5,
+    }),
+    trail: new MeshBasicMaterial({
+      color: palette.main,
+      opacity: 0.3,
+      transparent: true,
+    }),
+  };
+
+  hoopSets.set(color, materials);
   return materials;
 }

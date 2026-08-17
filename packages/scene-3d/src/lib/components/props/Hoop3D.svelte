@@ -1,20 +1,60 @@
+<script module lang="ts">
+  import { TorusGeometry } from "three";
+  import {
+    HOOP_CENTERLINE_RADIUS_M,
+    HOOP_TUBE_RADIUS_M,
+    HOOP_RING_SEGMENTS,
+    HOOP_TUBE_SEGMENTS,
+  } from "./hoop-geometry";
+
+  const builds = new Map<number, TorusGeometry>();
+
+  function getHoopGeometry(scale: number): TorusGeometry {
+    const cached = builds.get(scale);
+    if (cached) return cached;
+
+    const geometry = new TorusGeometry(
+      HOOP_CENTERLINE_RADIUS_M * scale,
+      HOOP_TUBE_RADIUS_M * scale,
+      HOOP_TUBE_SEGMENTS,
+      HOOP_RING_SEGMENTS
+    );
+    builds.set(scale, geometry);
+    return geometry;
+  }
+</script>
+
 <script lang="ts">
   /**
    * Hoop3D Component
    *
-   * Renders a 3D hoop (ring) prop. The hand grabs the BOTTOM of the ring,
-   * so the grip point is at the group origin (0,0,0) and the ring center
-   * is offset upward by the ring's radius. This means the bottom of the
-   * torus touches the origin where the hand holds it.
+   * A mini hoop: one 5/8in HDPE tube bent into an 18.5in ring.
+   * `hoop-geometry.ts` carries the numbers and where each came from — the
+   * diameter off `minihoop.svg` (whose 18.36in lands inside the range minis are
+   * sold at, unlike the club's length), the tube off the tubing spec, where 5/8in
+   * is forced: 3/4in tube will not hold a round hoop at this diameter, which is
+   * why no vendor sells that combination.
    *
-   * Uses computePropRotation (unified for all prop types).
+   * The hand grips the tube's CENTRELINE at the near side of the ring, which is
+   * where `minihoop.svg` puts its 2D hand point — measured 0.7% off the
+   * centreline, so the 2D and 3D grips are in register. `TorusGeometry`'s
+   * `radius` is a centreline radius too, so offsetting the mesh up by exactly
+   * that radius puts the grip at the group origin.
+   *
+   * Because a hoop is sold in discrete inch sizes, its size is absolute — it does
+   * not scale with the user's staff length the way Staff3D does. `scale` still
+   * applies, which is what the BIGHOOP prop type uses.
+   *
+   * The invented white grip torus is gone. Nothing on a real hoop marks the grip
+   * — the ring is one uniform tube from end to end, which is also what the glyph
+   * draws. The same fake grip ring came off the club for the same reason.
    */
 
   import { T } from "@threlte/core";
   import type { Prop3DProps } from "./Prop3DProps";
-  import { PROP_COLORS } from "./Prop3DProps";
   import { computePropRotation } from "./prop3d-transforms";
-  import { userProportionsState } from "../../state/user-proportions-state.svelte";
+  import { getHoopMaterials } from "./frame-materials";
+  import { PLATE_TRAIL_GEOMETRY } from "./plate-materials";
   import {
     LAYER_WORLD,
     LAYER_PLAYER_BODY,
@@ -24,58 +64,35 @@
     propState,
     color,
     visible = true,
-    length,
-    thickness,
     isActivePlayer = false,
     scale = 1,
   }: Prop3DProps = $props();
 
   const propLayer = $derived(isActivePlayer ? LAYER_PLAYER_BODY : LAYER_WORLD);
-  const palette = $derived(PROP_COLORS[color]);
 
-  const effectiveLength = $derived(length ?? userProportionsState.staffLength);
-  const staffRadius = $derived(
-    thickness
-      ? thickness / 2
-      : userProportionsState.dimensions.staffRadius
-  );
-
-  // Ring radius: ~35% of staff length
-  const ringRadius = $derived(effectiveLength * 0.35 * scale);
-
-  // Tube radius: same thickness as a staff shaft
-  const tubeRadius = $derived(staffRadius * 1.0 * scale);
-
-  // Grip indicator ring dimensions (small white torus at origin)
-  const gripOuterRadius = $derived(staffRadius * 1.4 * scale);
-  const gripTubeRadius = $derived(staffRadius * 0.15 * scale);
+  const geometry = $derived(getHoopGeometry(scale));
+  const materials = $derived(getHoopMaterials(color));
 
   const rotation = $derived(computePropRotation(propState));
 </script>
 
 {#if visible}
   <T.Group {rotation} layers={propLayer}>
-    <!-- Main hoop ring: center offset upward by ringRadius so the
-         bottom of the torus sits at the origin (the grip point) -->
-    <T.Mesh position={[0, ringRadius, 0]}>
-      <T.TorusGeometry args={[ringRadius, tubeRadius, 16, 32]} />
-      <T.MeshStandardMaterial
-        color={palette.main}
-        roughness={0.3}
-        metalness={0.2}
-      />
-    </T.Mesh>
-
-    <!-- Grip indicator: small white ring at origin where the hand holds -->
-    <T.Mesh>
-      <T.TorusGeometry args={[gripOuterRadius, gripTubeRadius, 12, 24]} />
-      <T.MeshStandardMaterial color="white" roughness={0.4} metalness={0.1} />
-    </T.Mesh>
+    <!-- Lifted by the centreline radius so the tube's centreline passes through
+         the origin at the bottom of the ring, which is where the hand is. -->
+    <T.Mesh
+      {geometry}
+      material={materials.tube}
+      position={[0, HOOP_CENTERLINE_RADIUS_M * scale, 0]}
+      dispose={false}
+    />
   </T.Group>
 
-  <!-- Trail indicator sphere at prop position -->
-  <T.Mesh layers={propLayer}>
-    <T.SphereGeometry args={[0.015, 8, 8]} />
-    <T.MeshBasicMaterial color={palette.main} opacity={0.3} transparent />
-  </T.Mesh>
+  <!-- Trail indicator (small sphere at prop position for path visualization) -->
+  <T.Mesh
+    geometry={PLATE_TRAIL_GEOMETRY}
+    material={materials.trail}
+    layers={propLayer}
+    dispose={false}
+  />
 {/if}
