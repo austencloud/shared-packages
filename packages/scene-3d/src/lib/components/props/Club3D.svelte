@@ -44,7 +44,7 @@
       case "marker":
         return materials.marker;
       case "cap":
-        // Same EVA as the knob, which is what a Delphin's flat cap is.
+        // Same EVA as the knob, which is what a club's cap is.
         return materials.knob;
       default:
         return materials.body;
@@ -56,15 +56,14 @@
   /**
    * Club3D Component
    *
-   * A real juggling club, turned from the published dimensions of a Henrys
-   * Delphin in the 105mm body. Butt to tip: a semi-round EVA knob, a taped
-   * handle, the dark band at the shoulder, the body, and the flat cap.
+   * A real juggling club. Butt to tip: a semi-round EVA knob, a taped handle, the
+   * dark band at the shoulder, the body, and a broad domed cap.
    *
-   * 52cm overall, 22cm of handle, 30cm of body, widest two thirds up the body.
-   * `club-profile.ts` carries the numbers and where each came from. This is the
-   * one prop in the set NOT measured off its 2D artwork: `club.svg` is a
-   * stylized glyph that draws an 18in club tapering to a point, and a club built
-   * from it read visibly small next to the 6'3" avatar.
+   * The silhouette comes from `club.svg`, rescaled to real dimensions — 52cm
+   * overall, 22cm of handle, 30cm of body, 8cm at the widest, 56% up the body.
+   * `club-profile.ts` carries the numbers, where each one came from, and the two
+   * earlier attempts that got it wrong (one too short, one shaped like a
+   * balloon).
    *
    * Because a club is a standardized object, its size is absolute — it does not
    * scale with the user's staff length the way Staff3D does. `scale` still

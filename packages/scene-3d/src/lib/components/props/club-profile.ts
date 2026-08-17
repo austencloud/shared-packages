@@ -1,29 +1,57 @@
 /**
- * Club lathe profile, built from a real juggling club.
+ * Club lathe profile: the silhouette from `club.svg`, the size from real clubs.
  *
- * Every other prop in this round was measured off its own 2D artwork, because
- * the artwork is the authority on the prop's shape. `club.svg` is the exception:
- * it is a stylized pictograph glyph, not a drawing of a club. Measured against
- * `staff.svg` it draws an 18in club -- shorter than anything sold -- and it
- * tapers the body to a point, which no club has. Fitting that silhouette to real
- * anchors still left a club that read wrong.
+ * This prop took three attempts, and the two failures are worth recording.
  *
- * So this is built from the published dimensions of the club in the reference
- * photos instead, a Henrys Delphin in the 105mm body:
+ * The first built the club by transcribing `club.svg` outright, the way every
+ * other prop in this set is built. That gives an 18in club -- shorter than
+ * anything sold -- because the drawing is a pictograph glyph and fattens the
+ * body so the shape reads at small sizes, which costs it length.
  *
- *   Henrys Delphin   52cm overall, 22cm handle, 30cm body, 200g,
- *                    flat cap and semi-round knob (both EVA), 16mm wood dowel
- *   Renegade         body models 75/85/95/105mm; 105mm is the size they
- *                    recommend for people over 6ft, and the avatar is 6'3"
- *   Play PX3         20.5in overall, 15.5mm dowel, 81.6mm shell -- the slim one,
- *                    kept here as the lower bound on a believable body
+ * The second threw the drawing away and generated the shape from curve functions
+ * against published dimensions. It read as a balloon: a thin handle carrying a
+ * fat body that tapered to a narrow nose. Measuring the drawing shows exactly
+ * why, and the numbers are all ratios the drawing gets RIGHT:
  *
- * Two numbers have no published spec and were read off the product photos: the
- * 36mm knob and the 25mm flat cap. Everything else is quoted.
+ *                        club.svg   the balloon
+ *   cap dia / body dia     0.351       0.238     <- a club ends BROAD
+ *   widest up the body      56%         67%
+ *   handle dia / body dia  0.264       0.219
+ *   knob dia / body dia    0.423       0.343
  *
- * Colour comes from the photos too, since the glyph is a flat silhouette. Every
- * club sold is a dark knob, a light handle, a dark band at the shoulder, and a
- * coloured body with a dark cap -- never one solid colour.
+ * The body was never too fat in ratio -- the drawing's body is fatter still.
+ * Everything else was too thin, and the top was a long convex nose instead of a
+ * near-straight cone ending in a broad cap.
+ *
+ * So this profile takes the whole silhouette from `club.svg` -- every
+ * radius-to-radius ratio and all of its edge curvature -- and rescales only the
+ * two quantities the drawing is not authoritative on: overall length, and body
+ * diameter. Axially in two linear segments so both published lengths land exact;
+ * radially by a single factor, so no ratio moves.
+ *
+ * The published numbers, all from Firetoys product pages:
+ *
+ *   Henrys Delphin      52cm overall, 22cm handle, 30cm body, 200g,
+ *                       16mm ash dowel and a tube handle. No width published.
+ *   Play PX3 / EX1      52cm overall, 22cm handle, "Width: 8cm", 205g --
+ *                       same geometry as the Delphin, and it does publish a width
+ *   Renegade bodies     75 / 85 / 95 / 105mm, plus a 108mm fathead
+ *
+ * 8cm is the body diameter used here. The earlier 105mm came from Renegade's
+ * body range by taking the widest normal body, on a reading of their sizing
+ * guide that the guide does not actually support -- body width is a grip and
+ * juggling-feel choice, not a function of the juggler's height. 8cm sits between
+ * Renegade's 75 and 85mm bodies: an ordinary club.
+ *
+ * Nothing else needed inventing. The drawing's own ratios against a 8cm body
+ * give a 21mm handle, a 34mm knob and a 28mm cap -- which is a 16mm dowel inside
+ * a tube handle, a standard knob, and a standard cap. The drawing is
+ * proportionally honest about every part of the club except how fat the body is
+ * relative to its length.
+ *
+ * Colour is off the product photos, since the glyph is a flat silhouette: a dark
+ * knob, a light taped handle, a dark band at the shoulder, a coloured body and a
+ * dark cap. Never one solid colour.
  */
 
 import type { ProfileStop } from "./prop-lathe";
@@ -34,11 +62,14 @@ export interface ClubBand {
   readonly stops: readonly ProfileStop[];
 }
 
-/** Overall length: the Delphin's 52cm. */
+/** Overall length: 52cm, which the Delphin and the Play Sirius clubs agree on. */
 export const CLUB_LENGTH_M = 0.52;
 
-/** Body at its widest: the 105mm model. */
-export const CLUB_BODY_DIAMETER_M = 0.105;
+/** Body at its widest: the Play Sirius published 8cm. */
+export const CLUB_BODY_DIAMETER_M = 0.08;
+
+/** Handle length: 22cm, which both clubs also agree on. */
+export const CLUB_HANDLE_M = 0.22;
 
 /**
  * The bands, butt to tip, in world units (metres).
@@ -47,89 +78,102 @@ export const CLUB_BODY_DIAMETER_M = 0.105;
  * the user's staff length. Set a 40in staff and your clubs stay 52cm, which is
  * how a prop bag works.
  *
- * The hand sits at 0, just above the knob's widest point -- the standard club
- * grip puts the pinky against the knob, and it is also where `club.svg` puts the
- * 2D hand point, so the pictographs and the 3D scene stay in register. The knob
- * is the only band that reaches below the origin.
+ * The hand sits at 0, which is where `club.svg` puts its 2D hand point -- the
+ * viewBox centre, just above the knob's widest part, where the standard grip puts
+ * the pinky. That keeps the pictographs and the 3D scene in register. The knob is
+ * the only band reaching below the origin.
  *
- * Adjacent bands share a stop exactly, so no join is visible: the club is one
- * continuous turned body and only its colour changes along the length. The cap's
- * two stops sit at the same height, which revolves into the flat disc face a
- * Delphin actually ends in.
+ * Adjacent bands share a stop exactly, so the club is one continuous turned body
+ * whose colour changes along its length and no join is visible.
+ *
+ * Two features carry most of the club's character, and both come straight off the
+ * drawing rather than from a curve function:
+ *
+ *   - the body's upper half is a LONG STRAIGHT TAPER, from 37.7mm radius down to
+ *     14.6mm in one run. Curving through that stretch is what made the second
+ *     attempt read as a balloon.
+ *   - the cap is BROAD -- it turns over at 13.9mm radius, a third of the body's
+ *     width, into a shallow 3.4mm dome. A club does not come to a point.
  */
 export const CLUB_BANDS: readonly ClubBand[] = [
   {
+    // Semi-round EVA knob, widest just above the hand.
     id: "knob",
     stops: [
-      { at: -0.01302, radius: 0.0035 },
-      { at: -0.00987, radius: 0.01008 },
-      { at: -0.00777, radius: 0.01375 },
-      { at: -0.00567, radius: 0.01642 },
-      { at: -0.00357, radius: 0.01782 },
-      { at: -0.00252, radius: 0.018 },
-      { at: -0.00199, radius: 0.01779 },
-      { at: 0.0043, radius: 0.012 },
-      { at: 0.00641, radius: 0.01079 },
-      { at: 0.00798, radius: 0.0105 },
+      { at: -0.01657, radius: 0.00528 },
+      { at: -0.01631, radius: 0.00771 },
+      { at: -0.01593, radius: 0.00922 },
+      { at: -0.0153, radius: 0.01071 },
+      { at: -0.01416, radius: 0.01239 },
+      { at: -0.01251, radius: 0.01389 },
+      { at: -0.01061, radius: 0.015 },
+      { at: -0.00832, radius: 0.01586 },
+      { at: -0.00578, radius: 0.01643 },
+      { at: -0.0021, radius: 0.01681 },
+      { at: 0.00322, radius: 0.01689 },
+      { at: 0.0064, radius: 0.01667 },
+      { at: 0.00893, radius: 0.01618 },
+      { at: 0.01147, radius: 0.01525 },
+      { at: 0.01325, radius: 0.01413 },
+      { at: 0.01464, radius: 0.01264 },
+      { at: 0.01578, radius: 0.01054 },
     ],
   },
   {
-    // 21mm at the butt thickening to 23mm: the 16mm dowel plus a taped grip.
+    // 21mm: the 16mm ash dowel inside a tube handle. Straight, then the last
+    // millimetre picks up the start of the shoulder.
     id: "handle",
     stops: [
-      { at: 0.00798, radius: 0.0105 },
-      { at: 0.19298, radius: 0.0115 },
+      { at: 0.01578, radius: 0.01054 },
+      { at: 0.20216, radius: 0.01054 },
+      { at: 0.20343, radius: 0.01077 },
     ],
   },
   {
-    // The dark band at the shoulder, where the handle meets the body.
+    // The dark band at the shoulder, where the handle meets the body. The
+    // drawing kinks here, and revolvedProfile keeps that kink as a crease.
     id: "marker",
     stops: [
-      { at: 0.19298, radius: 0.0115 },
-      { at: 0.20698, radius: 0.0155 },
+      { at: 0.20343, radius: 0.01077 },
+      { at: 0.21743, radius: 0.01381 },
     ],
   },
   {
-    // Flares out of the shoulder, swells to 105mm two thirds up the body, then
-    // rounds off into the cap. The balance sits toward the body end, which is
-    // why the widest point is high rather than centred.
+    // Flares out of the shoulder to 8cm at 56% up the body, holds a short crown,
+    // then the long straight taper to the cap.
     id: "body",
     stops: [
-      { at: 0.20698, radius: 0.0155 },
-      { at: 0.23059, radius: 0.02452 },
-      { at: 0.2542, radius: 0.03218 },
-      { at: 0.27856, radius: 0.03871 },
-      { at: 0.30293, radius: 0.04389 },
-      { at: 0.32806, radius: 0.04788 },
-      { at: 0.3532, radius: 0.05056 },
-      { at: 0.37909, radius: 0.05208 },
-      { at: 0.40694, radius: 0.05249 },
-      { at: 0.41596, radius: 0.05221 },
-      { at: 0.4246, radius: 0.05158 },
-      { at: 0.43323, radius: 0.05057 },
-      { at: 0.44146, radius: 0.04924 },
-      { at: 0.4497, radius: 0.04754 },
-      { at: 0.45755, radius: 0.04553 },
-      { at: 0.4654, radius: 0.0431 },
-      { at: 0.47246, radius: 0.04049 },
-      { at: 0.47952, radius: 0.03741 },
-      { at: 0.4858, radius: 0.03418 },
-      { at: 0.49129, radius: 0.03083 },
-      { at: 0.49639, radius: 0.02711 },
-      { at: 0.5007, radius: 0.0232 },
-      { at: 0.50384, radius: 0.01953 },
-      { at: 0.5062, radius: 0.0155 },
-      { at: 0.50698, radius: 0.0125 },
+      { at: 0.21743, radius: 0.01381 },
+      { at: 0.25122, radius: 0.02098 },
+      { at: 0.283, radius: 0.02749 },
+      { at: 0.30934, radius: 0.03262 },
+      { at: 0.33013, radius: 0.03637 },
+      { at: 0.34416, radius: 0.03857 },
+      { at: 0.35277, radius: 0.03959 },
+      { at: 0.35608, radius: 0.03979 },
+      { at: 0.3721, radius: 0.04 },
+      { at: 0.38176, radius: 0.03987 },
+      { at: 0.3901, radius: 0.03948 },
+      { at: 0.39884, radius: 0.03872 },
+      { at: 0.40718, radius: 0.0377 },
+      { at: 0.49787, radius: 0.01457 },
+      { at: 0.49986, radius: 0.01406 },
+      { at: 0.49999, radius: 0.01388 },
     ],
   },
   {
+    // Broad top: turns over at 13.9mm radius into a shallow dome. Same EVA as
+    // the knob.
     id: "cap",
     stops: [
-      { at: 0.50698, radius: 0.0125 },
-      { at: 0.50698, radius: 0 },
+      { at: 0.49999, radius: 0.01388 },
+      { at: 0.50092, radius: 0.01203 },
+      { at: 0.50184, radius: 0.00929 },
+      { at: 0.50303, radius: 0.00442 },
+      { at: 0.50343, radius: 0.00108 },
     ],
   },
 ];
 
-/** Hand to the flat cap, in metres. */
-export const CLUB_REACH_M = 0.50698;
+/** Hand to the top of the cap, in metres. */
+export const CLUB_REACH_M = 0.50343;
