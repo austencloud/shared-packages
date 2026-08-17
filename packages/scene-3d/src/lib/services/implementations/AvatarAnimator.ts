@@ -33,6 +33,14 @@ import type { FingerBoneName } from "../../domain/models/GripPose";
  *  anatomically implausible - bend partway and let the rest read as strain. */
 const MAX_WRIST_SWING = (55 * Math.PI) / 180;
 
+/** Max wrist correction ABOUT the forearm axis. Rolling the fist is
+ *  pronation/supination - far cheaper than radial/ulnar deviation - so the
+ *  twist share of the staff-axis correction gets its own, larger clamp.
+ *  Without the split, a vertical staff at a sideways-extended arm (the
+ *  weave's quarter phases) demands ~90 of what is mostly cheap roll, and a
+ *  single 55 clamp leaves the hand visibly off the shaft. */
+const MAX_WRIST_TWIST = (100 * Math.PI) / 180;
+
 /** Per-frame smoothing for the wrist alignment (higher = snappier). */
 const WRIST_SMOOTHING = 0.25;
 
@@ -173,6 +181,8 @@ export class AvatarAnimator implements IAvatarAnimator {
   private readonly _q2 = new Quaternion();
   private readonly _q3 = new Quaternion();
   private readonly _q4 = new Quaternion();
+  private readonly _q5 = new Quaternion();
+  private readonly _v4 = new Vector3();
   private readonly _m1 = new Matrix4();
   private readonly _socketTargetLeft = new Vector3();
   private readonly _socketTargetRight = new Vector3();
@@ -1087,9 +1097,35 @@ export class AvatarAnimator implements IAvatarAnimator {
     // Directed on purpose: no nearest-end negate, ever.
     this._v2.set(0, -1, 0).applyQuaternion(staffQuat);
 
-    // Swing-only correction, clamped to anatomical range
+    // Correction that carries the knuckle line onto the directed staff axis
     this._q2.setFromUnitVectors(this._v1, this._v2);
-    AvatarAnimator.clampQuatAngle(this._q2, MAX_WRIST_SWING);
+
+    // Split the correction about the forearm axis: the twist share is
+    // pronation/supination (cheap - big clamp), the swing share is
+    // radial/ulnar deviation (expensive - small clamp). One combined clamp
+    // starved the cheap roll and left the hand off the shaft at the
+    // weave's vertical-staff quarters.
+    eff.getWorldPosition(this._v3);
+    chain.middle.getWorldPosition(this._v4);
+    this._v3.sub(this._v4);
+    if (this._v3.lengthSq() > 1e-10) {
+      this._v3.normalize();
+      // Twist = projection of the correction onto the forearm axis
+      const d =
+        this._q2.x * this._v3.x +
+        this._q2.y * this._v3.y +
+        this._q2.z * this._v3.z;
+      this._q5
+        .set(this._v3.x * d, this._v3.y * d, this._v3.z * d, this._q2.w)
+        .normalize();
+      // Swing = correction with the twist share removed
+      this._q4.copy(this._q5).invert().premultiply(this._q2);
+      AvatarAnimator.clampQuatAngle(this._q5, MAX_WRIST_TWIST);
+      AvatarAnimator.clampQuatAngle(this._q4, MAX_WRIST_SWING);
+      this._q2.copy(this._q4).multiply(this._q5);
+    } else {
+      AvatarAnimator.clampQuatAngle(this._q2, MAX_WRIST_SWING);
+    }
 
     // Desired world orientation -> hand-local
     this._q3.copy(this._q2).multiply(this._q1);
