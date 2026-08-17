@@ -120,6 +120,17 @@
     bluePropAnchorRef?: import("three").Group;
     /** PropAnchor group ref for red hand IK target (from PerformerRig) */
     redPropAnchorRef?: import("three").Group;
+    /** Contact-lock correction group nested inside the blue PropAnchor.
+     *  Each frame its local position is set to the (clamped) residual
+     *  between the anchor and the hand's palm point, so the rendered prop
+     *  snaps to the hand even when IK can't fully reach. */
+    bluePropCorrectionRef?: import("three").Group;
+    /** Contact-lock correction group nested inside the red PropAnchor. */
+    redPropCorrectionRef?: import("three").Group;
+    /** Stance yaw input track (radians): sustained torso facing offset
+     *  distributed across the spine, feet planted. Planner-shaped - the
+     *  caller decides the stance, the animator applies it. */
+    stanceYaw?: number;
     /** Disable spine twist (dual-wheel: wide lateral targets twist the torso/feet) */
     disableSpineTwist?: boolean;
     /** Current beat index for collision detection logging */
@@ -175,6 +186,9 @@
     onRootMotion,
     bluePropAnchorRef,
     redPropAnchorRef,
+    bluePropCorrectionRef,
+    redPropCorrectionRef,
+    stanceYaw = 0,
     disableSpineTwist = false,
     stepNumber = 0,
     beatProgress = 0,
@@ -277,6 +291,70 @@
   }
 
   const _unitY = new Vector3(0, 1, 0);
+
+  // --- Wrist orientation + last-mile contact lock ---
+  // Full world staff orientations handed to the animator so the wrist can
+  // align its knuckle line with the shaft. Composed the same way
+  // buildStaffSegment composes its axis: anchor (or facing) x
+  // worldRotation x STAFF_HORIZONTAL_QUAT.
+  const _blueStaffQuat = new Quaternion();
+  const _redStaffQuat = new Quaternion();
+  const _anchorQuat = new Quaternion();
+  // Stable object passed to setPropsAndBlend each frame (no allocation).
+  const _propOrientations: import("../services/contracts/IAvatarAnimator").PropOrientations =
+    { blue: null, red: null };
+  /** Max residual (meters) the contact lock will bridge. Beyond this the
+   *  hand genuinely can't reach and snapping the prop would look wrong. */
+  const CONTACT_LOCK_MAX = 0.06;
+  const _palmWorld = new Vector3();
+  const _corrLocal = new Vector3();
+
+  function composeStaffWorldQuat(
+    anchorRef: import("three").Group | undefined,
+    worldRotation: Quaternion,
+    out: Quaternion
+  ): Quaternion {
+    if (anchorRef) {
+      anchorRef.getWorldQuaternion(_anchorQuat);
+    } else {
+      _anchorQuat.setFromAxisAngle(_unitY, facingAngle);
+    }
+    return out
+      .copy(_anchorQuat)
+      .multiply(worldRotation)
+      .multiply(STAFF_HORIZONTAL_QUAT);
+  }
+
+  /**
+   * Last-mile contact lock: measure the residual between the prop anchor
+   * and the hand's palm point AFTER the IK solve, and move the correction
+   * group (which parents the rendered prop) by that residual, clamped.
+   * The prop stays glued to the hand; the IK error becomes invisible.
+   */
+  function applyContactLock(
+    side: "left" | "right",
+    anchorRef: import("three").Group | undefined,
+    correctionRef: import("three").Group | undefined,
+    active: boolean
+  ): void {
+    if (!correctionRef) return;
+    const palm =
+      active && animationService?.getPalmWorldPoint && anchorRef
+        ? animationService.getPalmWorldPoint(side, _palmWorld)
+        : null;
+    if (!palm || !anchorRef) {
+      correctionRef.position.set(0, 0, 0);
+      return;
+    }
+    anchorRef.updateWorldMatrix(true, false);
+    _corrLocal.copy(palm);
+    anchorRef.worldToLocal(_corrLocal);
+    const len = _corrLocal.length();
+    if (len > CONTACT_LOCK_MAX) {
+      _corrLocal.multiplyScalar(CONTACT_LOCK_MAX / len);
+    }
+    correctionRef.position.copy(_corrLocal);
+  }
 
   let servicesReady = $state(false);
   let modelLoaded = $state(false);
@@ -746,14 +824,51 @@
       ? { ...redPropState, worldPosition: redIKTarget }
       : null;
 
+    // World staff orientations for the wrist orientation goal.
+    _propOrientations.blue =
+      blueVisible && bluePropState
+        ? composeStaffWorldQuat(
+            bluePropAnchorRef,
+            bluePropState.worldRotation,
+            _blueStaffQuat
+          )
+        : null;
+    _propOrientations.red =
+      redVisible && redPropState
+        ? composeStaffWorldQuat(
+            redPropAnchorRef,
+            redPropState.worldRotation,
+            _redStaffQuat
+          )
+        : null;
+
     animationService.setPropsAndBlend(
       blueVisible ? blueWorldProp : null,
       redVisible ? redWorldProp : null,
+      undefined,
+      _propOrientations
     );
     // Push optional external spine pitch (e.g., lean-forward stance variants)
     // before the animator runs IK so the arms solve against the leaned torso.
     animationService.setExternalSpinePitch(spinePitchOffset);
+    animationService.setStanceYaw?.(stanceYaw);
     animationService.update(delta);
+
+    // 2a. Last-mile contact lock: after the solve, snap the rendered prop
+    // to the hand by the clamped residual. Runs even when the arm can't
+    // fully reach - that is exactly when it matters.
+    applyContactLock(
+      "left",
+      bluePropAnchorRef,
+      bluePropCorrectionRef,
+      !!(blueVisible && bluePropState)
+    );
+    applyContactLock(
+      "right",
+      redPropAnchorRef,
+      redPropCorrectionRef,
+      !!(redVisible && redPropState)
+    );
 
     // 2b. Collision detection - run after IK so bones are at final positions
     if (collisionDetector.enabled && skeletonService) {

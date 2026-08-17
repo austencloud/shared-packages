@@ -15,6 +15,19 @@
 
 import type { Vector3, Quaternion } from "three";
 
+/**
+ * The body's horizontal reference frame in world space. Both vectors are
+ * unit-length and horizontal. Derived from the skeleton root's world
+ * orientation so hand offsets are measured in the body's own axes -
+ * world-axis X/Z comparisons silently break as soon as the rig is yawed.
+ */
+export interface BodyFrame {
+  /** Points toward the body's right side (+lateral). */
+  lateral: Vector3;
+  /** Points out of the chest (the direction the body faces). */
+  forward: Vector3;
+}
+
 export interface SpineTwistResult {
   spine1: Quaternion;
   spine2: Quaternion;
@@ -36,16 +49,25 @@ export interface ISpineTwister {
    *   held prop doesn't need a counter-balanced stance).
    * - **Both null** - no prop in either hand. Identity (no twist).
    *
+   * Depth awareness: when a bodyFrame is supplied, hands BEHIND the body
+   * plane add a yaw term that turns the chest away from that hand's side -
+   * the shoulder blading a performer actually does to pass a prop into the
+   * plane behind them. Without a bodyFrame, offsets fall back to world
+   * X/Z axes (correct only for an unrotated rig) and the depth term still
+   * runs against those axes.
+   *
    * @param leftHandTarget - Left hand position (world space), or null if absent
    * @param rightHandTarget - Right hand position (world space), or null if absent
    * @param bodyCenter - Avatar's torso center (world space)
    * @param availableBones - Which bones the model actually has (for weight redistribution)
+   * @param bodyFrame - The body's own lateral/forward axes in world space
    * @returns Quaternions to apply to Spine1, Spine2, Neck, Head, and Hips
    */
   computeSpineTwist(
     leftHandTarget: Vector3 | null,
     rightHandTarget: Vector3 | null,
     bodyCenter: Vector3,
-    availableBones?: Set<string>
+    availableBones?: Set<string>,
+    bodyFrame?: BodyFrame
   ): SpineTwistResult;
 }

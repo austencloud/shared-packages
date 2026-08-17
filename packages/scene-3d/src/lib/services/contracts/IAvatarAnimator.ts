@@ -82,6 +82,19 @@ export interface PositionOffset {
   z: number;
 }
 
+/**
+ * World-space orientation of each rendered prop, passed alongside
+ * setPropsAndBlend so the animator can drive the wrist toward the staff
+ * axis. The quaternion must be the FULL world orientation of the prop's
+ * long axis (+Y of the prop cylinder after all rig/anchor transforms) -
+ * PropState3D.worldRotation alone is rig-local and is NOT sufficient
+ * when the rig is yawed.
+ */
+export interface PropOrientations {
+  blue?: Quaternion | null;
+  red?: Quaternion | null;
+}
+
 export interface IAvatarAnimator {
   /**
    * Set the hand targets from prop states
@@ -140,12 +153,35 @@ export interface IAvatarAnimator {
    * Set prop states and compute per-arm IK blend weights.
    * Arms with props ramp toward IK (weight 1).
    * Arms without props ramp toward animation (weight 0).
+   *
+   * @param orientations Optional world-space prop orientations. When
+   *   provided, the animator aligns each hand's knuckle line with its
+   *   staff axis after the arm solve (wrist orientation goal).
    */
   setPropsAndBlend(
     blueProp: PropState3D | null,
     redProp: PropState3D | null,
-    offset?: PositionOffset
+    offset?: PositionOffset,
+    orientations?: PropOrientations
   ): void;
+
+  /**
+   * Stance yaw input track (radians, positive = chest toward the body's
+   * +lateral side). Distributed across the spine so the feet never move -
+   * this is shoulder blading, not a whole-body turn. Planner-shaped: the
+   * caller supplies the value per frame (from a heuristic today, from an
+   * offline execution planner later); the animator only applies it.
+   * Optional so lightweight test doubles don't have to implement it.
+   */
+  setStanceYaw?(radians: number): void;
+
+  /**
+   * World position of the palm grip point (the spot on the hand a staff
+   * shaft actually crosses, derived from the knuckle bones). Returns null
+   * until the skeleton + finger chains are loaded. Used by the contact
+   * lock to snap the rendered prop to the hand.
+   */
+  getPalmWorldPoint?(side: "left" | "right", out: Vector3): Vector3 | null;
 
   /**
    * Enable/disable smooth blending between poses

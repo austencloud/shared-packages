@@ -130,6 +130,11 @@
       effectsParentRef: Group | undefined;
     }]>;
 
+    /** Stance yaw input track (radians), forwarded to Avatar3D: sustained
+     *  torso facing offset distributed across the spine, feet planted.
+     *  Planner-shaped - the caller (heuristic today, offline execution
+     *  planner later) decides the stance; the rig just carries it. */
+    stanceYaw?: number;
     /** Avatar mesh opacity 0-1, forwarded to Avatar3D for swap cross-fades.
      *  1 = fully opaque (default). */
     avatarOpacity?: number;
@@ -167,6 +172,7 @@
     enableRootMotion = false,
     enableFootPlanting = false,
     turnRequestOverride,
+    stanceYaw = 0,
     avatarOpacity = 1,
     onAvatarSwapped,
     gridSlot,
@@ -291,6 +297,13 @@
   let bluePropAnchorRef = $state<Group | undefined>(undefined);
   let redPropAnchorRef = $state<Group | undefined>(undefined);
 
+  // Contact-lock correction groups nested inside each PropAnchor. Avatar3D
+  // writes their local position each frame with the clamped anchor->palm
+  // residual, so the RENDERED prop stays glued to the hand while the IK
+  // target (the anchor itself) stays untouched - no feedback loop.
+  let bluePropCorrectionRef = $state<Group | undefined>(undefined);
+  let redPropCorrectionRef = $state<Group | undefined>(undefined);
+
   // Effects group ref - imperative renderers add meshes here so they
   // inherit the rig's transform.
   let effectsGroupRef = $state<Group | undefined>(undefined);
@@ -324,6 +337,9 @@
       turnRequest={turnRequest}
       bluePropAnchorRef={bluePropAnchorRef}
       redPropAnchorRef={redPropAnchorRef}
+      bluePropCorrectionRef={bluePropCorrectionRef}
+      redPropCorrectionRef={redPropCorrectionRef}
+      stanceYaw={stanceYaw}
       disableSpineTwist={isDualWheel}
       stepNumber={avatarState.currentStepIndex}
       beatProgress={avatarState.progress}
@@ -355,14 +371,16 @@
         position.y={bluePropState.worldPosition.y}
         position.z={bluePropState.worldPosition.z}
       >
-        {#if showProps}
-          <Prop3D
-            propType={bluePropType}
-            propState={bluePropState}
-            color="blue"
-            length={propLength}
-          />
-        {/if}
+        <T.Group bind:ref={bluePropCorrectionRef}>
+          {#if showProps}
+            <Prop3D
+              propType={bluePropType}
+              propState={bluePropState}
+              color="blue"
+              length={propLength}
+            />
+          {/if}
+        </T.Group>
       </T.Group>
     {/if}
   </T.Group>
@@ -379,14 +397,16 @@
         position.y={redPropState.worldPosition.y}
         position.z={redPropState.worldPosition.z}
       >
-        {#if showProps}
-          <Prop3D
-            propType={redPropType}
-            propState={redPropState}
-            color="red"
-            length={propLength}
-          />
-        {/if}
+        <T.Group bind:ref={redPropCorrectionRef}>
+          {#if showProps}
+            <Prop3D
+              propType={redPropType}
+              propState={redPropState}
+              color="red"
+              length={propLength}
+            />
+          {/if}
+        </T.Group>
       </T.Group>
     {/if}
   </T.Group>

@@ -7,10 +7,12 @@
  * from the spine's perspective. Without this, the avatar looks like
  * a mannequin bolted to a pole.
  *
- * Two degrees of freedom:
+ * Three degrees of freedom:
  * 1. YAW (Y-axis): torso turns left/right toward the crossing direction
  * 2. LATERAL TILT (Z-axis): torso leans sideways when hands are high
  *    and crossing - prevents arms from clipping through the head
+ * 3. FORWARD PITCH (X-axis): shoulders follow a cross-body reach so the
+ *    arms can clear the chest instead of solving from a rigid torso
  *
  * The twist distributes anatomically up the spine chain. If the model
  * is missing bones (common: Spine2/upper_chest), the missing bone's
@@ -28,7 +30,11 @@
  */
 
 import { Vector3, Quaternion, Euler } from "three";
-import type { ISpineTwister, SpineTwistResult } from "../contracts/ISpineTwister";
+import type {
+  ISpineTwister,
+  SpineTwistResult,
+  BodyFrame,
+} from "../contracts/ISpineTwister";
 
 /** Maximum total upper-body yaw (turning left/right) in radians (~60 degrees). */
 const MAX_YAW = (60 * Math.PI) / 180;
@@ -40,6 +46,9 @@ const SINGLE_HAND_MAX_YAW = (40 * Math.PI) / 180;
 
 /** Maximum lateral tilt (leaning sideways) in radians (~25 degrees). */
 const MAX_TILT = (25 * Math.PI) / 180;
+
+/** Maximum forward shoulder carry for a fully crossed two-hand pose. */
+const MAX_FORWARD_PITCH = (10 * Math.PI) / 180;
 
 /** Half shoulder width for normalizing lateral offset */
 const SHOULDER_HALF_WIDTH = 0.2;
@@ -66,6 +75,20 @@ const HIP_COUNTER_FRACTION = -0.20;
  */
 const TILT_HEIGHT_THRESHOLD = 0.25;
 
+/** How strongly a behind-the-body hand drives yaw. 1.0 would treat a hand
+ *  one full dead-zone-adjusted meter behind the plane as a max-yaw signal;
+ *  0.8 keeps the blading present but subordinate to lateral crossing. */
+const DEPTH_YAW_WEIGHT = 0.8;
+
+/** Hands within this many meters of the body plane are treated as ON the
+ *  plane. Wall-plane spinning hovers around zero depth; without a dead
+ *  zone the depth term would jitter the torso on every frame. */
+const DEPTH_DEAD_ZONE = 0.02;
+
+/** Fallback body axes when no BodyFrame is supplied (unrotated rig). */
+const DEFAULT_LATERAL = new Vector3(1, 0, 0);
+const DEFAULT_FORWARD = new Vector3(0, 0, 1);
+
 /**
  * Ideal distribution weights for the upper spine chain.
  * Weighted toward the upper back where shoulders attach.
@@ -79,25 +102,56 @@ const IDEAL_WEIGHTS: Record<string, number> = {
 };
 
 export class SpineTwister implements ISpineTwister {
+  /** Scratch vector for lateral/depth offset math (avoids per-call allocation). */
+  private readonly _offset = new Vector3();
+
   computeSpineTwist(
     leftHandTarget: Vector3 | null,
     rightHandTarget: Vector3 | null,
     bodyCenter: Vector3,
-    availableBones?: Set<string>
+    availableBones?: Set<string>,
+    bodyFrame?: BodyFrame
   ): SpineTwistResult {
     if (leftHandTarget && rightHandTarget) {
       return this.computeTwoHandedTwist(
         leftHandTarget,
         rightHandTarget,
         bodyCenter,
-        availableBones
+        availableBones,
+        bodyFrame
       );
     }
     const presentHand = leftHandTarget ?? rightHandTarget;
     if (presentHand) {
-      return this.computeSingleHandGaze(presentHand, bodyCenter, availableBones);
+      return this.computeSingleHandGaze(
+        presentHand,
+        bodyCenter,
+        availableBones,
+        bodyFrame
+      );
     }
     return this.identityResult();
+  }
+
+  /** Signed lateral offset of a target from body center, in the body's own frame. */
+  private lateralOf(
+    target: Vector3,
+    bodyCenter: Vector3,
+    frame?: BodyFrame
+  ): number {
+    this._offset.subVectors(target, bodyCenter);
+    return this._offset.dot(frame?.lateral ?? DEFAULT_LATERAL);
+  }
+
+  /** How far a target sits BEHIND the body plane (0 when at or in front of it). */
+  private behindOf(
+    target: Vector3,
+    bodyCenter: Vector3,
+    frame?: BodyFrame
+  ): number {
+    this._offset.subVectors(target, bodyCenter);
+    const depth = this._offset.dot(frame?.forward ?? DEFAULT_FORWARD);
+    return Math.max(0, -depth - DEPTH_DEAD_ZONE);
   }
 
   /**
@@ -110,10 +164,11 @@ export class SpineTwister implements ISpineTwister {
     leftHandTarget: Vector3,
     rightHandTarget: Vector3,
     bodyCenter: Vector3,
-    availableBones?: Set<string>
+    availableBones?: Set<string>,
+    bodyFrame?: BodyFrame
   ): SpineTwistResult {
-    const leftX = leftHandTarget.x - bodyCenter.x;
-    const rightX = rightHandTarget.x - bodyCenter.x;
+    const leftX = this.lateralOf(leftHandTarget, bodyCenter, bodyFrame);
+    const rightX = this.lateralOf(rightHandTarget, bodyCenter, bodyFrame);
 
     // --- YAW (Y-axis): torso turns toward crossing direction ---
 
@@ -123,12 +178,29 @@ export class SpineTwister implements ISpineTwister {
     // Cross-body tension: how much each hand crosses its natural side
     // Left hand's natural side is -X, so crossing = positive X.
     // Right hand's natural side is +X, so crossing = negative X.
-    const leftCross = Math.max(0, -leftX);
-    const rightCross = Math.max(0, rightX);
-    const crossTension = (leftCross + rightCross) * CROSS_TENSION_WEIGHT;
+    const leftCross = Math.max(0, leftX);
+    const rightCross = Math.max(0, -rightX);
+    const directionalCross =
+      (leftCross - rightCross) * CROSS_TENSION_WEIGHT;
 
-    // Combined yaw signal
-    const yawSignal = lateralBias + Math.sign(lateralBias || 1) * crossTension;
+    // Depth: a hand passing BEHIND the body plane pulls the same-side
+    // shoulder back, which reads as the chest turning AWAY from that
+    // hand's side. This is the blading a performer does to reach the
+    // plane behind them without breaking grip. The sign comes from the
+    // hand's lateral side (softened near center so a behind-center hand
+    // doesn't flicker the torso), scaled by how far behind it sits.
+    const leftBehind = this.behindOf(leftHandTarget, bodyCenter, bodyFrame);
+    const rightBehind = this.behindOf(rightHandTarget, bodyCenter, bodyFrame);
+    const softSign = (x: number) =>
+      Math.max(-1, Math.min(1, x / (SHOULDER_HALF_WIDTH * 0.5)));
+    const depthYawSignal =
+      -(softSign(leftX) * leftBehind + softSign(rightX) * rightBehind) *
+      DEPTH_YAW_WEIGHT;
+
+    // Crossing with one hand turns the torso toward that hand. A symmetric
+    // two-hand cross has no arbitrary left/right winner, so it stays centered
+    // and uses forward pitch below to carry both shoulders toward the props.
+    const yawSignal = lateralBias + directionalCross + depthYawSignal;
 
     // Normalize to [-1, 1] range
     const normalizedYaw = Math.max(-1, Math.min(1,
@@ -155,6 +227,11 @@ export class SpineTwister implements ISpineTwister {
       (leftCross + rightCross) / SHOULDER_HALF_WIDTH
     ));
 
+    // Pull the upper body toward crossed targets before arm IK runs. This is
+    // the local equivalent of a full-body IK chain pre-pull: the shoulders
+    // contribute to the reach rather than leaving the two arm bones alone.
+    const totalForwardPitch = crossFactor * MAX_FORWARD_PITCH;
+
     // Tilt direction matches the yaw direction (lean toward where you're reaching)
     const tiltSignal = Math.sign(normalizedYaw) * heightFactor * crossFactor;
     const totalTilt = tiltSignal * MAX_TILT;
@@ -163,11 +240,11 @@ export class SpineTwister implements ISpineTwister {
     const weights = this.redistributeWeights(availableBones);
 
     return {
-      spine1: this.makeSpineRotation(totalYaw * (weights.spine1 ?? 0), totalTilt * (weights.spine1 ?? 0)),
-      spine2: this.makeSpineRotation(totalYaw * (weights.spine2 ?? 0), totalTilt * (weights.spine2 ?? 0)),
-      neck: this.makeSpineRotation(totalYaw * (weights.neck ?? 0), totalTilt * (weights.neck ?? 0)),
-      head: this.makeSpineRotation(totalYaw * (weights.head ?? 0), totalTilt * (weights.head ?? 0)),
-      hips: this.makeSpineRotation(totalYaw * HIP_COUNTER_FRACTION, totalTilt * HIP_COUNTER_FRACTION * 0.5),
+      spine1: this.makeSpineRotation(totalYaw * (weights.spine1 ?? 0), totalTilt * (weights.spine1 ?? 0), totalForwardPitch * (weights.spine1 ?? 0)),
+      spine2: this.makeSpineRotation(totalYaw * (weights.spine2 ?? 0), totalTilt * (weights.spine2 ?? 0), totalForwardPitch * (weights.spine2 ?? 0)),
+      neck: this.makeSpineRotation(totalYaw * (weights.neck ?? 0), totalTilt * (weights.neck ?? 0), totalForwardPitch * (weights.neck ?? 0)),
+      head: this.makeSpineRotation(totalYaw * (weights.head ?? 0), totalTilt * (weights.head ?? 0), totalForwardPitch * (weights.head ?? 0)),
+      hips: this.makeSpineRotation(totalYaw * HIP_COUNTER_FRACTION, totalTilt * HIP_COUNTER_FRACTION * 0.5, 0),
     };
   }
 
@@ -181,10 +258,22 @@ export class SpineTwister implements ISpineTwister {
   private computeSingleHandGaze(
     handTarget: Vector3,
     bodyCenter: Vector3,
-    availableBones?: Set<string>
+    availableBones?: Set<string>,
+    bodyFrame?: BodyFrame
   ): SpineTwistResult {
-    const offsetX = handTarget.x - bodyCenter.x;
-    const normalizedYaw = Math.max(-1, Math.min(1, offsetX / SINGLE_HAND_REACH));
+    const offsetX = this.lateralOf(handTarget, bodyCenter, bodyFrame);
+    // A held prop passing behind the body still blades the chest away
+    // from that side, even with no second hand in play.
+    const behind = this.behindOf(handTarget, bodyCenter, bodyFrame);
+    const softSign = Math.max(
+      -1,
+      Math.min(1, offsetX / (SHOULDER_HALF_WIDTH * 0.5))
+    );
+    const yawSignal = offsetX - softSign * behind * DEPTH_YAW_WEIGHT;
+    const normalizedYaw = Math.max(
+      -1,
+      Math.min(1, yawSignal / SINGLE_HAND_REACH)
+    );
     const totalYaw = normalizedYaw * SINGLE_HAND_MAX_YAW;
 
     const weights = this.redistributeWeights(availableBones);
@@ -258,11 +347,19 @@ export class SpineTwister implements ISpineTwister {
    * Create a quaternion combining Y-axis yaw and Z-axis lateral tilt.
    * Order matters: tilt first (local Z), then yaw (local Y).
    */
-  private makeSpineRotation(yaw: number, tilt: number): Quaternion {
+  private makeSpineRotation(
+    yaw: number,
+    tilt: number,
+    forwardPitch: number = 0
+  ): Quaternion {
     const q = new Quaternion();
-    if (Math.abs(yaw) < 0.0001 && Math.abs(tilt) < 0.0001) return q;
-    // Euler order YZX: yaw around Y, tilt around Z, composed correctly
-    const euler = new Euler(0, yaw, tilt, "YZX");
+    if (
+      Math.abs(yaw) < 0.0001 &&
+      Math.abs(tilt) < 0.0001 &&
+      Math.abs(forwardPitch) < 0.0001
+    ) return q;
+    // Euler order YZX: yaw, lateral tilt, then forward pitch.
+    const euler = new Euler(forwardPitch, yaw, tilt, "YZX");
     q.setFromEuler(euler);
     return q;
   }
