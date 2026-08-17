@@ -50,8 +50,12 @@ const PALETTES = {
   red: { main: "#ef4444", dark: "#b91c1c" },
 } as const;
 
-/** Unburnt kevlar, which is a pale sand — not the black of a used wick. */
-const KEVLAR = "#efe0b4";
+/**
+ * Unburnt kevlar, a pale sand — not the black of a used wick. Measured off the
+ * wick in `torch.svg`, which is the one piece of prop artwork that draws the
+ * material in colour rather than as a pictograph silhouette.
+ */
+const KEVLAR = "#f6e5b6";
 /** Polished spine steel. */
 const STEEL = "#c8ced8";
 /** The near-black of a moulded sleeve. */
@@ -116,5 +120,77 @@ export function getFrameMaterials(
   };
 
   materialSets.set(key, materials);
+  return materials;
+}
+
+export interface TorchMaterialSet {
+  /** The knob at the butt, and the two white ferrules. Chrome hardware. */
+  readonly hardware: MeshStandardMaterial;
+  /** The wrapped handle. */
+  readonly grip: MeshStandardMaterial;
+  /**
+   * The flare cone. Carries the prop's colour, because that cone is the part
+   * every manufacturer sells in a colour — red, blue, gold, green, silver.
+   */
+  readonly flare: MeshPhysicalMaterial;
+  /** The thin rod between the flare and the wick. Real chrome, and small. */
+  readonly shaft: MeshStandardMaterial;
+  /** Kevlar. */
+  readonly wick: MeshStandardMaterial;
+  /** Path-visualization marker at the prop's position. */
+  readonly trail: MeshBasicMaterial;
+}
+
+const torchSets = new Map<string, TorchMaterialSet>();
+
+/**
+ * A torch is one build, not two: the fire and practice versions of this prop
+ * are the same object with a different wick, so there is no `variant` here.
+ */
+export function getTorchMaterials(color: "blue" | "red"): TorchMaterialSet {
+  const cached = torchSets.get(color);
+  if (cached) return cached;
+
+  const palette = PALETTES[color];
+
+  const materials: TorchMaterialSet = {
+    hardware: new MeshStandardMaterial({
+      color: "#e6e8ec",
+      roughness: 0.3,
+      metalness: 0.45,
+    }),
+    grip: new MeshStandardMaterial({
+      color: "#231f20",
+      // Grip tape and knurling: no highlight at all, or it reads as plastic.
+      roughness: 0.86,
+      metalness: 0.03,
+    }),
+    flare: new MeshPhysicalMaterial({
+      color: palette.main,
+      // The real cone is anodized or moulded acrylic under a gloss coat, and
+      // the clearcoat is what separates it from the matte grip below it.
+      roughness: 0.26,
+      metalness: 0.08,
+      clearcoat: 0.85,
+      clearcoatRoughness: 0.12,
+    }),
+    shaft: new MeshStandardMaterial({
+      color: "#b9bec6",
+      roughness: 0.22,
+      metalness: 0.72,
+    }),
+    wick: new MeshStandardMaterial({
+      color: KEVLAR,
+      roughness: 0.95,
+      metalness: 0,
+    }),
+    trail: new MeshBasicMaterial({
+      color: palette.main,
+      opacity: 0.3,
+      transparent: true,
+    }),
+  };
+
+  torchSets.set(color, materials);
   return materials;
 }

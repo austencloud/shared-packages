@@ -11,6 +11,10 @@
  * wrapped wick, a moulded head and a machined collar all read as. Squaring the
  * corners instead makes a prop look like a stack of tin cans; rounding them all
  * the way to a capsule makes it look like a pill.
+ *
+ * `revolvedProfile` is the other half: when the prop's own artwork draws it side
+ * on, the silhouette IS the half-section, so there is nothing to idealize. Feed
+ * the measured radii straight in.
  */
 
 import { BufferGeometry, LatheGeometry, Vector2 } from "three";
@@ -73,4 +77,40 @@ export function roundedCylinder({
   const geometry = new LatheGeometry(profile, radialSegments);
   geometry.computeVertexNormals();
   return geometry;
+}
+
+export interface ProfileStop {
+  /** Height along the local +Y axis, in the prop's own units. */
+  readonly at: number;
+  /** Radius at that height. */
+  readonly radius: number;
+}
+
+/**
+ * Revolve a measured half-section: a list of (height, radius) stops, spun about
+ * +Y. Unlike `roundedCylinder` this idealizes nothing — every bulge, swell and
+ * shoulder in the list survives into the mesh, which is the point when the
+ * numbers came off the prop's own artwork.
+ *
+ * Ends are closed by dropping to the axis, so a band that starts or ends fat
+ * gets a flat cap. Two stops at the same height with different radii make a
+ * flat annulus, which is how a real shoulder reads.
+ *
+ * `LatheGeometry` generates its own normals, and its handling of a zero-height
+ * step is better than a blanket `computeVertexNormals()` — that would smooth
+ * the shoulders away into a bevel.
+ */
+export function revolvedProfile(
+  stops: readonly ProfileStop[],
+  radialSegments = 24
+): BufferGeometry {
+  const profile: Vector2[] = [];
+  const first = stops[0];
+  const last = stops[stops.length - 1];
+
+  if (first.radius > 0) profile.push(new Vector2(0, first.at));
+  for (const stop of stops) profile.push(new Vector2(stop.radius, stop.at));
+  if (last.radius > 0) profile.push(new Vector2(0, last.at));
+
+  return new LatheGeometry(profile, radialSegments);
 }
