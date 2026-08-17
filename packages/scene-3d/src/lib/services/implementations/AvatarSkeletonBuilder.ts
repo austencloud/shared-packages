@@ -199,11 +199,28 @@ export class AvatarSkeletonBuilder implements IAvatarSkeletonBuilder {
 
   /**
    * Map a bone to a bones map (used during hot-swap)
+   *
+   * A bone whose name IS a canonical name always claims that slot, and alias
+   * matches never overwrite a claimed slot. Without both rules a model with
+   * Spine/Spine1/Spine2 cascades off-by-one: "Spine1" matches canonical
+   * Spine's "spine1" alias (hijacking it), "Spine2" then lands in Spine1,
+   * and canonical Spine2 maps to nothing - so spine twist and stance yaw
+   * silently lose the chest bone's share.
    */
   private mapBoneToMap(bone: Bone, bonesMap: Map<BoneName, Bone>): void {
     const boneName = bone.name.toLowerCase();
 
+    // Exact canonical-name match wins outright.
+    for (const standardName of Object.keys(BONE_NAME_ALIASES) as BoneName[]) {
+      if (boneName === standardName.toLowerCase()) {
+        bonesMap.set(standardName, bone);
+        return;
+      }
+    }
+
+    // Alias match fills only slots nothing has claimed yet.
     for (const [standardName, aliases] of Object.entries(BONE_NAME_ALIASES)) {
+      if (bonesMap.has(standardName as BoneName)) continue;
       for (const alias of aliases) {
         if (boneName === alias.toLowerCase()) {
           bonesMap.set(standardName as BoneName, bone);
@@ -227,9 +244,18 @@ export class AvatarSkeletonBuilder implements IAvatarSkeletonBuilder {
   private mapBone(bone: Bone): void {
     const boneName = bone.name.toLowerCase();
 
+    // Exact canonical-name match wins outright (see mapBoneToMap).
+    for (const standardName of Object.keys(BONE_NAME_ALIASES) as BoneName[]) {
+      if (boneName === standardName.toLowerCase()) {
+        this.state.bones.set(standardName, bone);
+        return;
+      }
+    }
+
+    // Alias match fills only slots nothing has claimed yet.
     for (const [standardName, aliases] of Object.entries(BONE_NAME_ALIASES)) {
+      if (this.state.bones.has(standardName as BoneName)) continue;
       for (const alias of aliases) {
-        // Use exact match first, then contains as fallback
         if (boneName === alias.toLowerCase()) {
           this.state.bones.set(standardName as BoneName, bone);
           return;
