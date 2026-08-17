@@ -1,29 +1,55 @@
+<script module lang="ts">
+  import type { BufferGeometry } from "three";
+  import { buildFanShape, FAN_FRAME_WIDTH } from "./fan-profile";
+  import { bullnosePlate } from "./plate-extrude";
+  import { getPlateMaterials, PLATE_TRAIL_GEOMETRY } from "./plate-materials";
+
+  const plates = new Map<string, BufferGeometry>();
+
+  /**
+   * Ceiling on how far the bevel may eat into the silhouette — roughly a third
+   * of the frame's half-width, past which the rolled edge folds through itself
+   * on the web between the grip ring and the flank wedges.
+   */
+  const MAX_BEVEL_INSET = FAN_FRAME_WIDTH / 6.8;
+
+  function getFanPlate(length: number, depth: number): BufferGeometry {
+    const key = `${length}:${depth}`;
+    const cached = plates.get(key);
+    if (cached) return cached;
+
+    const plate = bullnosePlate(
+      buildFanShape(length),
+      depth,
+      length * MAX_BEVEL_INSET
+    );
+    plates.set(key, plate);
+    return plate;
+  }
+</script>
+
 <script lang="ts">
   /**
    * Fan3D Component
    *
-   * Renders a realistic 3D folding fan with:
-   * - Wide arc blade (~150 degrees) using CircleGeometry, double-sided and translucent
-   * - 5 spine ribs radiating from the pivot across the blade arc
-   * - Thin torus arc rim along the curved outer edge
-   * - Short tapered handle extending downward from the pivot with end cap
+   * A flow fan: a grip ring at the hand, four spokes running out from it, and a
+   * rim closing the outside — the exact silhouette of the 2D fan, extruded into
+   * a bullnose plate. The outline and all five holes are transcribed from the
+   * prop's SVG in `fan-profile.ts`, so the 3D prop and the pictograph prop are
+   * the same shape by construction.
    *
-   * The fan pivot (grip point) is at origin (0,0,0).
-   * The blade extends upward (+Y), the handle extends downward (-Y).
+   * Not a folding fan. There is no fabric, no pleats, and no handle below the
+   * pivot; the artwork draws none of those, and the hand goes through the ring.
    *
-   * Uses computePropRotation (unified for all prop types).
+   * Extrusion emits two material groups: group 0 is the pair of faces, group 1
+   * is the rim, which is how the plate gets a darker turned edge.
    */
 
   import { T } from "@threlte/core";
-  import { DoubleSide } from "three";
   import type { Prop3DProps } from "./Prop3DProps";
-  import { PROP_COLORS } from "./Prop3DProps";
   import { computePropRotation } from "./prop3d-transforms";
   import { userProportionsState } from "../../state/user-proportions-state.svelte";
-  import {
-    LAYER_WORLD,
-    LAYER_PLAYER_BODY,
-  } from "../../layers/layer-constants";
+  import { LAYER_WORLD, LAYER_PLAYER_BODY } from "../../layers/layer-constants";
 
   let {
     propState,
@@ -37,152 +63,41 @@
 
   const propLayer = $derived(isActivePlayer ? LAYER_PLAYER_BODY : LAYER_WORLD);
 
-  // Fan blade radius is ~50% of staff length
-  const FAN_BLADE_RATIO = 0.5;
-
-  // Blade arc: ~150 degrees = 2.618 radians
-  const BLADE_THETA_LENGTH = 2.618;
-  // Center the arc so it fans symmetrically upward from origin
-  const BLADE_THETA_START = -BLADE_THETA_LENGTH / 2 + Math.PI / 2;
-  const BLADE_SEGMENTS = 48;
-
-  // 5 spine ribs evenly distributed across the blade arc
-  const SPINE_COUNT = 5;
-
-  const staffLength = $derived(
+  const effectiveLength = $derived(
     (length ?? userProportionsState.staffLength) * scale
   );
   const baseRadius = $derived(
     (thickness ?? userProportionsState.dimensions.staffRadius) * scale
   );
 
-  const bladeRadius = $derived(staffLength * FAN_BLADE_RATIO);
+  /**
+   * Flat spinning props are plate stock, not tube. The fan's frame runs about
+   * 3.2cm across at default size, so the plate sits a little under 2cm — thick
+   * enough to hold a rolled edge and to read edge-on, thin enough that a tilted
+   * spoke still shows mostly face rather than rim.
+   */
+  const plateDepth = $derived(baseRadius * 1.4);
 
-  const palette = $derived(PROP_COLORS[color]);
+  const plate = $derived(getFanPlate(effectiveLength, plateDepth));
+  const materials = $derived(getPlateMaterials(color));
 
   const rotation = $derived(computePropRotation(propState));
-
-  // Handle: ~12% of staff length, tapered (wider at top, narrower at bottom)
-  const handleLength = $derived(staffLength * 0.12);
-  const handleTopRadius = $derived(baseRadius * 1.3);
-  const handleBottomRadius = $derived(baseRadius * 0.9);
-
-  // Spine ribs: very thin cylinders radiating from pivot
-  const spineRadius = $derived(baseRadius * 0.3);
-
-  // Outer rim: thin torus arc along the curved edge
-  const rimTubeRadius = $derived(baseRadius * 0.25);
-
-  // Compute spine angles and positions. Each spine radiates from origin
-  // at evenly spaced angles across the blade arc.
-  const spineData = $derived.by(() => {
-    const spines: Array<{
-      posX: number;
-      posY: number;
-      rotZ: number;
-      len: number;
-    }> = [];
-    for (let i = 0; i < SPINE_COUNT; i++) {
-      // Distribute spines evenly across the arc, including both edges
-      const fraction = i / (SPINE_COUNT - 1);
-      const angle = BLADE_THETA_START + fraction * BLADE_THETA_LENGTH;
-      // Spine center is halfway along its length from origin
-      const halfLen = bladeRadius / 2;
-      const posX = Math.cos(angle) * halfLen;
-      const posY = Math.sin(angle) * halfLen;
-      // Rotation to align the cylinder along the radial direction.
-      // CylinderGeometry is vertical by default, so rotate to point along the angle.
-      const rotZ = angle - Math.PI / 2;
-      spines.push({ posX, posY, rotZ, len: bladeRadius });
-    }
-    return spines;
-  });
-
-  // Rim torus rotation: the TorusGeometry arc starts at angle 0 on the XY plane.
-  // We need to rotate it so the arc aligns with our blade arc.
-  // The torus arc center angle = BLADE_THETA_START
-  const rimRotationZ = $derived(BLADE_THETA_START);
 </script>
 
 {#if visible}
   <T.Group {rotation} layers={propLayer}>
-    <!-- Fan blade: wide arc disc, double-sided with translucency for fabric feel.
-         CircleGeometry lies in XY plane by default, extending upward from origin. -->
-    <T.Mesh>
-      <T.CircleGeometry
-        args={[bladeRadius, BLADE_SEGMENTS, BLADE_THETA_START, BLADE_THETA_LENGTH]}
-      />
-      <T.MeshStandardMaterial
-        color={palette.main}
-        roughness={0.6}
-        metalness={0.05}
-        side={DoubleSide}
-        transparent
-        opacity={0.9}
-      />
-    </T.Mesh>
-
-    <!-- Spine ribs: 5 thin cylinders radiating from the pivot across the blade arc -->
-    {#each spineData as spine}
-      <T.Mesh
-        position={[spine.posX, spine.posY, 0]}
-        rotation={[0, 0, spine.rotZ]}
-      >
-        <T.CylinderGeometry
-          args={[spineRadius, spineRadius, spine.len, 6, 1]}
-        />
-        <T.MeshStandardMaterial
-          color={palette.dark}
-          roughness={0.4}
-          metalness={0.15}
-        />
-      </T.Mesh>
-    {/each}
-
-    <!-- Outer rim: thin torus arc along the curved edge of the blade -->
-    <T.Mesh rotation={[0, 0, rimRotationZ]}>
-      <T.TorusGeometry
-        args={[
-          bladeRadius,
-          rimTubeRadius,
-          8,
-          BLADE_SEGMENTS,
-          BLADE_THETA_LENGTH,
-        ]}
-      />
-      <T.MeshStandardMaterial
-        color={palette.dark}
-        roughness={0.4}
-        metalness={0.15}
-      />
-    </T.Mesh>
-
-    <!-- Handle: short tapered cylinder extending downward (-Y) from the pivot -->
-    <T.Mesh position={[0, -handleLength / 2, 0]}>
-      <T.CylinderGeometry
-        args={[handleTopRadius, handleBottomRadius, handleLength, 12, 1]}
-      />
-      <T.MeshStandardMaterial
-        color={palette.dark}
-        roughness={0.3}
-        metalness={0.2}
-      />
-    </T.Mesh>
-
-    <!-- Handle end cap: sphere at the bottom of the handle -->
-    <T.Mesh position={[0, -handleLength, 0]}>
-      <T.SphereGeometry args={[handleBottomRadius, 10, 10]} />
-      <T.MeshStandardMaterial
-        color={palette.dark}
-        roughness={0.3}
-        metalness={0.2}
-      />
-    </T.Mesh>
+    <T.Mesh
+      geometry={plate}
+      material={[materials.face, materials.edge]}
+      dispose={false}
+    />
   </T.Group>
 
-  <!-- Trail indicator sphere -->
-  <T.Mesh layers={propLayer}>
-    <T.SphereGeometry args={[0.015, 8, 8]} />
-    <T.MeshBasicMaterial color={palette.main} opacity={0.3} transparent />
-  </T.Mesh>
+  <!-- Trail indicator (small sphere at prop position for path visualization) -->
+  <T.Mesh
+    geometry={PLATE_TRAIL_GEOMETRY}
+    material={materials.trail}
+    layers={propLayer}
+    dispose={false}
+  />
 {/if}
