@@ -2,27 +2,16 @@
   import type { BufferGeometry } from "three";
   import {
     buildTriquetraShape,
-    buildTriquetraShapes,
-    TRIQUETRA2_GRIP,
-    TRIQUETRA2_GRIP_OFFSET,
-    TRIQUETRA_GRIP,
+    TRIQUETRA2_HAND,
+    TRIQUETRA_HAND,
     TRIQUETRA_RIBBON_WIDTH,
   } from "./triquetra-profile";
-  import {
-    bullnosePlate,
-    gripBandMaxBevel,
-    gripBandShape,
-  } from "./plate-extrude";
+  import { bullnosePlate } from "./plate-extrude";
   import { getPlateMaterials, PLATE_TRAIL_GEOMETRY } from "./plate-materials";
 
   type TriquetraVariant = "triquetra" | "triquetra2";
 
-  interface TriquetraGeometrySet {
-    plate: BufferGeometry;
-    gripBand: BufferGeometry;
-  }
-
-  const geometrySets = new Map<string, TriquetraGeometrySet>();
+  const plates = new Map<string, BufferGeometry>();
 
   /**
    * Ceiling on how far the bevel may eat into the silhouette — roughly a third
@@ -31,37 +20,26 @@
    */
   const MAX_BEVEL_INSET = TRIQUETRA_RIBBON_WIDTH / 6.8;
 
-  function getTriquetraGeometrySet(
+  function getTriquetraPlate(
     length: number,
     depth: number,
     variant: TriquetraVariant
-  ): TriquetraGeometrySet {
+  ): BufferGeometry {
     const key = `${length}:${depth}:${variant}`;
-    const cached = geometrySets.get(key);
+    const cached = plates.get(key);
     if (cached) return cached;
 
-    const single = variant === "triquetra2";
-    const grip = single ? TRIQUETRA2_GRIP : TRIQUETRA_GRIP;
-    const geometry = {
-      plate: bullnosePlate(
-        single
-          ? buildTriquetraShape(length, TRIQUETRA2_GRIP_OFFSET)
-          : buildTriquetraShapes(length),
-        depth,
-        length * MAX_BEVEL_INSET
+    const plate = bullnosePlate(
+      buildTriquetraShape(
+        length,
+        variant === "triquetra2" ? TRIQUETRA2_HAND : TRIQUETRA_HAND
       ),
-      // The band stands proud of the plate on both faces, so it reads as
-      // something added to the prop rather than printed on it.
-      gripBand: bullnosePlate(
-        gripBandShape(length, grip),
-        depth * 1.3,
-        length * gripBandMaxBevel(grip)
-      ),
-    };
-    geometrySets.set(key, geometry);
-    return geometry;
+      depth,
+      length * MAX_BEVEL_INSET
+    );
+    plates.set(key, plate);
+    return plate;
   }
-
 </script>
 
 <script lang="ts">
@@ -73,11 +51,9 @@
    * four holes are transcribed from the prop's SVG in `triquetra-profile.ts`,
    * so the 3D prop and the pictograph prop are the same shape by construction.
    *
-   * The default prop is DOUBLE, because the drawing is: two knots mirrored
-   * about the hand, reaching in opposite directions, joined by the grip band
-   * that fills the channel between their cusps. `variant="triquetra2"` is a
-   * single one of those knots, held through the middle of the weave — the only
-   * thing that drawing changes is where the hand meets the plate.
+   * Both props are the same single knot. The only difference is where the hand
+   * meets it: `triquetra` grips the base, `triquetra2` reaches through the
+   * middle of the weave. Each drawing's viewBox centre says which.
    *
    * Extrusion emits two material groups: group 0 is the pair of faces, group 1
    * is the rim, which is how the plate gets a darker turned edge.
@@ -117,9 +93,7 @@
    */
   const plateDepth = $derived(baseRadius * 1.4);
 
-  const geometry = $derived(
-    getTriquetraGeometrySet(effectiveLength, plateDepth, variant)
-  );
+  const plate = $derived(getTriquetraPlate(effectiveLength, plateDepth, variant));
   const materials = $derived(getPlateMaterials(color));
 
   const rotation = $derived(computePropRotation(propState));
@@ -128,21 +102,8 @@
 {#if visible}
   <T.Group {rotation} layers={propLayer}>
     <T.Mesh
-      geometry={geometry.plate}
+      geometry={plate}
       material={[materials.face, materials.edge]}
-      dispose={false}
-    />
-
-    <!--
-      Every prop marks the hand with white. A ring would hoop out of a plate
-      this flat, so the triquetra wears a band instead — and on the double prop
-      that band is structural, bridging the channel between the two knots and
-      lapping onto both. Sized to the material it lands on, so it never
-      overhangs into a hole.
-    -->
-    <T.Mesh
-      geometry={geometry.gripBand}
-      material={[materials.grip, materials.gripEdge]}
       dispose={false}
     />
   </T.Group>

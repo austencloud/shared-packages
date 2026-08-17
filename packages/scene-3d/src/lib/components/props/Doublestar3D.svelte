@@ -1,18 +1,10 @@
 <script module lang="ts">
-  import { BoxGeometry, type BufferGeometry } from "three";
-  import {
-    buildDoublestarShape,
-    DOUBLESTAR_WAIST_HALF_WIDTH,
-  } from "./doublestar-profile";
+  import type { BufferGeometry } from "three";
+  import { buildDoublestarShape } from "./doublestar-profile";
   import { bullnosePlate } from "./plate-extrude";
   import { getPlateMaterials, PLATE_TRAIL_GEOMETRY } from "./plate-materials";
 
-  interface DoublestarGeometrySet {
-    plate: BufferGeometry;
-    gripBand: BoxGeometry;
-  }
-
-  const geometrySets = new Map<string, DoublestarGeometrySet>();
+  const plates = new Map<string, BufferGeometry>();
 
   /**
    * Ceiling on how far the bevel may eat into the silhouette, normalized to
@@ -21,15 +13,9 @@
    */
   const MAX_BEVEL_INSET = 0.008;
 
-  /** Half the grip band's extent along the prop, normalized to length. */
-  const GRIP_BAND_HALF_HEIGHT = 0.028;
-
-  function getDoublestarGeometrySet(
-    length: number,
-    depth: number
-  ): DoublestarGeometrySet {
+  function getDoublestarPlate(length: number, depth: number): BufferGeometry {
     const key = `${length}:${depth}`;
-    const cached = geometrySets.get(key);
+    const cached = plates.get(key);
     if (cached) return cached;
 
     const plate = bullnosePlate(
@@ -38,18 +24,8 @@
       length * MAX_BEVEL_INSET,
       12
     );
-
-    const bandWidth = length * DOUBLESTAR_WAIST_HALF_WIDTH * 2.24;
-    const geometry = {
-      plate,
-      gripBand: new BoxGeometry(
-        bandWidth,
-        length * GRIP_BAND_HALF_HEIGHT * 2,
-        depth * 1.2
-      ),
-    };
-    geometrySets.set(key, geometry);
-    return geometry;
+    plates.set(key, plate);
+    return plate;
   }
 
 </script>
@@ -109,9 +85,7 @@
    */
   const plateDepth = $derived(baseRadius * 1.7);
 
-  const geometry = $derived(
-    getDoublestarGeometrySet(effectiveLength, plateDepth)
-  );
+  const plate = $derived(getDoublestarPlate(effectiveLength, plateDepth));
   const materials = $derived(getPlateMaterials(color));
 
   const rotation = $derived(computePropRotation(propState));
@@ -120,19 +94,8 @@
 {#if visible}
   <T.Group {rotation} layers={propLayer}>
     <T.Mesh
-      geometry={geometry.plate}
+      geometry={plate}
       material={[materials.face, materials.edge]}
-      dispose={false}
-    />
-
-    <!--
-      Every prop marks the hand with white. A ring would hoop out of a plate
-      this flat, so the doublestar wears its grip as a band wrapped around the
-      central bar, proud of the plate on all four sides.
-    -->
-    <T.Mesh
-      geometry={geometry.gripBand}
-      material={materials.grip}
       dispose={false}
     />
   </T.Group>

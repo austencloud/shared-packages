@@ -3,25 +3,14 @@
   import {
     buildBuugengShape,
     buildTrigengShape,
-    BUUGENG_GRIP,
     GENG_BLADE_WIDTH,
-    TRIGENG_GRIP,
   } from "./geng-profile";
-  import {
-    bullnosePlate,
-    gripBandMaxBevel,
-    gripBandShape,
-  } from "./plate-extrude";
+  import { bullnosePlate } from "./plate-extrude";
   import { getPlateMaterials, PLATE_TRAIL_GEOMETRY } from "./plate-materials";
 
   type GengVariant = "buugeng" | "trigeng";
 
-  interface GengGeometrySet {
-    plate: BufferGeometry;
-    gripBand: BufferGeometry;
-  }
-
-  const geometrySets = new Map<string, GengGeometrySet>();
+  const plates = new Map<string, BufferGeometry>();
 
   /**
    * Ceiling on how far the bevel may eat into the silhouette. The blade runs
@@ -30,33 +19,24 @@
    */
   const MAX_BEVEL_INSET = GENG_BLADE_WIDTH / 6.8;
 
-  function getGengGeometrySet(
+  function getGengPlate(
     length: number,
     depth: number,
     variant: GengVariant
-  ): GengGeometrySet {
+  ): BufferGeometry {
     const key = `${length}:${depth}:${variant}`;
-    const cached = geometrySets.get(key);
+    const cached = plates.get(key);
     if (cached) return cached;
 
-    const tri = variant === "trigeng";
-    const grip = tri ? TRIGENG_GRIP : BUUGENG_GRIP;
-    const geometry = {
-      plate: bullnosePlate(
-        tri ? buildTrigengShape(length) : buildBuugengShape(length),
-        depth,
-        length * MAX_BEVEL_INSET
-      ),
-      // The band stands proud of the plate on both faces, so it reads as
-      // something wrapped around the blade rather than printed on it.
-      gripBand: bullnosePlate(
-        gripBandShape(length, grip),
-        depth * 1.3,
-        length * gripBandMaxBevel(grip)
-      ),
-    };
-    geometrySets.set(key, geometry);
-    return geometry;
+    const plate = bullnosePlate(
+      variant === "trigeng"
+        ? buildTrigengShape(length)
+        : buildBuugengShape(length),
+      depth,
+      length * MAX_BEVEL_INSET
+    );
+    plates.set(key, plate);
+    return plate;
   }
 </script>
 
@@ -114,9 +94,7 @@
    */
   const plateDepth = $derived(baseRadius * 1.4);
 
-  const geometry = $derived(
-    getGengGeometrySet(effectiveLength, plateDepth, variant)
-  );
+  const plate = $derived(getGengPlate(effectiveLength, plateDepth, variant));
   const materials = $derived(getPlateMaterials(color));
 
   const rotation = $derived(computePropRotation(propState));
@@ -125,19 +103,8 @@
 {#if visible}
   <T.Group {rotation} layers={propLayer}>
     <T.Mesh
-      geometry={geometry.plate}
+      geometry={plate}
       material={[materials.face, materials.edge]}
-      dispose={false}
-    />
-
-    <!--
-      Every prop marks the hand with white. A ring would hoop out of a blade
-      this flat, so the geng wears a band instead, sized to the material it
-      lands on so it never overhangs where the blade curves away.
-    -->
-    <T.Mesh
-      geometry={geometry.gripBand}
-      material={[materials.grip, materials.gripEdge]}
       dispose={false}
     />
   </T.Group>

@@ -19,10 +19,6 @@ export interface PlateMaterialSet {
   readonly face: MeshPhysicalMaterial;
   /** The rolled rim (extrusion group 1). */
   readonly edge: MeshStandardMaterial;
-  /** The band marking the hand. */
-  readonly grip: MeshStandardMaterial;
-  /** The band's own rolled rim. */
-  readonly gripEdge: MeshStandardMaterial;
   /** Path-visualization marker at the prop's position. */
   readonly trail: MeshBasicMaterial;
 }
@@ -66,19 +62,6 @@ export function getPlateMaterials(color: "blue" | "red"): PlateMaterialSet {
       color: new Color(palette.main).lerp(new Color(palette.dark), 0.6),
       roughness: 0.42,
       metalness: 0.1,
-    }),
-    // Grip tape, not chrome: matte enough that it never competes with the
-    // plate's highlight, with the rolled edge a shade down so the wrap has a
-    // readable thickness of its own against the white face.
-    grip: new MeshStandardMaterial({
-      color: "#f2f4f8",
-      roughness: 0.55,
-      metalness: 0.04,
-    }),
-    gripEdge: new MeshStandardMaterial({
-      color: "#c3c9d6",
-      roughness: 0.6,
-      metalness: 0.04,
     }),
     trail: new MeshBasicMaterial({
       color: palette.main,

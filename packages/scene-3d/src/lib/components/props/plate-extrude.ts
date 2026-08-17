@@ -3,16 +3,18 @@
  *
  * The doublestar, the triquetra and the geng family are all the same object in
  * different silhouettes: a 2D outline transcribed from the pictograph artwork,
- * given depth, with a rolled edge and a white band marking the hand. This
- * module owns how that stock is cut, so a new flat prop supplies an outline and
- * nothing else.
+ * given depth and a rolled edge. This module owns how that stock is cut, so a
+ * new flat prop supplies an outline and nothing else.
+ *
+ * Nothing is added that the artwork does not draw. None of the flat props mark
+ * the hand in 2D — only `staff.svg` carries a hand marker — so none of them
+ * wear a grip in 3D either.
  */
 
 import {
   type BufferGeometry,
   ExtrudeGeometry,
   type Shape as ShapeType,
-  Shape,
 } from "three";
 import { mergeVertices } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 
@@ -67,47 +69,4 @@ export function bullnosePlate(
   welded.computeVertexNormals();
   extruded.dispose();
   return welded;
-}
-
-/** A grip band's footprint on the plate, in the outline's own coordinates. */
-export interface GripBand {
-  /** Half-extent across the prop. */
-  readonly halfAcross: number;
-  /** Half-extent along the prop. */
-  readonly halfAlong: number;
-  /** Centre along the prop. Defaults to the hand. */
-  readonly centerAlong?: number;
-}
-
-/**
- * Ceiling on the band's own rolled edge. The band's half-extent along the prop,
- * not a narrow feature of the silhouette, is what binds here.
- */
-export function gripBandMaxBevel(band: GripBand): number {
-  return band.halfAlong * 0.4;
-}
-
-/**
- * Build a grip band as a rounded rectangle in the plate's plane, ready to
- * extrude. Corner radius is tied to the band's own thickness so a squat band
- * does not come out as a lozenge.
- */
-export function gripBandShape(scale: number, band: GripBand): Shape {
-  const w = band.halfAcross * scale;
-  const h = band.halfAlong * scale;
-  const r = Math.min(h, w) * 0.45;
-  const cy = (band.centerAlong ?? 0) * scale;
-
-  const shape = new Shape();
-  shape.moveTo(-w + r, cy - h);
-  shape.lineTo(w - r, cy - h);
-  shape.quadraticCurveTo(w, cy - h, w, cy - h + r);
-  shape.lineTo(w, cy + h - r);
-  shape.quadraticCurveTo(w, cy + h, w - r, cy + h);
-  shape.lineTo(-w + r, cy + h);
-  shape.quadraticCurveTo(-w, cy + h, -w, cy + h - r);
-  shape.lineTo(-w, cy - h + r);
-  shape.quadraticCurveTo(-w, cy - h, -w + r, cy - h);
-  shape.closePath();
-  return shape;
 }

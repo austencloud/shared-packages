@@ -26,7 +26,6 @@
  */
 
 import { Shape } from "three";
-import type { GripBand } from "./plate-extrude";
 
 /** [c1x, c1y, c2x, c2y, endX, endY] */
 type Cubic = readonly [number, number, number, number, number, number];
@@ -42,16 +41,6 @@ interface Contour {
  * 4.6cm blade; the narrower of the two sets the bevel ceiling for the family.
  */
 export const GENG_BLADE_WIDTH = 0.0534;
-
-/**
- * Where the hand meets each blade. The buugeng grips the waist where its two
- * arcs cross; the trigeng grips the hub the three arms leave from, which has a
- * little more room. Both bands are sized to sit wholly on material — the blade
- * curves away under them, so a band that spans the full blade width overhangs
- * into open air on the outside of the curve.
- */
-export const BUUGENG_GRIP: GripBand = { halfAcross: 0.0277, halfAlong: 0.0297 };
-export const TRIGENG_GRIP: GripBand = { halfAcross: 0.0316, halfAlong: 0.0316 };
 
 const BUUGENG_OUTLINE: Contour = {
   start: [0.26325, 0.24446],

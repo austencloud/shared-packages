@@ -71,12 +71,6 @@ const STAR_HOLE: Contour = {
   ],
 };
 
-/**
- * Half-width of the bar at the exact centre of the prop, normalized to length.
- * That is where the hand goes, so the grip band is sized from it.
- */
-export const DOUBLESTAR_WAIST_HALF_WIDTH = 0.027;
-
 function trace<T extends Shape | Path>(
   target: T,
   contour: Contour,

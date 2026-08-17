@@ -2,32 +2,31 @@
  * Triquetra silhouette profile
  *
  * The 3D triquetra is not an approximation of the 2D prop — it IS the 2D
- * artwork, given depth. These contours are a direct transcription of one knot
- * from `static/images/props/triquetra.svg` (viewBox 290.3x169.6): every cubic
- * below comes from that file, with its elliptical arcs converted to beziers.
- * One closed outline plus four holes — the two near lobes, the core triangle,
- * and the far lobe's ring interior.
+ * artwork, given depth. These contours are a direct transcription of the knot
+ * `static/images/props/triquetra.svg` draws: every cubic below comes from that
+ * file, with its elliptical arcs converted to beziers. One closed outline plus
+ * four holes — the two near lobes, the core triangle, and the far lobe's ring
+ * interior.
  *
  * Coordinates are normalized to the STAFF's drawn span (252.8 SVG units, the
  * shared unit across every prop drawing) and rotated into prop-local 2D space,
  * so the prop's reach runs along +Y like every other prop:
  *
- *   x = (svgY - 84.8)  / 252.8    across the prop, spans [-0.335, 0.335]
- *   y = (svgX - 150.5) / 252.8    along the prop,  spans [-0.060, 0.553]
+ *   x = (svgY - 84.8)  / 252.8    across the prop
+ *   y = (svgX - 150.5) / 252.8    along the prop
  *
- * The origin is the hand, and the table is written with the knot's near cusp
- * sitting exactly on it. The artwork actually stands the cusp off the hand by
- * `TRIQUETRA_CUSP_GAP`, which the builders add back — see that constant.
+ * The two props are ONE knot each. They differ only in where the hand meets it,
+ * and the hand is always the viewBox centre — that is where `prop-svg-loader`
+ * puts it in 2D, so it is where it goes in 3D.
  *
- * One knot is not the whole prop. `triquetra.svg` draws TWO of them, mirrored
- * about the hand, reaching in opposite directions: a double-ended prop just
- * under a metre long, held in the middle where the two knots meet.
- * `triquetra2.svg` draws a single knot held through the middle of the weave.
- * Both are built from this one table.
+ * `triquetra.svg` carries a second copy of the knot, mirrored about that
+ * centre, marked `fill:none`. It draws nothing. It is there to widen the
+ * viewBox so the centre lands near the knot's base rather than through its
+ * middle — the drawing's way of moving the hand. Extruding it would put a
+ * second knot on the prop that the artwork does not have.
  */
 
 import { Path, Shape } from "three";
-import type { GripBand } from "./plate-extrude";
 
 /** [c1x, c1y, c2x, c2y, endX, endY] */
 type Cubic = readonly [number, number, number, number, number, number];
@@ -108,90 +107,43 @@ const HOLE_FAR_LOBE: Contour = {
 
 /**
  * Width of the ribbon at its narrowest, normalized to staff length — measured
- * as the closest approach between the outline and any hole. The grip band and
- * the bevel ceiling are both sized from it.
+ * as the closest approach between the outline and any hole. The bevel ceiling
+ * is sized from it.
  */
 export const TRIQUETRA_RIBBON_WIDTH = 0.0542;
 
-/**
- * How far the knot's near cusp stands off the hand in the artwork, normalized
- * to staff length — 5.35 SVG units, 1.8cm at default size.
- *
- * The contour table above is written with the cusp on the origin, so every
- * builder adds this back to restore the drawing. On the double prop it opens a
- * 3.7cm channel between the two knots' cusps, and that channel is not an error
- * in the drawing: it is where the handle goes. The grip band fills it and
- * laps onto both knots, which is what joins them into one prop.
- */
-export const TRIQUETRA_CUSP_GAP = 0.02117;
-
-/**
- * The grip band, sized against the plate rather than guessed at. Width is set
- * by the hand — 9.7cm — and is the same on both props. Height and placement
- * are not, because the two bands do different jobs.
- *
- * On the double prop the band is structural and centred on the hand: 4.8cm
- * spans the 3.7cm channel between the two cusps and still laps 0.55cm onto
- * solid material at the narrowest point (x = 0), where sampling the silhouette
- * puts the plate's edge at 1.8cm and unbroken material from there out to
- * 7.9cm. The plate holds far more than 9.7cm of width at that height — 34cm
- * before it runs out — so the band cannot overhang.
- *
- * On the single knot the band is a wrap, seated just past the hand on the
- * ribbon dividing the core from the far lobe. That ribbon is 4.75cm thick but
- * it is an ARC, so a straight band as tall as the ribbon runs off it at both
- * ends: at 4.8cm tall the plate only carries 4.4cm of width, less than half
- * the hand. Tape proportions are what fit — 2.2cm tall leaves room for 24.7cm,
- * so the 9.7cm band sits well inside the material across its whole length.
- */
-/** Both bands span the same width across the prop. */
-const GRIP_HALF_ACROSS = 0.056;
-
-export const TRIQUETRA_GRIP: GripBand = {
-  halfAcross: GRIP_HALF_ACROSS,
-  halfAlong: 0.028,
-};
-
-/** Wrap seated on the ribbon the single knot hangs from. */
-export const TRIQUETRA2_GRIP: GripBand = {
-  halfAcross: GRIP_HALF_ACROSS,
-  halfAlong: 0.013,
-  centerAlong: 0.013,
-};
-
-/**
- * How far along the prop the single-knot variant grips, normalized to staff
- * length.
- *
- * triquetra2 is not a second drawing — measured against this profile it is one
- * of the double prop's knots to within drawing noise, in a square viewBox that
- * places the hand somewhere else entirely. Its viewBox centre lands at
- * y = 0.21558 here, which is 0.79cm inside the core hole; the nearest material
- * beyond it is y = 0.22468, exactly the core's far bound. So the hand hangs on
- * the inner edge of the ribbon dividing the core from the far lobe — you put
- * your hand through the middle of the weave rather than holding a junction.
- * Snapping onto that edge is the one correction this variant needs: the prop
- * has to touch the hand.
- */
-export const TRIQUETRA2_GRIP_OFFSET = 0.22468;
-
-interface Placement {
-  /** Point in the contour table's own frame that is brought to the hand. */
-  readonly offset: number;
-  /** Reflect the knot back along the prop, for the double's second half. */
-  readonly mirror?: boolean;
+/** The point of the contour table that the hand sits on. */
+interface Hand {
+  /** Along the prop. */
+  readonly along: number;
+  /** Across the prop. */
+  readonly across: number;
 }
+
+/**
+ * `triquetra.svg` is a 290.3x169.6 box, so its centre is (145.15, 84.8) — 5.35
+ * units short of where this table puts its origin, which is 1.8cm out along the
+ * prop. The hand lands just off the knot's near cusp: you hold it at the base
+ * and the whole weave reaches away from you.
+ */
+export const TRIQUETRA_HAND: Hand = { along: -0.02117, across: 0 };
+
+/**
+ * `triquetra2.svg` is the same knot in a square 170x170 box, translated 120
+ * units left, so its centre is (205, 85) in this table's frame. That lands
+ * inside the core hole — the hand goes THROUGH the middle of the weave rather
+ * than holding the base. Same drawing, different grip.
+ */
+export const TRIQUETRA2_HAND: Hand = { along: 0.21559, across: 0.00079 };
 
 function trace<T extends Shape | Path>(
   target: T,
   contour: Contour,
   scale: number,
-  place: Placement
+  hand: Hand
 ): T {
-  const sy = place.mirror ? -scale : scale;
-  const shift = place.offset;
-  const px = (x: number) => x * scale;
-  const py = (y: number) => (y - shift) * sy;
+  const px = (x: number) => (x - hand.across) * scale;
+  const py = (y: number) => (y - hand.along) * scale;
 
   target.moveTo(px(contour.start[0]), py(contour.start[1]));
   for (const [c1x, c1y, c2x, c2y, x, y] of contour.curves) {
@@ -201,47 +153,18 @@ function trace<T extends Shape | Path>(
   return target;
 }
 
-function buildKnot(staffLength: number, place: Placement): Shape {
-  const shape = trace(new Shape(), OUTLINE, staffLength, place);
+/**
+ * Build the triquetra — one knot, sized against a staff of `staffLength` units
+ * and lying in the XY plane ready to extrude, with `hand` brought to the
+ * origin.
+ */
+export function buildTriquetraShape(staffLength: number, hand: Hand): Shape {
+  const shape = trace(new Shape(), OUTLINE, staffLength, hand);
   shape.holes = [
-    trace(new Path(), HOLE_LEFT_LOBE, staffLength, place),
-    trace(new Path(), HOLE_RIGHT_LOBE, staffLength, place),
-    trace(new Path(), HOLE_CORE, staffLength, place),
-    trace(new Path(), HOLE_FAR_LOBE, staffLength, place),
+    trace(new Path(), HOLE_LEFT_LOBE, staffLength, hand),
+    trace(new Path(), HOLE_RIGHT_LOBE, staffLength, hand),
+    trace(new Path(), HOLE_CORE, staffLength, hand),
+    trace(new Path(), HOLE_FAR_LOBE, staffLength, hand),
   ];
   return shape;
-}
-
-/**
- * Build the double triquetra — two knots mirrored about the hand — sized
- * against a staff of `staffLength` units and lying in the XY plane ready to
- * extrude, with the hand at the origin and the prop reaching along both ±Y.
- *
- * The two knots interlock: their near lobes overlap across a lens either side
- * of the junction, about 9% of the plate's area. That needs no boolean union
- * to render. Both are extruded to identical depth in the same plane, so every
- * face one knot contributes inside the other is exactly coplanar with it and
- * every rim it contributes there sits at or below that plane — the depth test
- * resolves the pair into the union's silhouette on its own.
- */
-export function buildTriquetraShapes(staffLength: number): Shape[] {
-  // The table puts the cusp on the origin; bringing the point one gap SHORT of
-  // it to the hand stands both cusps back off by the gap, as drawn.
-  const place = { offset: -TRIQUETRA_CUSP_GAP };
-  return [
-    buildKnot(staffLength, place),
-    buildKnot(staffLength, { ...place, mirror: true }),
-  ];
-}
-
-/**
- * Build a single triquetra knot gripped `gripOffset` along its length — the
- * triquetra2 variant. The shape is the same one the double prop is made of;
- * only where the hand meets it changes.
- */
-export function buildTriquetraShape(
-  staffLength: number,
-  gripOffset: number
-): Shape {
-  return buildKnot(staffLength, { offset: gripOffset });
 }
