@@ -194,3 +194,72 @@ export function getTorchMaterials(color: "blue" | "red"): TorchMaterialSet {
   torchSets.set(color, materials);
   return materials;
 }
+
+export interface ClubMaterialSet {
+  /** The rubber cap at the butt. Matte, and darker than the marker ring. */
+  readonly knob: MeshStandardMaterial;
+  /** The thin straight grip between knob and body. */
+  readonly handle: MeshStandardMaterial;
+  /** The ring at the handle/body corner every club sold wears. */
+  readonly marker: MeshStandardMaterial;
+  /**
+   * The barrel. Carries the prop's colour, because it is the only part big
+   * enough to tell blue from red across a dark stage — and because on a real
+   * club the body is the part that comes in a colour at all.
+   */
+  readonly body: MeshPhysicalMaterial;
+  /** Path-visualization marker at the prop's position. */
+  readonly trail: MeshBasicMaterial;
+}
+
+const clubSets = new Map<string, ClubMaterialSet>();
+
+/**
+ * A club is one turned body whose colour changes along its length, so unlike
+ * the frame props there is no `variant` here: every build people own — moulded,
+ * LED, practice — shares this material split and differs only in the body.
+ */
+export function getClubMaterials(color: "blue" | "red"): ClubMaterialSet {
+  const cached = clubSets.get(color);
+  if (cached) return cached;
+
+  const palette = PALETTES[color];
+
+  const materials: ClubMaterialSet = {
+    knob: new MeshStandardMaterial({
+      color: "#1b1b1e",
+      // Moulded rubber, so it keeps a little sheen the tape ring does not.
+      roughness: 0.72,
+      metalness: 0.02,
+    }),
+    handle: new MeshStandardMaterial({
+      color: "#eceef1",
+      roughness: 0.55,
+      metalness: 0.02,
+    }),
+    marker: new MeshStandardMaterial({
+      color: "#141416",
+      // Vinyl tape: flatter than the knob, and it should read as a decal.
+      roughness: 0.88,
+      metalness: 0.02,
+    }),
+    body: new MeshPhysicalMaterial({
+      color: palette.main,
+      // Blow-moulded polyethylene under a gloss skin. Same reasoning as the
+      // torch's flare: the clearcoat is what separates it from the matte
+      // handle it sits against.
+      roughness: 0.3,
+      metalness: 0.06,
+      clearcoat: 0.7,
+      clearcoatRoughness: 0.18,
+    }),
+    trail: new MeshBasicMaterial({
+      color: palette.main,
+      opacity: 0.3,
+      transparent: true,
+    }),
+  };
+
+  clubSets.set(color, materials);
+  return materials;
+}
