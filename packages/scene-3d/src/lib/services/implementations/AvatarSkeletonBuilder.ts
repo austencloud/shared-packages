@@ -138,12 +138,27 @@ export class AvatarSkeletonBuilder implements IAvatarSkeletonBuilder {
     const newBones = new Map<BoneName, Bone>();
     let newSkeleton: Skeleton | null = null;
 
-    // Find all skinned meshes and bones in the new model
+    // Find all skinned meshes and bones in the new model.
+    //
+    // An optimized character GLB carries one skin per garment - body, shirt,
+    // shorts, sneakers, hair - and the exporter prunes each skin down to the
+    // joints that garment actually needs. Taking whichever skin happens to be
+    // traversed last hands us an 8-bone sneaker or hair skeleton with no
+    // fingers in it at all, which silently disables the finger animator for
+    // the whole avatar. The body skin is the one with every joint, so keep the
+    // richest skeleton rather than the last one.
     gltf.scene.traverse((child) => {
       if ((child as SkinnedMesh).isSkinnedMesh) {
         const skinnedMesh = child as SkinnedMesh;
         newMeshes.push(skinnedMesh);
-        newSkeleton = skinnedMesh.skeleton;
+        if (
+          skinnedMesh.skeleton &&
+          (!newSkeleton ||
+            skinnedMesh.skeleton.bones.length >
+              (newSkeleton as Skeleton).bones.length)
+        ) {
+          newSkeleton = skinnedMesh.skeleton;
+        }
 
         // Map bones from the skeleton directly (more reliable than checking isBone)
         if (skinnedMesh.skeleton) {
@@ -394,39 +409,52 @@ export class AvatarSkeletonBuilder implements IAvatarSkeletonBuilder {
     const left = new Map<FingerBoneName, Bone>();
     const right = new Map<FingerBoneName, Bone>();
 
-    // Build a lookup from lowercase bone name → Bone reference
-    // using the skeleton's actual bone array (the GPU-bound instances)
-    const bonesByName = new Map<string, Bone>();
-    for (const bone of this.skeleton.bones) {
-      bonesByName.set(bone.name.toLowerCase(), bone);
-    }
+    // Lowercased bone names from the skeleton's own bone array (the GPU-bound
+    // instances). Order follows the skin joint array, which is the order the
+    // suffix and substring passes below scan in.
+    const named = this.skeleton.bones.map((bone) => ({
+      bone,
+      lower: bone.name.toLowerCase(),
+    }));
+
+    // A bone already claimed by one canonical slot cannot be claimed by
+    // another - guards the substring pass against cross-assignment.
+    const claimed = new Set<Bone>();
+
+    const findFingerBone = (aliases: string[]): Bone | null => {
+      const wanted = aliases.map((a) => a.toLowerCase());
+
+      // Exact, then suffix, then substring. Suffix is what carries the
+      // namespaced rigs: three's GLTFLoader strips the colon from Mixamo's
+      // "mixamorig:LeftHandThumb1", leaving "mixamorigLeftHandThumb1", which
+      // an exact lookup misses on 13 of the 16 avatars - and a null here
+      // disables the finger animator for the whole model.
+      for (const test of [
+        (name: string, alias: string) => name === alias,
+        (name: string, alias: string) => name.endsWith(alias),
+        (name: string, alias: string) => name.includes(alias),
+      ]) {
+        for (const alias of wanted) {
+          for (const entry of named) {
+            if (claimed.has(entry.bone)) continue;
+            if (test(entry.lower, alias)) {
+              claimed.add(entry.bone);
+              return entry.bone;
+            }
+          }
+        }
+      }
+
+      return null;
+    };
 
     for (const boneName of FINGER_BONES) {
-      // --- Left hand ---
-      const leftKey = `Left${boneName}`;
-      const leftAliases = FINGER_BONE_ALIASES[leftKey] ?? [];
-      let leftBone: Bone | null = null;
-
-      for (const alias of leftAliases) {
-        const found = bonesByName.get(alias.toLowerCase());
-        if (found) {
-          leftBone = found;
-          break;
-        }
-      }
-
-      // --- Right hand ---
-      const rightKey = `Right${boneName}`;
-      const rightAliases = FINGER_BONE_ALIASES[rightKey] ?? [];
-      let rightBone: Bone | null = null;
-
-      for (const alias of rightAliases) {
-        const found = bonesByName.get(alias.toLowerCase());
-        if (found) {
-          rightBone = found;
-          break;
-        }
-      }
+      const leftBone = findFingerBone(
+        FINGER_BONE_ALIASES[`Left${boneName}`] ?? []
+      );
+      const rightBone = findFingerBone(
+        FINGER_BONE_ALIASES[`Right${boneName}`] ?? []
+      );
 
       if (!leftBone || !rightBone) {
         return null;
