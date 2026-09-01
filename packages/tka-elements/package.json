@@ -1,0 +1,56 @@
+{
+  "name": "@austencloud/tka-elements",
+  "version": "1.0.0",
+  "description": "The Kinetic Alphabet elemental icons (Earth, Water, Air, Fire, Sun, Moon) as rendered on TKA pictographs, with the timing-and-direction mapping",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./icons/*": "./icons/*",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "icons",
+    "README.md",
+    "LICENSE",
+    "LICENSE-ARTWORK"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsc",
+    "clean": "rimraf dist",
+    "prepublishOnly": "npm run clean && npm run build && npm test",
+    "release": "npm version patch && npm publish --access public",
+    "test": "vitest run"
+  },
+  "keywords": [
+    "tka",
+    "kinetic-alphabet",
+    "flow-arts",
+    "vtg",
+    "elements",
+    "icons",
+    "webp"
+  ],
+  "author": "Austen Cloud <austencloud@gmail.com> (https://tkaflowarts.com)",
+  "license": "MIT",
+  "homepage": "https://tkaflowarts.com",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/austencloud/shared-packages.git",
+    "directory": "packages/tka-elements"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "devDependencies": {
+    "rimraf": "^6.0.1",
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0"
+  }
+}
