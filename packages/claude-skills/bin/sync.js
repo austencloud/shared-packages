@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
-import { readFileSync, writeFileSync, mkdirSync, readdirSync, statSync, unlinkSync, rmdirSync, existsSync } from 'fs';
-import { join, dirname, resolve } from 'path';
+import { readFileSync, writeFileSync, mkdirSync, readdirSync, statSync, unlinkSync, rmdirSync, existsSync, copyFileSync } from 'fs';
+import { join, dirname, resolve, relative, extname } from 'path';
 import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -39,6 +39,29 @@ function renderTemplate(templateContent, variables) {
   });
 }
 
+// Extensions rendered through the {{variable}} substitution. Anything else is
+// copied byte for byte.
+const RENDERABLE = new Set(['.md', '.py', '.sh', '.js', '.mjs', '.json', '.txt', '.toml', '.yml', '.yaml']);
+
+// Copy every file in a skill template folder other than SKILL.md, preserving
+// subdirectory structure, so helper scripts ship alongside the skill.
+function syncSkillAssets(skillDir, outDir, variables) {
+  let written = 0;
+  for (const filePath of walkDir(skillDir)) {
+    const rel = relative(skillDir, filePath).replace(/\\/g, '/');
+    if (rel === 'SKILL.md' || rel.split('/').includes('__pycache__') || rel.endsWith('.pyc')) continue;
+    const dest = join(outDir, rel);
+    mkdirSync(dirname(dest), { recursive: true });
+    if (RENDERABLE.has(extname(filePath).toLowerCase())) {
+      writeFileSync(dest, renderTemplate(readFileSync(filePath, 'utf-8'), variables), 'utf-8');
+    } else {
+      copyFileSync(filePath, dest);
+    }
+    written++;
+  }
+  return written;
+}
+
 function syncCommand(cwd) {
   const config = readConfig(cwd);
   const variables = { ...config };
@@ -49,7 +72,8 @@ function syncCommand(cwd) {
 
   // Render skills
   for (const skillName of config.skills) {
-    const templatePath = join(templatesDir, 'skills', skillName, 'SKILL.md');
+    const skillDir = join(templatesDir, 'skills', skillName);
+    const templatePath = join(skillDir, 'SKILL.md');
     if (!existsSync(templatePath)) {
       console.error(`  ✗ Template not found: skills/${skillName}/SKILL.md`);
       continue;
@@ -61,6 +85,11 @@ function syncCommand(cwd) {
     writeFileSync(join(outDir, 'SKILL.md'), rendered, 'utf-8');
     console.log(`  \u2713 skills/${skillName}/SKILL.md`);
     written++;
+    const assets = syncSkillAssets(skillDir, outDir, variables);
+    if (assets > 0) {
+      console.log(`  \u2713 skills/${skillName}/ (${assets} asset file(s))`);
+      written += assets;
+    }
   }
 
   // Render agents mapped from skills
