@@ -1,12 +1,12 @@
 ---
-description: Use when writing or reviewing user-facing text to check for AI writing patterns, banned words, or robotic tone
+description: Use while writing or reviewing user-facing text to catch AI writing patterns, including structural repetition across pages
 ---
 
 # AI Writing Buster
 
 **Args:** `$ARGUMENTS` (file path, glob pattern, or paste text directly)
 
-Scans user-facing text for AI writing tells. Two passes: a mechanical script for anything regex can catch, then a judgment pass for the tells that need context.
+Scans user-facing text for AI writing tells. Apply it while drafting as well as when reviewing. Two passes: a mechanical script for anything regex can catch, then a judgment pass for the tells that need context. Read sibling pages together when the text is part of a series.
 
 ## Usage
 
@@ -29,6 +29,9 @@ Scans user-facing text for AI writing tells. Two passes: a mechanical script for
    Exit 1 means findings. Findings prefixed `JUDGMENT:` are statistical hints, not verdicts.
 
 2. **Do the judgment pass** against the list below. The script cannot see these.
+   Compare the draft with neighboring pages for repeated structure, captions,
+   contribution boxes, and endings. Do not add fragments or uneven paragraphs
+   merely to improve a rhythm score.
 3. **Report violations** grouped by category, script findings first.
 4. **Provide a fix** for each violation.
 5. **Give an overall assessment:** Clean / Minor issues / Needs rewrite.
@@ -93,6 +96,15 @@ The script is the source of truth for exact patterns. Categories it covers:
 
 ## Pass 2: Judgment (you catch these)
 
+- **Unsigned first-person narration.** Flag `I`, `I'd`, `I've`, `me`, `my`, `we`, `our`, and `us` in site copy without a byline or signature. The reader cannot tell who is speaking. Restate the fact in third person; preserve first person in signed writing and attributed quotes.
+- **Page self-commentary.** The copy talks about its own length, order, or purpose instead of the subject: "This page is short because..." or "First, what this page is not about." Start with the information.
+- **Announced honesty.** "The honest version", "one admission", "plainly", or "this site won't pretend otherwise" perform candor before stating a limit. State the limit directly.
+- **Paragraph punchlines.** Repeated clipped fragments or neat one-line endings make factual prose sound staged. Keep a short line when it carries meaning; remove it when it only recaps the paragraph.
+- **Contrast flips.** Repeated "X, not Y" and "neither X nor Y" formulations create artificial balance. State the actual relationship once.
+- **Staged setups.** "Good news:", "So, plainly:", rhetorical questions, and paired slogan-like headings delay the point. Lead with the fact.
+- **Cross-page templates.** Compare sibling pages for the same heading order, section length, caption shape, CTA wording, and closer with nouns swapped. Give each page the structure its subject needs. Shared components may stay shared, but their visible language should not read like a fill-in-the-blank script.
+- **Uniform section development.** Every topic gets a heading and one or two similarly sized paragraphs regardless of substance. Combine closely related ideas and give complex ones the space they need. Do not manufacture unevenness for its own sake.
+- **Summary-sentence cabooses.** A section ends by restating its own point. End on the useful detail instead.
 - **Manufactured intimacy.** A personal "take" the writer has no standing to hold. "For 50 people at 8:30, this is the one I'd pick." State the fact and the tradeoff, don't perform preference.
 - **Restating the reader's situation** back to them before answering. Answer first.
 - **Praise of the reader's plan** or unsolicited reassurance. "Now you're pushing up against the part that matters most." Cut unless specific and earned.
