@@ -520,7 +520,7 @@ BLOCK_TAGS = set("p h1 h2 h3 h4 h5 h6 li ul ol dl dt dd div section header foote
                  "table thead tbody tr td th caption blockquote figure figcaption br hr button label summary "
                  "details form fieldset legend option select textarea input img svg title pre iframe video "
                  "audio canvas picture source".split())
-BREAK, HEAD, ITEM, CELL = "\x00", "\x01", "\x02", "\x03"
+BREAK, HEAD, ITEM, CELL, TITLE = "\x00", "\x01", "\x02", "\x03", "\x04"
 STRING_LIT = re.compile(r"\"((?:[^\"\\\n]|\\.){12,})\"|'((?:[^'\\\n]|\\.){12,})'|`((?:[^`\\]|\\.){12,})`", re.S)
 FUNCTION_WORDS = set("the a an of to and or in on at for by with from is are was were be it its this that "
                      "you your we our can will not".split())
@@ -627,7 +627,7 @@ def markup_doc_blocks(content):
         _blank(vis, m.start(), m.end(), BREAK if m.group(1).lower() == "pre" else None)
 
     text = "".join(vis)
-    i = 0
+    i = svg = 0
     while i < len(text):
         c = text[i]
         if c == "{":
@@ -650,6 +650,8 @@ def markup_doc_blocks(content):
             tag = name.group(1) if name else ""
             closing = text[i + 1:i + 2] == "/"
             mark = None
+            if tag.lower() == "svg" and text[j - 2] != "/":
+                svg += -1 if closing else 1
             if tag.lower() in BLOCK_TAGS or tag[:1].isupper() or ":" in tag:
                 mark = BREAK
                 if not closing and re.fullmatch(r"h[1-6]", tag.lower()):
@@ -658,16 +660,18 @@ def markup_doc_blocks(content):
                     mark = ITEM
                 elif not closing and tag.lower() in ("td", "th"):
                     mark = CELL
+                elif not closing and tag.lower() == "title" and svg <= 0:
+                    mark = TITLE  # the page title, not an SVG label
             _blank(vis, i, j, mark)
             i = j
             continue
         i += 1
 
     blocks, cur = [], None
-    kinds = {BREAK: "p", HEAD: "h", ITEM: "li", CELL: "td"}
+    kinds = {BREAK: "p", HEAD: "h", ITEM: "li", CELL: "td", TITLE: "title"}
     pending = "p"
     for lineno, line in enumerate("".join(vis).split("\n"), 1):
-        for part in re.split("([\x00-\x03])", line):
+        for part in re.split("([\x00-\x04])", line):
             if part in kinds:
                 if cur is not None and cur.text:
                     blocks.append(cur)
@@ -743,6 +747,12 @@ def prose_sentences(doc, kinds=("p", "li", "str")):
 FINITE = re.compile(r"\b(?:is|are|was|were|am|be|been|has|have|had|do|does|did|can|could|will|would|shall|"
                     r"should|may|might|must)\b|n['’]t\b|['’](?:s|re|ll|ve|d|m)\b|"
                     r"^(?:i|you|we|they|he|she|it|there)\b", R)
+# An imperative addressed to the reader is a sentence too ("Submit it here.").
+IMPERATIVE = re.compile(r"(?:please |just )?(?:submit|send|tell|e-?mail|message|text|call|contact|reach|ask|"
+                        r"let (?:us|me) know|join|share|reply|report|file|leave|drop|ping|write|try|use|click|"
+                        r"tap|press|type|run|open|see|check|read|visit|go|head|get|sign|download|install|add|"
+                        r"follow|subscribe|register|watch|listen|look|find|search|browse|select|choose|pick|"
+                        r"scroll|jump)\b", R)
 
 
 def scan_question_fragment(doc):
@@ -758,7 +768,8 @@ def scan_question_fragment(doc):
             continue
         n = nwords(a)
         if q.rstrip("\"'”’").endswith("?") and 0 < n <= 4 and a.rstrip("\"'”’").endswith(".") \
-                and not FINITE.search(a) and not re.match(r"(?:yes|no|sure|nope|yep)\b", a, R):
+                and not FINITE.search(a) and not IMPERATIVE.match(a) \
+                and not re.match(r"(?:yes|no|sure|nope|yep)\b", a, R):
             found.append(finding(doc.path, b2.line_at(o2), "question then fragment", "MEDIUM",
                                  " ".join((q + " " + a).split())[-90:],
                                  "state the answer as a sentence, delete the question"))
@@ -1232,6 +1243,9 @@ SELF_TEST = [
     ("parenthetical question", "This will reach most (all?) Linux distributions.", "a.md", None),
     ("question answered by a sentence", "What if you want another language? There are several ways.", "a.md", None),
     ("mid-sentence that said", "The paper cites a study that said the opposite.", "a.md", None),
+    ("call to action", "Remember a tool this page is missing, or spotted a detail that is wrong? Submit it here.",
+     "a.md", None),
+    ("staged imperative still counts", "The fix? Keep it simple.", "a.md", "question then fragment"),
     ("interjections", "Build it and run the tests again, then look at the output to see whether the new "
                       "option shows up where you expect it in the list of commands. Neat!\n\n"
                       "Commit the change with a message that says what it does and why it was needed, "
@@ -1257,7 +1271,14 @@ def self_test():
     if manual:
         failed += 1
         print("FAIL consistent manual phrasing is not a template: %s" % [f["pattern"] for f in manual])
-    total = len(SELF_TEST) + 2
+    titles = scan_files({"faq/+page.svelte": "<svelte:head>\n  <title>FAQ | The Kinetic Alphabet</title>\n"
+                                             "</svelte:head>\n<h1>Questions</h1>",
+                         "support/+page.svelte": "<svelte:head>\n  <title>Support · The Kinetic Alphabet"
+                                                 "</title>\n</svelte:head>\n<h1>Support</h1>"})
+    if titles:
+        failed += 1
+        print("FAIL page titles are not a template: %s" % [f["pattern"] for f in titles])
+    total = len(SELF_TEST) + 3
     print("self-test: %d/%d passed" % (total - failed, total))
     return 1 if failed else 0
 
@@ -1293,8 +1314,12 @@ def main(argv=None):
         if path == "-":
             contents["<stdin>"] = sys.stdin.read()
         else:
-            with open(path, encoding="utf-8", errors="replace") as fh:
-                contents[path] = fh.read()
+            try:
+                with open(path, encoding="utf-8", errors="replace") as fh:
+                    contents[path] = fh.read()
+            except OSError as e:
+                print("ai_bust: cannot read %s: %s" % (path, e.strerror or e), file=sys.stderr)
+                return 2
 
     if args.email:
         all_found = []
