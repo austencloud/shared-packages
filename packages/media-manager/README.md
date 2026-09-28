@@ -14,6 +14,10 @@ Import pure rules from `@austencloud/media-manager/catalog`:
 
 The package has no Firebase, Cloudflare, or browser dependency in this subpath. Put new catalog rules and their tests here before changing an application adapter. Ringmaster maps its Firestore records to these types; Taco Tuesday maps its D1 gallery records. A tag edit in one app does not automatically edit another app's database.
 
+## Entity links
+
+Import `@austencloud/media-manager/entity-links` for normalized name matching, skill aliases, linked-tag ownership, tag selection, and legacy-link validation. Supply skill registries and entity records from the application. These rules accept plain records and do not read or create data; each application still resolves IDs and performs transactions through its own adapter. Matching a name in separate application databases does not establish a shared canonical identity.
+
 The root export contains reusable Svelte media management components. `@austencloud/media-spotlight` remains the shared viewer package. It is a separate package and version; a consumer must update its pinned version to receive viewer changes.
 
 ## Updating consumers
