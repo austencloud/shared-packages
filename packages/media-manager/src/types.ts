@@ -84,6 +84,13 @@ export interface MediaTag {
 	color: TagColor;
 	category: TagCategory;
 	description?: string;
+	parentId?: string | null;
+	path?: string[];
+	depth?: number;
+	aliases?: string[];
+	prereqTagIds?: string[];
+	linkedEntityId?: string;
+	linkedCollection?: string;
 	createdAt: Date;
 	updatedAt: Date;
 }
