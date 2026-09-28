@@ -3,6 +3,7 @@ import type { MediaTag } from './types.js';
 import type { CatalogMediaItem, CatalogMediaTag, MediaCollection, MediaSearchFilters, SmartCollectionFilters, TagTreeNode } from './catalog-types.js';
 
 export * from './catalog-types.js';
+export * from './folder-tree.js';
 
 export const DEFAULT_CATEGORY_ORDER = ['performer', 'skill', 'act', 'agent', 'event', 'character', 'occasion', 'content', 'prop'];
 export const DEFAULT_CATEGORY_LABELS: Record<string, string> = {

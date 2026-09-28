@@ -9,6 +9,7 @@ Import pure rules from `@austencloud/media-manager/catalog`:
 - Tag categories, labels, prerequisites, hierarchy, and entity link guards
 - Media search and sorting
 - Manual and smart collection selection
+- Manual folder hierarchy, descendant lookup, valid parent choices, and unique item counts
 - Storage-neutral item, tag, collection, and repository types
 
 The package has no Firebase, Cloudflare, or browser dependency in this subpath. Put new catalog rules and their tests here before changing an application adapter. Ringmaster maps its Firestore records to these types; Taco Tuesday maps its D1 gallery records. A tag edit in one app does not automatically edit another app's database.
