@@ -154,6 +154,87 @@ export const DEFAULT_SMART_FILTERS: SmartCollectionFilters = {
 	sort: { field: 'createdAt', direction: 'desc' }
 };
 
+/** Persist only the filters a smart collection can replay across applications. */
+export function snapshotSmartCollectionFilters(filters: MediaSearchFilters | SmartCollectionFilters): SmartCollectionFilters {
+	return {
+		tags: [...filters.tags], excludeTags: [...filters.excludeTags], tagMode: filters.tagMode,
+		type: filters.type, query: filters.query.trim(), untaggedOnly: filters.untaggedOnly,
+		needsEditingOnly: filters.needsEditingOnly, tagCountMin: filters.tagCountMin,
+		tagCountMax: filters.tagCountMax, sort: { ...filters.sort },
+		...(filters.yearTaken != null ? { yearTaken: filters.yearTaken } : {}),
+		...(filters.cameraMake ? { cameraMake: filters.cameraMake } : {}),
+		...(filters.cameraModel ? { cameraModel: filters.cameraModel } : {}),
+		...(filters.hasLocation ? { hasLocation: true } : {})
+	};
+}
+
+export function summarizeSmartCollectionFilters(filters: SmartCollectionFilters): string[] {
+	const parts: string[] = [];
+	if (filters.tags.length) parts.push(`${filters.tags.length} tag${filters.tags.length === 1 ? '' : 's'} (${filters.tagMode})`);
+	if (filters.excludeTags.length) parts.push(`${filters.excludeTags.length} excluded`);
+	if (filters.type !== 'all') parts.push(`${filters.type.charAt(0).toUpperCase()}${filters.type.slice(1)}s only`);
+	if (filters.query) parts.push(`Search: "${filters.query}"`);
+	if (filters.untaggedOnly) parts.push('Untagged only');
+	if (filters.needsEditingOnly) parts.push('Needs editing');
+	if (filters.tagCountMin !== null || filters.tagCountMax !== null) {
+		if (filters.tagCountMin !== null && filters.tagCountMax !== null) parts.push(`Tags ${filters.tagCountMin}–${filters.tagCountMax}`);
+		else if (filters.tagCountMin !== null) parts.push(`Tags >= ${filters.tagCountMin}`);
+		else parts.push(`Tags <= ${filters.tagCountMax}`);
+	}
+	if (filters.yearTaken != null) parts.push(`Year: ${filters.yearTaken}`);
+	if (filters.cameraMake) parts.push(`Camera: ${filters.cameraMake}`);
+	if (filters.cameraModel) parts.push(`Model: ${filters.cameraModel}`);
+	if (filters.hasLocation) parts.push('Has location');
+	return parts.length ? parts : ['No filters (matches all items)'];
+}
+
+/** Validate a browser-supplied smart collection before storing or replaying it. */
+export function parseSmartCollectionFilters(input: unknown, validTagIds?: ReadonlySet<string>): SmartCollectionFilters {
+	if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('Invalid smart collection filters.');
+	const value = input as Record<string, unknown>;
+	const tags = (key: 'tags' | 'excludeTags'): string[] => {
+		const ids = value[key];
+		if (!Array.isArray(ids) || ids.length > 20 || ids.some((id) => typeof id !== 'string' || !id || (validTagIds && !validTagIds.has(id)))) {
+			throw new Error('Invalid collection tags.');
+		}
+		return [...new Set(ids as string[])];
+	};
+	const numberOrNull = (key: 'tagCountMin' | 'tagCountMax'): number | null => {
+		const count = value[key];
+		if (count === null || count === undefined) return null;
+		if (!Number.isInteger(count) || (count as number) < 0 || (count as number) > 100) throw new Error('Invalid tag count.');
+		return count as number;
+	};
+	const type = value.type;
+	if (type !== 'all' && type !== 'image' && type !== 'video' && type !== 'document' && type !== 'audio') throw new Error('Invalid media type.');
+	if (value.tagMode !== 'and' && value.tagMode !== 'or') throw new Error('Invalid tag match mode.');
+	if (typeof value.query !== 'string' || value.query.length > 200) throw new Error('Invalid search query.');
+	if (typeof value.untaggedOnly !== 'boolean' || typeof value.needsEditingOnly !== 'boolean') throw new Error('Invalid collection flags.');
+	const sort = value.sort;
+	if (!sort || typeof sort !== 'object' || Array.isArray(sort)) throw new Error('Invalid collection sort.');
+	const sorting = sort as Record<string, unknown>;
+	if (!['createdAt', 'dateTaken', 'name', 'tagCount', 'size'].includes(String(sorting.field)) || (sorting.direction !== 'asc' && sorting.direction !== 'desc')) throw new Error('Invalid collection sort.');
+	const tagCountMin = numberOrNull('tagCountMin');
+	const tagCountMax = numberOrNull('tagCountMax');
+	if (tagCountMin !== null && tagCountMax !== null && tagCountMin > tagCountMax) throw new Error('Minimum tag count exceeds maximum.');
+	const yearTaken = value.yearTaken;
+	if (yearTaken != null && (!Number.isInteger(yearTaken) || (yearTaken as number) < 1800 || (yearTaken as number) > 2200)) throw new Error('Invalid capture year.');
+	for (const key of ['cameraMake', 'cameraModel'] as const) {
+		if (value[key] != null && (typeof value[key] !== 'string' || (value[key] as string).length > 100)) throw new Error('Invalid camera filter.');
+	}
+	if (value.hasLocation != null && typeof value.hasLocation !== 'boolean') throw new Error('Invalid location filter.');
+	return {
+		tags: tags('tags'), excludeTags: tags('excludeTags'), tagMode: value.tagMode,
+		type, query: value.query.trim(), untaggedOnly: value.untaggedOnly,
+		needsEditingOnly: value.needsEditingOnly, tagCountMin, tagCountMax,
+		sort: { field: sorting.field as SmartCollectionFilters['sort']['field'], direction: sorting.direction as 'asc' | 'desc' },
+		...(yearTaken != null ? { yearTaken: yearTaken as number } : {}),
+		...(value.cameraMake ? { cameraMake: value.cameraMake as string } : {}),
+		...(value.cameraModel ? { cameraModel: value.cameraModel as string } : {}),
+		...(value.hasLocation ? { hasLocation: true } : {})
+	};
+}
+
 export function addCollectionItems(collection: MediaCollection, itemIds: readonly string[]): MediaCollection {
 	if (collection.type !== 'manual') return collection;
 	return { ...collection, itemIds: [...new Set([...collection.itemIds, ...itemIds])] };
