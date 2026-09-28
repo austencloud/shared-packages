@@ -1,6 +1,6 @@
 {
   "name": "@austencloud/media-manager",
-  "version": "1.6.0",
+  "version": "1.7.0",
   "description": "Reusable media management UI: tag manager, media grid, curator, and spotlight integration",
   "type": "module",
   "svelte": "./dist/index.js",
@@ -15,6 +15,11 @@
     "./catalog": {
       "types": "./dist/catalog.d.ts",
       "import": "./dist/catalog.js"
+    },
+    "./search": {
+      "types": "./dist/search.svelte.d.ts",
+      "svelte": "./dist/search.svelte.js",
+      "import": "./dist/search.svelte.js"
     },
     "./entity-links": {
       "types": "./dist/entity-links.d.ts",
