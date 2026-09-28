@@ -3,13 +3,13 @@
   "version": "1.2.0",
   "description": "Reusable media management UI: tag manager, media grid, curator, and spotlight integration",
   "type": "module",
-  "svelte": "./src/index.ts",
+  "svelte": "./dist/index.js",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "svelte": "./src/index.ts",
+      "svelte": "./dist/index.js",
       "import": "./dist/index.js"
     },
     "./catalog": {
@@ -18,7 +18,7 @@
     },
     "./advanced-tags": {
       "types": "./dist/advanced-tags.d.ts",
-      "svelte": "./src/advanced-tags.ts",
+      "svelte": "./dist/advanced-tags.js",
       "import": "./dist/advanced-tags.js"
     },
     "./css/*": "./css/*"
