@@ -33,6 +33,31 @@ export function getAllCategories(tags: readonly MediaTag[], categoryOrder: reado
 	return [...categoryOrder, ...custom.sort((a, b) => getCategoryLabel(a).localeCompare(getCategoryLabel(b)))];
 }
 
+/** Validate prerequisite IDs before saving a tag. Prerequisites are alternatives, but each edge must remain acyclic. */
+export function assertValidTagPrerequisites(tags: readonly MediaTag[], tagId: string, prereqIds: readonly string[]): void {
+	const byId = new Map(tags.map((tag) => [tag.id, tag]));
+	if (!byId.has(tagId)) throw new Error(`Tag does not exist: ${tagId}`);
+	for (const prereqId of prereqIds) {
+		if (!byId.has(prereqId)) throw new Error(`Prerequisite tag does not exist: ${prereqId}`);
+		if (prereqId === tagId) throw new Error('A tag cannot require itself');
+	}
+	const proposed = new Set(prereqIds);
+	const visiting = new Set<string>();
+	const visited = new Set<string>();
+	function visit(id: string): void {
+		if (visiting.has(id)) throw new Error('Tag prerequisites cannot contain a cycle');
+		if (visited.has(id)) return;
+		visiting.add(id);
+		const next = id === tagId ? proposed : (byId.get(id)?.prereqTagIds ?? []);
+		for (const dependency of next) {
+			if (byId.has(dependency)) visit(dependency);
+		}
+		visiting.delete(id);
+		visited.add(id);
+	}
+	visit(tagId);
+}
+
 /** A category or tag with prerequisite IDs is visible when any one is active. */
 export function getVisibleTagsByCategory<T extends { tag: MediaTag }>(
 	categoryOrder: readonly string[], tagsByCategory: Map<string, T[]>,

@@ -35,6 +35,8 @@ export { default as TagManagerTagRow } from './tags/TagManagerTagRow.svelte';
 export { default as TagManagerToolbar } from './tags/TagManagerToolbar.svelte';
 export { default as TagManagerBatchBar } from './tags/TagManagerBatchBar.svelte';
 export { default as TagManager } from './tags/TagManager.svelte';
+export { default as AdvancedTagManager } from './tags/AdvancedTagManager.svelte';
+export type { TagManagerActions as AdvancedTagManagerActions } from './tags/AdvancedTagManager.svelte';
 
 // ─── Media Grid Components ───────────────────────────────────────────────────
 

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-	DEFAULT_SMART_FILTERS, addCollectionItems, assertTagCanChangeCategory,
+	DEFAULT_SMART_FILTERS, addCollectionItems, assertTagCanChangeCategory, assertValidTagPrerequisites,
 	assertTagCanDelete, assertTagsCanMerge, buildTagTree, filterMediaItems,
 	getCollectionItems, getVisibleTagsByCategory, reparentTag
 } from '../dist/catalog.js';
@@ -18,6 +18,14 @@ const item = (id, tags, extras = {}) => ({
 const collection = (type, filters = null, itemIds = []) => ({
 	id: 'c', name: 'c', description: '', type, parentId: null,
 	itemIds, filters, createdAt: date, updatedAt: date
+});
+
+test('prerequisite validation rejects missing IDs, self references, and cycles', () => {
+	const tags = [tag('a'), tag('b', null, ['b'], ['a']), tag('c', null, ['c'], ['b'])];
+	assert.doesNotThrow(() => assertValidTagPrerequisites(tags, 'a', []));
+	assert.throws(() => assertValidTagPrerequisites(tags, 'a', ['missing']), /does not exist/);
+	assert.throws(() => assertValidTagPrerequisites(tags, 'a', ['a']), /require itself/);
+	assert.throws(() => assertValidTagPrerequisites(tags, 'a', ['c']), /cycle/);
 });
 
 test('category and tag prerequisites use OR rules', () => {
