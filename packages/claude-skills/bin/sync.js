@@ -8,7 +8,32 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const templatesDir = resolve(__dirname, '..', 'templates');
 
-const MANAGED_MARKER = '<!-- managed by @austencloud/claude-skills — do not edit manually, run: npx @austencloud/claude-skills sync -->';
+// The marker goes inside each SKILL.md and AGENT.md frontmatter as a YAML
+// comment on line 2. Codex skips a SKILL.md whose first line is not `---`, and
+// Claude Code shows a comment ahead of the frontmatter as the description.
+const MANAGED_MARKER = '# managed by @austencloud/claude-skills - do not edit manually, run: npx @austencloud/claude-skills sync';
+const FRONTMATTER = /^---(\r?\n)[\s\S]*?\r?\n---(?:\r?\n|$)/;
+
+// Returns the rendered template with the marker as line 2, ending in the
+// template's own line break, or null when the template does not open with a
+// closed frontmatter block. Neither tool can read such a skill, so sync
+// refuses it instead of writing it.
+function markManaged(rendered) {
+  const match = rendered.match(FRONTMATTER);
+  if (!match) return null;
+  const eol = match[1];
+  return `---${eol}${MANAGED_MARKER}${eol}${rendered.slice(3 + eol.length)}`;
+}
+
+// Managed files carry the marker at the top: on line 2 inside the frontmatter,
+// on line 1 of a helper script like ai_bust.py, or on line 1 as the HTML
+// comment older syncs wrote. A file that only mentions it further down is
+// hand-written.
+function isManaged(content) {
+  const [first = '', second = ''] = content.split(/\r?\n/, 2);
+  const marked = (line) => /^(<!--|#) managed by @austencloud\/claude-skills\b/.test(line);
+  return marked(first) || (first === '---' && marked(second));
+}
 
 const SKILL_TO_AGENTS = {
   audit: ['audit-evaluator', 'audit-fixer'],
@@ -79,7 +104,12 @@ function syncCommand(cwd) {
       continue;
     }
     const template = readFileSync(templatePath, 'utf-8');
-    const rendered = MANAGED_MARKER + '\n\n' + renderTemplate(template, variables);
+    const rendered = markManaged(renderTemplate(template, variables));
+    if (!rendered) {
+      console.error(`  ✗ skills/${skillName}/SKILL.md needs YAML frontmatter (--- ... ---) starting on line 1`);
+      process.exitCode = 1;
+      continue;
+    }
     const outDir = join(claudeDir, 'skills', skillName);
     mkdirSync(outDir, { recursive: true });
     writeFileSync(join(outDir, 'SKILL.md'), rendered, 'utf-8');
@@ -103,7 +133,12 @@ function syncCommand(cwd) {
         continue;
       }
       const template = readFileSync(templatePath, 'utf-8');
-      const rendered = MANAGED_MARKER + '\n\n' + renderTemplate(template, variables);
+      const rendered = markManaged(renderTemplate(template, variables));
+      if (!rendered) {
+        console.error(`  ✗ agents/${agentName}/AGENT.md needs YAML frontmatter (--- ... ---) starting on line 1`);
+        process.exitCode = 1;
+        continue;
+      }
       const outDir = join(claudeDir, 'agents', agentName);
       mkdirSync(outDir, { recursive: true });
       writeFileSync(join(outDir, 'AGENT.md'), rendered, 'utf-8');
@@ -152,7 +187,7 @@ function cleanCommand(cwd) {
     const files = walkDir(scanDir);
     for (const filePath of files) {
       const content = readFileSync(filePath, 'utf-8');
-      if (content.includes('managed by @austencloud/claude-skills')) {
+      if (isManaged(content)) {
         unlinkSync(filePath);
         const relative = filePath.slice(claudeDir.length + 1).replace(/\\/g, '/');
         console.log(`  \u2717 removed ${relative}`);

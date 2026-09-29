@@ -5,6 +5,9 @@
   "bin": {
     "claude-skills": "./bin/sync.js"
   },
+  "scripts": {
+    "test": "node --test"
+  },
   "files": ["bin", "templates"],
   "type": "module",
   "license": "MIT",
