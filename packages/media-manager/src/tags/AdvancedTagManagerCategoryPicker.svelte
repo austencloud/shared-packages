@@ -5,13 +5,14 @@
 		current: TagCategory;
 		categories: string[];
 		categoryLabels?: Record<string, string>;
+		appearance?: 'default' | 'rows';
 		onSelect: (category: TagCategory) => void;
 	}
 
-	const { current, categories, categoryLabels = {}, onSelect }: Props = $props();
+	const { current, categories, categoryLabels = {}, appearance = 'default', onSelect }: Props = $props();
 </script>
 
-<div class="category-picker" role="radiogroup" aria-label="Tag category">
+<div class="category-picker" class:rows={appearance === 'rows'} role="radiogroup" aria-label="Tag category">
 	{#each categories as category (category)}
 		<button
 			class="category-pill"
@@ -74,6 +75,11 @@
 		outline-offset: 2px;
 	}
 
+	.category-picker.rows { display: grid; grid-template-columns: 1fr; gap: 0; padding: 0; border: 1px solid var(--theme-stroke); border-radius: var(--radius-sm); overflow: hidden; }
+	.category-picker.rows .category-pill { min-height: 36px; border: 0; border-radius: 0; background: transparent; color: var(--theme-text); text-align: left; padding: 7px 10px; }
+	.category-picker.rows .category-pill + .category-pill { border-top: 1px solid var(--theme-stroke); }
+	.category-picker.rows .category-pill:active { transform: none; }
+	.category-picker.rows .category-pill.selected { background: var(--theme-accent-bg); color: var(--theme-text); box-shadow: inset 2px 0 var(--theme-accent); animation: none; }
 	@media (prefers-reduced-motion: reduce) {
 		.category-pill {
 			transition: none;

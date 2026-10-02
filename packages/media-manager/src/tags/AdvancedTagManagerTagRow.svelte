@@ -31,6 +31,7 @@
 		canDrag?: boolean;
 		enableDrag?: boolean;
 		compact?: boolean;
+		appearance?: 'default' | 'rows';
 		onToggleSelect: (tagId: string) => void;
 		onRename: (tagId: string, newName: string) => Promise<void>;
 		onChangeColor: (tagId: string, newColor: TagColor) => Promise<void>;
@@ -60,6 +61,7 @@
 		canDrag = true,
 		enableDrag = true,
 		compact = false,
+		appearance = 'default',
 		onToggleSelect,
 		onRename,
 		onChangeColor,
@@ -305,6 +307,7 @@
 	class:dragging={isDragSource}
 	class:can-drag={canDrag && enableDrag}
 	class:compact
+	class:rows={appearance === 'rows'}
 	class:selection-mode={selectionMode}
 	data-tag-id={tag.id}
 	draggable={canDrag && enableDrag}
@@ -316,7 +319,7 @@
 	role="listitem"
 >
 	<div class="row-main" class:menu-open={showActionMenu}>
-		{#if selectionMode}
+		{#if selectionMode && appearance !== 'rows'}
 			<button
 				class="select-indicator"
 				class:selected
@@ -365,7 +368,18 @@
 				</button>
 			</div>
 		{:else}
-			{#if canDrag}
+			{#if appearance === 'rows'}
+				<button
+					class="row-select"
+					aria-pressed={selectionMode ? selected : undefined}
+					aria-label={selectionMode ? `${selected ? 'Deselect' : 'Select'} ${tag.name}` : `Rename ${tag.name}`}
+					onclick={() => selectionMode ? onToggleSelect(tag.id) : startRename()}
+				>
+					<span class="row-name">{tag.name}</span>
+					<span class="row-count">{itemCount}<span class="sr-only"> item{itemCount === 1 ? '' : 's'}</span></span>
+					{#if selectionMode}<span class="row-status" aria-hidden="true">{selected ? 'Selected' : 'Select'}</span>{/if}
+				</button>
+			{:else if canDrag}
 				<!-- Tag name (clickable to rename with a fine pointer; on touch,
 				     rename lives only in the row menu, so this is just a label) -->
 				<button
@@ -406,9 +420,9 @@
 			{/if}
 
 			<!-- Item count -->
-			<span class="item-count"
+			{#if appearance !== 'rows'}<span class="item-count"
 				>{itemCount}<span class="count-unit">&nbsp;item{itemCount !== 1 ? 's' : ''}</span></span
-			>
+			>{/if}
 
 			<!-- Three-dot action menu -->
 			<TagEntityLink {tag} />
@@ -520,6 +534,7 @@
 	{#if showCategoryPicker}
 		<div class="inline-panel">
 			<TagManagerCategoryPicker
+				{appearance}
 				current={tag.category}
 				{categories}
 				{categoryLabels}
@@ -531,6 +546,7 @@
 	{#if showPrereqPicker}
 		<div class="inline-panel">
 			<TagManagerPrereqPicker
+				{appearance}
 				currentPrereqs={tag.prereqTagIds ?? []}
 				{allTags}
 				excludeTagId={tag.id}
@@ -1291,6 +1307,62 @@
 		padding: 4px 8px 10px;
 	}
 
+	.tag-row.rows,
+	.tag-row.rows.compact {
+		margin: 0;
+		border: 0;
+		border-radius: 0;
+		background: transparent;
+		box-shadow: none;
+		transform: none;
+		transition: background 140ms ease-out, border-color 140ms ease-out;
+	}
+	.tag-row.rows:hover,
+	.tag-row.rows:active {
+		transform: none;
+		box-shadow: none;
+	}
+	.tag-row.rows:hover { background: var(--interactive-hover); }
+	.tag-row.rows.selected:hover { background: var(--theme-accent-bg); box-shadow: inset 2px 0 var(--theme-accent); }
+	.tag-row.rows.selected {
+		background: var(--theme-accent-bg);
+		box-shadow: inset 2px 0 var(--theme-accent);
+	}
+	.tag-row.rows .row-main,
+	.tag-row.rows.compact .row-main,
+	.tag-row.rows.compact.selection-mode .row-main {
+		display: flex;
+		gap: 4px;
+		min-height: 40px;
+		padding: 0 4px;
+	}
+	.row-select {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		flex: 1;
+		min-width: 0;
+		min-height: 40px;
+		padding: 0 8px;
+		background: transparent;
+		border: 0;
+		color: var(--theme-text);
+		text-align: left;
+		cursor: pointer;
+	}
+	.row-select:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
+	.row-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 500; }
+	.row-count { color: var(--theme-text-dim); font-size: 11px; font-variant-numeric: tabular-nums; }
+	.row-status { min-width: 3.5rem; color: var(--theme-text-dim); font-size: 11px; text-align: right; }
+	.tag-row.rows.selected .row-status { color: var(--theme-accent); }
+	.tag-row.rows .action-menu-anchor,
+	.tag-row.rows.compact .action-menu-anchor { display: block; flex: none; }
+	.tag-row.rows .action-menu-trigger,
+	.tag-row.rows.compact .action-menu-trigger { opacity: 1; margin: 0; }
+	.tag-row.rows .category-badge { border-radius: var(--radius-sm); background: transparent; }
+	.tag-row.rows .inline-panel { margin-left: 0; }
+	.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+
 	@keyframes panel-enter {
 		from {
 			opacity: 0;
@@ -1303,6 +1375,8 @@
 	}
 
 	@media (prefers-reduced-motion: reduce) {
+		.tag-row.rows,
+		.tag-row.rows.compact { transition: none; }
 		.tag-row,
 		.icon-btn,
 		.select-indicator,

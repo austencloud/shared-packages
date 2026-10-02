@@ -29,11 +29,13 @@
 			x = 60,
 			duration = 280,
 			delay = 0,
+			plain = false,
 			easing = cubicOut
 		}: {
 			x?: number;
 			duration?: number;
 			delay?: number;
+			plain?: boolean;
 			easing?: (t: number) => number;
 		} = {}
 	) {
@@ -43,7 +45,7 @@
 			easing,
 			css: (t: number) => {
 				const u = 1 - t;
-				return `opacity: ${t}; transform: translateX(${u * x}px) scale(${0.97 + 0.03 * t})`;
+				return `opacity: ${t}; transform: translateX(${u * x}px)${plain ? '' : ` scale(${0.97 + 0.03 * t})`}`;
 			}
 		};
 	}
@@ -71,6 +73,8 @@
 		searchQuery: string;
 		categoryFilter: string | null;
 		compact?: boolean;
+		appearance?: 'default' | 'rows';
+		categoryVisual?: ((category: string) => { icon: string; accent: string }) | undefined;
 		onOpenCategory: (category: string | null) => void;
 		onQuickCreate?: (name: string, color: TagColor, category: TagCategory) => Promise<void>;
 		onToggleSelect: (tagId: string) => void;
@@ -121,6 +125,8 @@
 		searchQuery,
 		categoryFilter,
 		compact = false,
+		appearance = 'default',
+		categoryVisual,
 		onOpenCategory,
 		onQuickCreate,
 		onToggleSelect,
@@ -154,7 +160,7 @@
 	// The desktop sidebar's inline manager (340-440px) stays one column.
 	const SPLIT_MIN_WIDTH = 560;
 	let tableWidth = $state(0);
-	let split = $derived(!compact && tableWidth >= SPLIT_MIN_WIDTH && allTags.length > 0);
+	let split = $derived(appearance !== 'rows' && !compact && tableWidth >= SPLIT_MIN_WIDTH && allTags.length > 0);
 	// With no category chosen the right column shows the first one that has
 	// tags. Display only: it doesn't set categoryFilter, so a narrow layout
 	// still opens on the index.
@@ -320,7 +326,7 @@
 				<div class="quick-create">
 					<TagManagerColorPicker current={quickColor} onSelect={(c) => (quickColor = c)} />
 
-					<div class="quick-category-chips" role="radiogroup" aria-label="Tag category">
+					<div class="quick-category-chips" class:rows={appearance === 'rows'} role="radiogroup" aria-label="Tag category">
 						{#each allCategories as cat (cat)}
 							<button
 								class="qc-chip"
@@ -329,6 +335,7 @@
 								aria-checked={quickCategory === cat}
 								onclick={() => (quickCategory = cat)}
 							>
+								{#if appearance === 'rows' && categoryVisual}<span class="category-visual" style={`color: ${categoryVisual(cat).accent}`}><Icon name={categoryVisual(cat).icon} size={15} /></span>{/if}
 								{getCategoryLabel(cat, categoryLabels)}
 							</button>
 						{/each}
@@ -375,10 +382,14 @@
 				onclick={() => onOpenCategory(null)}
 				aria-label="Back to categories"
 			>
-				<Icon name="arrow-left" size={16} />
+				<Icon name={appearance === 'rows' ? 'chevron-left' : 'arrow-left'} size={16} />
+				{#if appearance === 'rows'}<span>Back</span>{/if}
 			</button>
 		{/if}
 		<div class="category-header">
+			{#if appearance === 'rows' && categoryVisual}
+				<span class="category-visual" style={`color: ${categoryVisual(category).accent}`}><Icon name={categoryVisual(category).icon} size={16} /></span>
+			{/if}
 			{#if onRenameCategory}
 				<span class="category-label-wrap">
 					<CategoryRenameInput
@@ -411,6 +422,7 @@
 	{#if categoryPrereqPickerOpen === category && onChangeCategoryPrereqs}
 		<div class="category-prereq-panel">
 			<TagManagerPrereqPicker
+				{appearance}
 				currentPrereqs={categoryPrereqs[category] ?? []}
 				{allTags}
 				excludeCategory={category}
@@ -422,20 +434,21 @@
 		</div>
 	{/if}
 
-	<div class="category-tags" role="list" transition:slide={{ duration: slideList ? 200 : 0 }}>
+	<div class="category-tags" role="list" transition:slide={{ duration: slideList && !reducedMotion.current ? appearance === 'rows' ? 160 : 200 : 0 }}>
 		{#each catTags as { tag, itemCount }, i (tag.id)}
 			<div
 				class="tag-row-wrapper"
 				in:fly={{
-					y: 12,
-					duration: 200,
-					delay: Math.min(i * 30, 300)
+					y: appearance === 'rows' ? 0 : 12,
+					duration: appearance === 'rows' || reducedMotion.current ? 0 : 200,
+					delay: appearance === 'rows' ? 0 : Math.min(i * 30, 300)
 				}}
-				out:fly={{ y: -8, duration: 150 }}
-				animate:flip={{ duration: 200 }}
+				out:fly={{ y: appearance === 'rows' ? 0 : -8, duration: appearance === 'rows' || reducedMotion.current ? 0 : 150 }}
+				animate:flip={{ duration: reducedMotion.current ? 0 : appearance === 'rows' ? 160 : 200 }}
 			>
 				<TagManagerTagRow
 					{compact}
+					{appearance}
 					{selectionMode}
 					showCategory={isSearching}
 					{tag}
@@ -471,12 +484,12 @@
 	{/if}
 {/snippet}
 
-<div class="tag-table" class:compact bind:clientWidth={tableWidth}>
+<div class="tag-table" class:compact class:rows={appearance === 'rows'} bind:clientWidth={tableWidth}>
 	{#if showCreateWizard}
 		<div
 			class="view-panel create-view"
-			in:viewPush={{ x: 60, delay: 60 }}
-			out:viewPush={{ x: 60, duration: 220, easing: cubicIn }}
+			in:viewPush={{ x: appearance === 'rows' ? 10 : 60, delay: appearance === 'rows' ? 0 : 60, duration: reducedMotion.current ? 0 : appearance === 'rows' ? 170 : 280, plain: appearance === 'rows' }}
+			out:viewPush={{ x: appearance === 'rows' ? 10 : 60, duration: reducedMotion.current ? 0 : appearance === 'rows' ? 140 : 220, easing: cubicIn, plain: appearance === 'rows' }}
 		>
 			<!-- Live Preview -->
 			<div class="wizard-section wizard-stagger-1">
@@ -519,7 +532,7 @@
 			<!-- Category -->
 			<div class="wizard-section wizard-stagger-4">
 				<span class="wizard-label">Category</span>
-				<div class="wizard-category-chips" role="radiogroup" aria-label="Tag category">
+				<div class="wizard-category-chips" class:rows={appearance === 'rows'} role="radiogroup" aria-label="Tag category">
 					{#each allCategories as cat (cat)}
 						<button
 							class="qc-chip"
@@ -528,6 +541,7 @@
 							aria-checked={wizardCategory === cat}
 							onclick={() => (wizardCategory = cat)}
 						>
+							{#if appearance === 'rows' && categoryVisual}<span class="category-visual" style={`color: ${categoryVisual(cat).accent}`}><Icon name={categoryVisual(cat).icon} size={15} /></span>{/if}
 							{getCategoryLabel(cat, categoryLabels)}
 						</button>
 					{/each}
@@ -565,8 +579,9 @@
 			{#if allTags.length > 0}
 				<div class="wizard-section wizard-stagger-5">
 					{#if wizardShowPrereqs}
-						<div transition:slide={{ duration: 200 }}>
+						<div transition:slide={{ duration: reducedMotion.current ? 0 : 200 }}>
 							<TagManagerPrereqPicker
+								{appearance}
 								currentPrereqs={wizardPrereqTagIds}
 								{allTags}
 								excludeCategory={wizardCategory}
@@ -618,10 +633,11 @@
 	{#if showMergeWizard}
 		<div
 			class="view-panel merge-view"
-			in:viewPush={{ x: 60, delay: 60 }}
-			out:viewPush={{ x: 60, duration: 220, easing: cubicIn }}
+			in:viewPush={{ x: appearance === 'rows' ? 10 : 60, delay: appearance === 'rows' ? 0 : 60, duration: reducedMotion.current ? 0 : appearance === 'rows' ? 170 : 280, plain: appearance === 'rows' }}
+			out:viewPush={{ x: appearance === 'rows' ? 10 : 60, duration: reducedMotion.current ? 0 : appearance === 'rows' ? 140 : 220, easing: cubicIn, plain: appearance === 'rows' }}
 		>
 			<TagManagerMergeFlow
+				{appearance}
 				mode={mergeMode}
 				sourceTags={mergeSourceTags}
 				{allTags}
@@ -634,8 +650,8 @@
 	{#if !showCreateWizard && !showMergeWizard}
 		<div
 			class="view-panel list-view"
-			in:viewPush={{ x: -60, delay: 60 }}
-			out:viewPush={{ x: -60, duration: 220, easing: cubicIn }}
+			in:viewPush={{ x: appearance === 'rows' ? -10 : -60, delay: appearance === 'rows' ? 0 : 60, duration: reducedMotion.current ? 0 : appearance === 'rows' ? 170 : 280, plain: appearance === 'rows' }}
+			out:viewPush={{ x: appearance === 'rows' ? -10 : -60, duration: reducedMotion.current ? 0 : appearance === 'rows' ? 140 : 220, easing: cubicIn, plain: appearance === 'rows' }}
 		>
 			{#if toolbar}{@render toolbar()}{/if}
 			<div class="list-scroll" class:split>
@@ -691,16 +707,17 @@
 				{:else if visibleCategories.length === 0}
 					{@render emptyState()}
 				{:else if !activeCategory && !isSearching}
-					<div class="category-index" aria-label="Tag categories">
-						{#if !compact}
+					<div class="category-index" aria-label="Tag categories" in:fly={{ x: appearance === 'rows' ? -10 : 0, duration: appearance === 'rows' && !reducedMotion.current ? 170 : 0 }} out:fade={{ duration: appearance === 'rows' && !reducedMotion.current ? 100 : 0 }}>
+						{#if !compact && appearance !== 'rows'}
 							<p class="index-heading">
 								Categories <span>{allCategories.length}</span>
 							</p>
 						{/if}
 						{#each allCategories as category (category)}
 							<button class="category-index-row" onclick={() => onOpenCategory(category)}>
+								{#if appearance === 'rows' && categoryVisual}<span class="category-visual" style={`color: ${categoryVisual(category).accent}`}><Icon name={categoryVisual(category).icon} size={16} /></span>{/if}
 								<span class="index-name">{getCategoryLabel(category, categoryLabels)}</span>
-								<span class="index-count">{tagCountByCategory.get(category) ?? 0} tags</span>
+								<span class="index-count">{tagCountByCategory.get(category) ?? 0}{#if appearance === 'rows'}<span class="sr-only"> tags</span>{:else} tags{/if}</span>
 								<Icon name="chevron-right" size={15} />
 							</button>
 						{/each}
@@ -709,9 +726,9 @@
 					{#each visibleCategories as category (category)}
 						<div
 							class="category-section"
-							in:fly={{ y: 16, duration: 250 }}
-							out:fade={{ duration: 150 }}
-							animate:flip={{ duration: 250 }}
+							in:fly={{ x: appearance === 'rows' ? 10 : 0, y: appearance === 'rows' ? 0 : 16, duration: reducedMotion.current ? 0 : appearance === 'rows' ? 170 : 250 }}
+							out:fade={{ duration: reducedMotion.current ? 0 : 150 }}
+							animate:flip={{ duration: reducedMotion.current ? 0 : appearance === 'rows' ? 170 : 250 }}
 						>
 							{@render categoryBody(category, tagsByCategory.get(category) ?? [])}
 						</div>
@@ -1623,7 +1640,53 @@
 		color: var(--text-faint);
 	}
 
+	.tag-table.rows .category-index {
+		margin: 8px;
+		padding: 0;
+		max-width: none;
+		border: 1px solid var(--theme-stroke);
+		border-radius: var(--radius-sm);
+		overflow: hidden;
+	}
+	.tag-table.rows .category-index-row,
+	.tag-table.rows.compact .category-index-row {
+		min-height: var(--min-touch-target);
+		margin: 0;
+		padding: 7px 10px;
+		gap: 9px;
+		border: 0;
+		border-radius: 0;
+		background: transparent;
+		transition: background 140ms ease-out, border-color 140ms ease-out;
+	}
+	.tag-table.rows .category-index-row + .category-index-row { border-top: 1px solid var(--theme-stroke); }
+	.tag-table.rows .category-index-row:hover { background: var(--interactive-hover); }
+	.tag-table.rows .index-name { font-size: 13px; font-weight: 500; }
+	.tag-table.rows .index-count { font-size: 11px; font-variant-numeric: tabular-nums; }
+	.tag-table.rows .category-section { max-width: none; padding: 0 8px; }
+	.tag-table.rows .category-header-row { background: transparent; border-bottom-color: var(--theme-stroke); }
+	.tag-table.rows .category-back { display: inline-flex; align-items: center; justify-content: center; gap: 4px; width: auto; min-width: var(--min-touch-target); min-height: var(--min-touch-target); padding: 0 8px; border: 1px solid var(--theme-stroke); border-radius: var(--radius-sm); background: var(--surface-dim); color: var(--royal-text); font-size: 13px; }
+	.tag-table.rows .category-back:hover { background: var(--interactive-hover); }
+	.tag-table.rows .category-label { text-transform: none; letter-spacing: 0; font-size: 14px; color: var(--theme-text); }
+	.tag-table.rows .category-label-wrap :global(h4) { text-transform: none; letter-spacing: 0; }
+	.tag-table.rows .category-header { gap: 8px; }
+	.tag-table.rows .category-count { min-width: 0; height: auto; padding: 0; background: transparent; border-radius: 0; color: var(--theme-text-dim); font-size: 11px; font-weight: 400; }
+	.tag-table.rows .wizard-section,
+	.tag-table.rows .wizard-hint,
+	.tag-table.rows .preview-tag { animation: none; }
+	.tag-table.rows .category-tags { padding-top: 0; border: 1px solid var(--theme-stroke); border-radius: var(--radius-sm); overflow: visible; }
+	.tag-table.rows .tag-row-wrapper + .tag-row-wrapper { border-top: 1px solid var(--theme-stroke); }
+	.tag-table.rows .category-visual { display: inline-flex; flex: none; align-items: center; justify-content: center; width: 20px; }
+	.tag-table.rows .quick-category-chips,
+	.tag-table.rows .wizard-category-chips { display: grid; grid-template-columns: 1fr; gap: 0; border: 1px solid var(--theme-stroke); border-radius: var(--radius-sm); overflow: hidden; }
+	.tag-table.rows .qc-chip { display: flex; align-items: center; gap: 7px; min-height: 36px; padding: 6px 9px; border: 0; border-radius: 0; background: transparent; color: var(--theme-text); text-align: left; transform: none; transition: background 140ms ease-out, border-color 140ms ease-out; }
+	.tag-table.rows .qc-chip + .qc-chip { border-top: 1px solid var(--theme-stroke); }
+	.tag-table.rows .qc-chip.active { color: var(--theme-text); background: var(--theme-accent-bg); box-shadow: inset 2px 0 var(--theme-accent); animation: none; }
+	.tag-table.rows .qc-chip:active { transform: none; }
 	@media (prefers-reduced-motion: reduce) {
+		.tag-table.rows .category-index-row,
+		.tag-table.rows.compact .category-index-row,
+		.tag-table.rows .qc-chip { transition: none; }
 		.category-index-row,
 		.category-back,
 		.qc-chip,

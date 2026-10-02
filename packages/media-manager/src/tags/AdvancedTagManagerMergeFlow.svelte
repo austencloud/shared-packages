@@ -13,11 +13,12 @@
 		allTags: MediaTag[];
 		/** Item counts per tag ID */
 		itemCountMap: Map<string, number>;
+		appearance?: 'default' | 'rows';
 		onConfirm: (targetId: string) => void;
 		onCancel: () => void;
 	}
 
-	const { mode, sourceTags, allTags, itemCountMap, onConfirm, onCancel }: Props = $props();
+	const { mode, sourceTags, allTags, itemCountMap, appearance = 'default', onConfirm, onCancel }: Props = $props();
 
 	let selectedTargetId = $state('');
 	let searchQuery = $state('');
@@ -80,7 +81,7 @@
 	});
 </script>
 
-<div class="merge-flow">
+<div class="merge-flow" class:rows={appearance === 'rows'}>
 	<!-- Source display -->
 	<div class="merge-header merge-section">
 		{#if mode === 'single' && sourceTags.length === 1}
@@ -134,7 +135,7 @@
 						aria-selected={false}
 						onclick={() => selectTarget(tag.id)}
 					>
-						<TagChip label={tag.name} color={tag.color} size="sm" />
+						{#if appearance === 'rows'}<span class="plain-option-name">{tag.name}</span>{:else}<TagChip label={tag.name} color={tag.color} size="sm" />{/if}
 						<span class="option-count">{itemCountMap.get(tag.id) ?? 0}</span>
 					</button>
 				{:else}
@@ -499,6 +500,12 @@
 		}
 	}
 
+	.merge-flow.rows .tag-options { display: grid; grid-template-columns: 1fr; gap: 0; border: 1px solid var(--theme-stroke); border-radius: var(--radius-sm); overflow: hidden; }
+	.merge-flow.rows .tag-option { display: flex; align-items: center; width: 100%; min-height: 36px; padding: 7px 10px; border: 0; border-radius: 0; background: transparent; color: var(--theme-text); text-align: left; transform: none; }
+	.merge-flow.rows .tag-option + .tag-option { border-top: 1px solid var(--theme-stroke); }
+	.merge-flow.rows .tag-option:hover { box-shadow: none; transform: none; }
+	.merge-flow.rows .plain-option-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+	.merge-flow.rows .option-count { color: var(--theme-text-dim); font-size: 11px; font-variant-numeric: tabular-nums; }
 	@media (prefers-reduced-motion: reduce) {
 		.selected-target,
 		.merge-detail {

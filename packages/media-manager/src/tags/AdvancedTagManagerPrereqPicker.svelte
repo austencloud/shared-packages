@@ -8,6 +8,7 @@
 		excludeTagId?: string;
 		excludeCategory?: string;
 		categoryLabels?: Record<string, string>;
+		appearance?: 'default' | 'rows';
 		/** What the rule does, in plain words; differs for tags, categories and the create form */
 		hint?: string;
 		onSelect: (ids: string[]) => void;
@@ -22,6 +23,7 @@
 		excludeTagId,
 		excludeCategory,
 		categoryLabels = {},
+		appearance = 'default',
 		hint = 'Only offer this tag on items that already have one of these. Changes save as you tap.',
 		onSelect,
 		onDone
@@ -67,7 +69,7 @@
 	});
 </script>
 
-<div class="prereq-picker">
+<div class="prereq-picker" class:rows={appearance === 'rows'}>
 	<p class="picker-label">
 		<Icon name="link" size={12} />
 		Prerequisites
@@ -87,11 +89,12 @@
 							class="prereq-tag"
 							class:active={selected.has(tag.id)}
 							style="--tag-color: {getTagHex(tag)}"
+							aria-pressed={appearance === 'rows' ? selected.has(tag.id) : undefined}
 							onclick={() => toggle(tag.id)}
 						>
-							<span class="prereq-dot"></span>
+							{#if appearance !== 'rows'}<span class="prereq-dot"></span>{/if}
 							{tag.name}
-							{#if selected.has(tag.id)}
+							{#if appearance === 'rows'}<span class="row-status" aria-hidden="true">{selected.has(tag.id) ? 'Selected' : 'Select'}</span>{:else if selected.has(tag.id)}
 								<Icon name="check" size={10} />
 							{/if}
 						</button>
@@ -298,6 +301,13 @@
 		outline-offset: 2px;
 	}
 
+	.prereq-picker.rows .prereq-category-label { text-transform: none; letter-spacing: 0; color: var(--theme-text-dim); }
+	.prereq-picker.rows .prereq-tags { display: grid; grid-template-columns: 1fr; gap: 0; border: 1px solid var(--theme-stroke); border-radius: var(--radius-sm); overflow: hidden; }
+	.prereq-picker.rows .prereq-tag { display: flex; align-items: center; width: 100%; min-height: 36px; padding: 7px 10px; border: 0; border-radius: 0; color: var(--theme-text); background: transparent; text-align: left; transform: none; }
+	.prereq-picker.rows .prereq-tag + .prereq-tag { border-top: 1px solid var(--theme-stroke); }
+	.prereq-picker.rows .prereq-tag.active { background: var(--theme-accent-bg); color: var(--theme-text); box-shadow: inset 2px 0 var(--theme-accent); }
+	.prereq-picker.rows .row-status { margin-left: auto; min-width: 3.5rem; color: var(--theme-text-dim); font-size: 11px; text-align: right; }
+	.prereq-picker.rows .prereq-tag.active .row-status { color: var(--theme-accent); }
 	@media (prefers-reduced-motion: reduce) {
 		.prereq-tag,
 		.clear-btn {

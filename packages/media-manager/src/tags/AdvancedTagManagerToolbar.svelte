@@ -16,6 +16,7 @@
 		selectionMode: boolean;
 		showBrowseSummary?: boolean;
 		compact?: boolean;
+		appearance?: 'default' | 'rows';
 		onSearchChange: (query: string) => void;
 		onSortChange: (sort: SortOption) => void;
 		onCategoryFilterChange: (category: string | null) => void;
@@ -34,6 +35,7 @@
 		selectionMode,
 		showBrowseSummary = true,
 		compact = false,
+		appearance = 'default',
 		onSearchChange,
 		onSortChange,
 		onSelectAll,
@@ -60,7 +62,7 @@
 	}
 </script>
 
-<div class="toolbar" class:compact>
+<div class="toolbar" class:compact class:rows={appearance === 'rows'}>
 	<div class="toolbar-top">
 		<!-- Search -->
 		<div class="search-container">
@@ -224,6 +226,8 @@
 		flex: 1;
 		min-width: 0;
 	}
+	.toolbar.rows .search-container { background: transparent; border-color: var(--theme-stroke); border-radius: var(--radius-sm); }
+	.toolbar.rows .search-container:focus-within { border-color: var(--theme-accent); box-shadow: none; }
 
 	.search-container:focus-within {
 		border-color: var(--royal-border);

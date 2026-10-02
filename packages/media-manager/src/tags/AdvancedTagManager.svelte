@@ -46,6 +46,8 @@
 		onClose: () => void;
 		presentation?: 'dialog' | 'inline';
 		compact?: boolean;
+		appearance?: 'default' | 'rows';
+		categoryVisual?: (category: string) => { icon: string; accent: string };
 		initialCategory?: string | null;
 	}
 
@@ -62,6 +64,8 @@
 		onClose,
 		presentation = 'dialog',
 		compact = false,
+		appearance = 'default',
+		categoryVisual,
 		initialCategory = null
 	}: Props = $props();
 	setContext(advancedTagContext, { Icon: hostIcon, entityHref });
@@ -101,6 +105,7 @@
 
 	// Fine pointer still enables the row's desktop rename shortcut.
 	const finePointer = new MediaQuery('(pointer: fine)');
+	const reducedMotion = new MediaQuery('(prefers-reduced-motion: reduce)');
 	let canDrag = $derived(finePointer.current);
 
 	// Phone sheet follows the visual viewport so the on-screen keyboard
@@ -537,6 +542,7 @@
 	class="tag-manager-overlay"
 	class:inline={presentation === 'inline'}
 	class:compact
+	class:rows={appearance === 'rows'}
 	onclick={(e) => {
 		if (presentation === 'dialog' && e.target === e.currentTarget) onClose();
 	}}
@@ -547,6 +553,7 @@
 		class="tag-manager"
 		class:inline={presentation === 'inline'}
 		class:compact
+		class:rows={appearance === 'rows'}
 		role={presentation === 'dialog' ? 'dialog' : undefined}
 		aria-modal={presentation === 'dialog' ? 'true' : undefined}
 		aria-label="Manage tags"
@@ -562,8 +569,8 @@
 				{#if showInlineCreate}
 					<div
 						class="header-state"
-						in:fade={{ duration: 200, delay: 80 }}
-						out:fade={{ duration: 150 }}
+						in:fade={{ duration: reducedMotion.current ? 0 : 200, delay: reducedMotion.current ? 0 : 80 }}
+						out:fade={{ duration: reducedMotion.current ? 0 : 150 }}
 					>
 						<button
 							class="back-btn"
@@ -577,8 +584,8 @@
 				{:else if showMergeFlow}
 					<div
 						class="header-state"
-						in:fade={{ duration: 200, delay: 80 }}
-						out:fade={{ duration: 150 }}
+						in:fade={{ duration: reducedMotion.current ? 0 : 200, delay: reducedMotion.current ? 0 : 80 }}
+						out:fade={{ duration: reducedMotion.current ? 0 : 150 }}
 					>
 						<button class="back-btn" onclick={cancelMerge} aria-label="Back to tag list">
 							<Icon name="arrow-left" size={16} />
@@ -588,8 +595,8 @@
 				{:else}
 					<div
 						class="header-state"
-						in:fade={{ duration: 200, delay: 80 }}
-						out:fade={{ duration: 150 }}
+						in:fade={{ duration: reducedMotion.current ? 0 : 200, delay: reducedMotion.current ? 0 : 80 }}
+						out:fade={{ duration: reducedMotion.current ? 0 : 150 }}
 					>
 						<div class="header-left">
 							<h2 class="title">Manage Tags</h2>
@@ -634,6 +641,7 @@
 					Move {selectedTagIds.size} tag{selectedTagIds.size !== 1 ? 's' : ''} to
 				</p>
 				<TagManagerCategoryPicker
+					{appearance}
 					current=""
 					categories={categoryOrder}
 					{categoryLabels}
@@ -675,6 +683,8 @@
 		<!-- Tag Table -->
 		<TagManagerTagTable
 			{compact}
+			{appearance}
+			{categoryVisual}
 			{selectionMode}
 			{tagsByCategory}
 			{visibleCategories}
@@ -719,6 +729,7 @@
 			{#snippet toolbar()}
 				<TagManagerToolbar
 					{compact}
+					{appearance}
 					{selectionMode}
 					{searchQuery}
 					{sortBy}
@@ -1238,9 +1249,21 @@
 		}
 	}
 
+	.tag-manager.rows { box-shadow: 0 16px 40px var(--overlay-medium); animation: rows-enter 170ms ease-out both; }
+	.tag-manager.rows.inline { box-shadow: none; animation: none; }
+	.tag-manager.rows .header { background: var(--theme-panel-bg); }
+	.tag-manager.rows .title { font-size: 15px; font-weight: 600; }
+	.tag-manager.rows .new-tag-btn,
+	.tag-manager.rows .back-btn,
+	.tag-manager.rows .close-btn { border-radius: var(--radius-sm); transform: none; }
+	.tag-manager.rows .new-tag-btn:active,
+	.tag-manager.rows .back-btn:active,
+	.tag-manager.rows .close-btn:active { transform: none; }
+	@keyframes rows-enter { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
 	@media (prefers-reduced-motion: reduce) {
 		.tag-manager-overlay,
-		.tag-manager {
+		.tag-manager,
+		.tag-manager.rows {
 			animation: none;
 		}
 		.new-tag-btn,
