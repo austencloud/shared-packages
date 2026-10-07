@@ -1,6 +1,7 @@
 {
   "name": "@austencloud/video-editor",
   "version": "0.1.0",
+  "private": true,
   "description": "Keyframe video editor for Svelte 5 apps: project schema, frame compositor, WebCodecs export and the editor UI. Shared by tka-platform and Ringmaster.",
   "type": "module",
   "svelte": "./dist/index.js",
@@ -32,14 +33,13 @@
     "test": "node --test test/*.test.mjs",
     "clean": "rimraf dist"
   },
-  "dependencies": {
-    "mediabunny": "^1.44.0"
-  },
   "peerDependencies": {
+    "mediabunny": "^1.44.0",
     "svelte": "^5.0.0"
   },
   "devDependencies": {
     "@sveltejs/package": "^2.3.0",
+    "mediabunny": "~1.44.2",
     "rimraf": "^5.0.0",
     "svelte": "^5.0.0",
     "svelte-check": "^4.0.0",

@@ -7,21 +7,31 @@
 <script lang="ts">
 	import { onMount } from "svelte";
 	import { createPreviewWorker } from "../workers/index.js";
-	import type { PreviewWorkerPong } from "../workers/messages.js";
+	import type { PreviewWorkerPing, PreviewWorkerPong } from "../workers/messages.js";
 
 	let { seconds = 83.5 }: { seconds?: number } = $props();
 	let status = $state("waiting");
 
 	onMount(() => {
-		const worker = createPreviewWorker();
+		let worker: Worker;
+		try {
+			worker = createPreviewWorker();
+		} catch (error) {
+			status = `error construct ${String(error)}`;
+			return;
+		}
 		worker.addEventListener("message", (event: MessageEvent<PreviewWorkerPong>) => {
 			const { timecode, mediabunny } = event.data;
 			status = `pong ${timecode} ${mediabunny ? "mediabunny" : "no-mediabunny"}`;
 		});
 		worker.addEventListener("error", (event) => {
-			status = `error ${event.message}`;
+			// A module worker that fails to load fires a plain Event, not an ErrorEvent.
+			status = `error ${event instanceof ErrorEvent && event.message ? event.message : "worker failed to load"}`;
 		});
-		worker.postMessage({ type: "ping", seconds });
+		worker.addEventListener("messageerror", () => {
+			status = "error messageerror";
+		});
+		worker.postMessage({ type: "ping", seconds } satisfies PreviewWorkerPing);
 		return () => worker.terminate();
 	});
 </script>
