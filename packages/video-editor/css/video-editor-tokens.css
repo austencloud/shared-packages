@@ -1,0 +1,19 @@
+/*
+ * Tokens read by @austencloud/video-editor components.
+ * Each --ve-* value takes the host's --theme-* token when the host defines it
+ * and falls back to a dark default otherwise.
+ * Import once in the host: import "@austencloud/video-editor/css/video-editor-tokens.css";
+ */
+
+:root {
+	--ve-bg: var(--theme-panel-bg, #15151a);
+	--ve-surface: var(--theme-card-bg, #1e1e25);
+	--ve-surface-hover: var(--theme-card-hover-bg, #26262f);
+	--ve-text: var(--theme-text, #f3f3f5);
+	--ve-text-dim: var(--theme-text-dim, #9a9aa5);
+	--ve-stroke: var(--theme-stroke, rgba(255, 255, 255, 0.12));
+	--ve-stroke-strong: var(--theme-stroke-strong, rgba(255, 255, 255, 0.24));
+	--ve-accent: var(--theme-accent, #f97316);
+	--ve-radius: 12px;
+	--ve-font: var(--theme-font, system-ui, sans-serif);
+}

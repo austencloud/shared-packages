@@ -1,0 +1,63 @@
+{
+  "name": "@austencloud/video-editor",
+  "version": "0.1.0",
+  "description": "Keyframe video editor for Svelte 5 apps: project schema, frame compositor, WebCodecs export and the editor UI. Shared by tka-platform and Ringmaster.",
+  "type": "module",
+  "svelte": "./dist/index.js",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "svelte": "./dist/index.js",
+      "import": "./dist/index.js"
+    },
+    "./core": {
+      "types": "./dist/core/index.d.ts",
+      "import": "./dist/core/index.js"
+    },
+    "./css/*": "./css/*"
+  },
+  "sideEffects": [
+    "./css/*"
+  ],
+  "files": [
+    "dist",
+    "css"
+  ],
+  "scripts": {
+    "build": "svelte-package -i src -o dist",
+    "dev": "svelte-package -i src -o dist --watch",
+    "check": "svelte-check --tsconfig ./tsconfig.json",
+    "test": "node --test test/*.test.mjs",
+    "clean": "rimraf dist"
+  },
+  "dependencies": {
+    "mediabunny": "^1.44.0"
+  },
+  "peerDependencies": {
+    "svelte": "^5.0.0"
+  },
+  "devDependencies": {
+    "@sveltejs/package": "^2.3.0",
+    "rimraf": "^5.0.0",
+    "svelte": "^5.0.0",
+    "svelte-check": "^4.0.0",
+    "typescript": "^5.0.0"
+  },
+  "keywords": [
+    "svelte",
+    "video",
+    "editor",
+    "keyframes",
+    "webcodecs",
+    "austencloud"
+  ],
+  "author": "Austen Cloud <austencloud@gmail.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/austencloud/shared-packages.git",
+    "directory": "packages/video-editor"
+  }
+}
