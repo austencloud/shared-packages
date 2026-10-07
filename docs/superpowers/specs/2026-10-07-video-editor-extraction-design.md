@@ -1,0 +1,319 @@
+# Video editor extraction: `@austencloud/video-editor`
+
+Date: 2026-10-07. Status: approved in conversation (Austen: "go ahead and make
+it happen"). Name chosen by Austen: `video-editor`.
+
+## Goal
+
+Post Studio, the custom video editor inside tka-platform, becomes one shared
+package that both tka-platform and Ringmaster (E:/cirque-aflame/ringmaster)
+run with full feature parity for everything generic. TKA's sequence-specific
+pieces stay in tka-platform as a plugin the package loads. Every change to the
+editor from now on happens in the package and reaches both apps.
+
+## Decisions (Austen, 2026-10-07)
+
+| Topic | Decision |
+| --- | --- |
+| Parity scope | The generic editor is identical in both apps: timeline, trim, split, speed, reorder, snapping, zoom, undo, keyframes with easing, transitions, looks, text, cards, music lane, media sources, export, drafts. Sequence overlays (animation, moves, carousel, titles), the Tutorial preset, take timing, tap-fit and staff-tip tracking stay in tka-platform behind a plugin interface. |
+| Ringmaster persistence | A Firestore `videoProjects` collection scoped to the signed-in user, through the existing store port, with the same device and session caching TKA uses. |
+| In-flight work | Extract from tka-platform `main` now. The `codex/feature-video-captures` branch (CLI and server work, plus a few editor-domain edits) is rebased onto the package afterwards. |
+| Name | `@austencloud/video-editor`, folder `E:/shared-packages/packages/video-editor`. Screens may still say Post Studio (TKA) or Studio (Ringmaster). |
+
+## What moves and what stays
+
+Inventory of tka-platform on 2026-10-07 (paths relative to E:/tka-platform):
+
+- `src/lib/shared/media-composition` (about 100 files, 32.7k lines): domain
+  (project schema, edits, keyframes, compiler, preset schema), services
+  (evaluator, painters, compositor, exporter, audio plan and mix, stores,
+  preview cache), state (`post-editor-state.svelte.ts`), workers (preview
+  video, staff-tip tracker).
+- `src/lib/shared/share/components/post-studio` (about 90 files, 23k lines):
+  `PostStudio.svelte`, `editor/PostEditorWorkspace.svelte` (3867 lines),
+  `editor/PostEditorCanvas.svelte` (3314), `editor/PostItemTool.svelte`
+  (1688), `editor/timeline/*`, keyframe and curve editors, tool panels,
+  `builder/*` (take timing UI).
+- The encoder in `src/lib/shared/animation-engine/{services/background-video-encoder.ts, workers/video-export.worker.ts}`
+  and `src/lib/shared/video-export/*` (frame capturer, takeover, captured
+  frame), shared with TKA's animation and 3D exports.
+- Generic helpers the editor leans on: `ui/components/{SegmentedControl, TypeableValue, ValueSlider, ScrubbableNumber, OverflowMenu}`,
+  `components/panel/PanelButton`, `components/Crossfade`,
+  `foundation/ui/{Drawer, DrawerHeader, ConfirmDialog}`, `panels/ResizeHandle`,
+  `timeline/TimeRuler`, `transitions/{motion, layout-flip, transitions, ws-ease}`,
+  `ui/typed-number`, `render/utils/trace-rounded-rect`, `audio/bpm-analyzer`,
+  `foundation/services/file-downloader`, `getVideoFileMetadata`, `deepEqual`.
+
+**Package side** (about 45k lines before cleanup): the generic domain, render
+path, encoder, editor UI, the helpers above, and the English strings.
+
+**Stays in tka-platform**: `SequenceData`/`StepData` types and everything that
+needs them (animation-engine, effects, mandala, pictograph, sequence-viewer
+surfaces, grid-join, create transforms, QR detector, share card state), the
+`builder/` timing UI and `take-timing.ts`/`tap-fit.ts`, the Tutorial preset and
+looks that place sequence items, staff-tip tracking, the share sheet and
+Instagram publishing (`PostShareSheet`, `InstagramPostReview`, `meta-publish`,
+`r2-video-uploader`), `features/post` (PostModule, account sync), the
+feature-video folder backend (`/api/dev/*`, `feature-video-store.ts`,
+`post-studio-draft-storage.mjs`) and the CLI (`scripts/post-project.mjs`,
+`scripts/feature-video/*`).
+
+**Deleted, not moved** (dead since the slots iteration):
+`state/media-composition-state.svelte.ts`, `composition-playback-adapter.ts`,
+`media-composition-preset-repository.ts`, `caption-painter.ts` and their tests.
+
+## Package anatomy
+
+```
+packages/video-editor/
+  package.json        name @austencloud/video-editor, version 0.1.0, type module
+  tsconfig.json       extends ../../tsconfig.base.json (strict, verbatimModuleSyntax)
+  src/
+    index.ts          VideoEditor.svelte, host and plugin types, createVideoEditorState
+    core/             project schema, item kinds, edits, keyframes, normalize, compiler, preset schema
+    render/           frame evaluator, painters, compositor, audio plan and mix, preview cache
+    encoder/          CanvasFrameCapturer, BackgroundVideoEncoder, video-export.worker.ts, ExportTakeover, captured-frame
+    workers/          preview-video.worker.ts
+    ui/               editor components (workspace, canvas, timeline, tools, keyframes, music lane) and the UI kit
+    strings/          en.ts: every key the editor uses, with English text
+  css/video-editor-tokens.css   --ve-* variables with dark fallbacks
+  test/               vitest (jsdom) for core, render, strings; vitest browser mode for components
+```
+
+Exports map, each with `types`, `svelte` (where a Svelte entry exists) and
+`import` conditions resolving to `dist` (media-manager's commit `ec21f52`
+pattern):
+
+| Subpath | Contents | Svelte? |
+| --- | --- | --- |
+| `.` | `VideoEditor` component, `createVideoEditorState`, host and plugin types | yes |
+| `./core` | schema factory, item kinds, edits, keyframes, normalize, compiler | no |
+| `./render` | evaluator, painter registry, compositor, audio | no |
+| `./encoder` | capturer, background encoder, takeover | yes (takeover) |
+| `./css/*` | tokens | n/a |
+
+`sideEffects: false` except the CSS. `files: ["dist", "css"]` (not `src`,
+so the published tarball stays small; `svelte` conditions point at `dist`).
+
+Dependencies (runtime): `mediabunny ^1.44`, `zod ^4`, `wavesurfer.js ^7`,
+`modern-screenshot ^4`, `dexie ^4`, `@fortawesome/free-solid-svg-icons ^7`,
+`h264-mp4-encoder ^1` (WASM fallback). Peer: `svelte ^5`. No `bits-ui`: the
+two components that use it get plain replacements. No `firebase`.
+
+Workers ship as `dist/workers/*.worker.js` and `dist/encoder/*.worker.js`,
+created by `new Worker(new URL("./x.worker.js", import.meta.url), { type: "module" })`
+from the module beside them. Hosts add `@austencloud/video-editor` to
+`optimizeDeps.exclude` and keep `resolve.dedupe: ["svelte"]`.
+
+Icons render as inline SVG from `@fortawesome/free-solid-svg-icons` through
+one `Icon.svelte`; the `fa-*` class usage (89 classes) is replaced.
+
+Styling: scoped `<style>` blocks reading `var(--ve-*, fallback)`. The token
+file maps `--ve-*` to `--theme-*` from `@austencloud/theme` when present.
+Ringmaster's token-usage scan must pass, so no hard-coded colours in the
+app-side integration.
+
+## Host contract
+
+```ts
+export interface VideoEditorHost {
+  ownerId: string;                       // scopes device storage keys (was auth.currentUser)
+  store?: VideoEditorStore;              // the PostEditorStore port, renamed; default devicePostEditorStore
+  mediaLibrary?: MediaLibrary;           // list and resolve library takes; fetch policy for CORS media
+  translate?: (key: StringKey, params?: Record<string, string | number>) => string; // default: English table
+  notify?: (toast: { kind: "info" | "error"; text: string }) => void;
+  shortcuts?: ShortcutRegistrar;         // default: a window keydown listener scoped to the editor
+  now?: () => number;
+  dev?: boolean;                         // replaces import.meta.env.DEV gates
+}
+
+export interface MediaLibrary {
+  listTakes(): Promise<LibraryTake[]>;
+  resolveTake(id: string): Promise<LibraryTake | null>;
+  /** Rewrites or re-requests a media URL so fetch and decode succeed (proxy, cache: "no-store"). */
+  requestFor(url: string): Request;
+}
+```
+
+`VideoEditorStore` keeps the current `PostEditorStore` shape (openProject,
+saveProject, timing load and save, history load and save) with the owner id
+passed in instead of read from Firebase.
+
+## Plugin contract
+
+```ts
+export interface VideoEditorPlugin {
+  id: string;                                   // "tka"
+  itemKinds: ItemKindDefinition[];              // zod schema, label, defaults, compile hook, tool panel, lane renderer, media sublayer
+  projectExtension?: z.ZodRawShape;             // extra top-level fields (sequenceId, timings, sequenceActions)
+  painters?: PainterFactory[];                  // strip, carousel, staff effects, tunnel titles
+  surfaces?: SurfaceCapture[];                  // DOM-captured render modes (choreo card, sequence animation)
+  alignment?: AlignmentProvider;                // take clocks and StepData for the evaluator
+  presets?: ProjectPreset[];                    // Tutorial
+  looks?: LookDefinition[];                     // Dual, Breakdown
+  modes?: EditorMode[];                         // "timing" mode and its toolbar
+  canvasOverlays?: CanvasOverlay[];             // staff tracking UI, animation panel reparenting
+}
+```
+
+Core item kinds: `video`, `image`, `card`, `text`. `card` in the core is a
+plain card (background, text lines, optional image or QR); TKA's choreo card
+is a plugin surface drawn into a `card` item through `surfaces`.
+
+`createProjectSchema(plugin?)` builds the discriminated union from the core
+kinds plus the plugin's and merges `projectExtension`. The core project has
+`subjectId: string` (TKA passes the sequence id). A TKA saved v2 project must
+parse and normalize to the same object as today; a test loads real drafts from
+`~/.tka/post-studio-drafts` fixtures copied into the test tree. Schema version
+stays 2. Unknown kinds fail parsing with a message naming the kind.
+
+## Render path
+
+- `compileProject(project, context, plugin?)`: core regions and clips; each
+  plugin kind contributes through its compile hook; sequence splitting at main
+  video boundaries moves into the TKA kinds' hooks.
+- `evaluatePresetLayers(preset, duration, t, alignment?)`: alignment stays an
+  optional argument supplied by `plugin.alignment`.
+- Painters come from a registry: core (text, backdrop, card) plus
+  `plugin.painters`. The `PostStudioLayerPainter` interface is unchanged.
+- The compositor's `renderMode` DOM captures become `plugin.surfaces`.
+- The encoder is `./encoder`; tka-platform's animation and 3D exporters import
+  it from the package (their `get-*` deferred registrations keep working).
+
+## Dev loop and publishing
+
+During steps 0 to 3 the apps resolve the package by Vite alias and tsconfig
+`paths`, not by installing it:
+
+- tka worktree: `vite.config.ts` gets `resolve.alias["@austencloud/video-editor"]`
+  entries pointing at `E:/worktrees/shared-packages/video-editor/packages/video-editor/dist`
+  (one per subpath), `server.fs.allow` includes that worktree, and
+  `optimizeDeps.exclude` lists the package. `tsconfig.json` `paths` mirror it
+  for svelte-check. The package's runtime deps resolve from the
+  shared-packages worktree's `node_modules` (pnpm install there once).
+- Ringmaster worktree: the same, in `ringmaster/vite.config.ts` and
+  `ringmaster/tsconfig.json`.
+- This keeps both primary checkouts' `node_modules` and lockfiles untouched
+  until step 4, which matters because tka worktrees junction `node_modules`
+  into the primary and Ringmaster CI fails on linked lock entries.
+
+Step 4 replaces the alias with a real dependency: publish
+`@austencloud/video-editor@0.1.0` through changesets, pin `^0.1.0` in both
+apps, regenerate Ringmaster's lockfile from a clean install, run both gates.
+
+## tka-platform integration
+
+- New folder `src/lib/shared/post-studio-plugin/` holds the TKA plugin:
+  sequence item kinds (animation, moves, carousel, titles), their panels and
+  lanes, surfaces (ChoreoCard, sequence animation), painters, the alignment
+  provider over take timing, the Tutorial preset and looks, the timing mode
+  and `builder/`, staff tracking overlay.
+- `PostModule.svelte` renders `<VideoEditor host={...} plugin={tkaPlugin} ...>`
+  with the host built from the current stores (`devicePostEditorStore`,
+  feature-video sync store, account projects), `t`, the toast and shortcut
+  services, `getSequenceVideosStore` as the media library.
+- `src/lib/shared/share/components/post-studio` and
+  `src/lib/shared/media-composition` shrink to what stays; moved files are
+  deleted in the same change that switches the import, never duplicated.
+- i18n: the package's English table is the source of the keys; tka's
+  `messages/*.json` keep their translations and `t` is passed in.
+- Parity proof: `tests/unit/video-editor-parity.test.ts` renders fixed
+  projects (the DCKΨ- post draft and `promo-1-0`) at 6 timestamps each through
+  the compositor before and after the switch and asserts pixel equality within
+  a tolerance of 0 on the frame hash. The "before" frames are captured once
+  on `main` into `tests/fixtures/video-editor-parity/` at the start of step 1.
+
+## Ringmaster integration
+
+- `packages/shared/src/schemas/video-projects.ts`: the Firestore doc shape
+  (`ownerId`, `project` as the package's core project, `revision`,
+  `updatedAt`, `title`); drift test like `media-items.ts`.
+- `src/lib/services/video-projects.svelte.ts`: `FirestoreVideoProjectStore`
+  implementing `VideoEditorStore` with revision checks, plus the device cache
+  and session undo caching copied from TKA's device store behaviour.
+- `src/lib/services/video-editor-media-library.ts`: `MediaLibrary` over
+  `mediaItems` videos and images in R2 and Firebase Storage; `requestFor`
+  returns `cache: "no-store"` requests for CORS media and routes legacy
+  Firebase Storage originals through `/api/r2/proxy`.
+- Routes: `/studio` (project list as EntityCard boxes, "New project" pill),
+  `/studio/[id]` (the editor full-bleed; sheets through a Portal). Spotlight's
+  trim action becomes "Open in Studio": it creates a project seeded with that
+  video and navigates; `/media?item=<id>&trim=1` redirects there.
+- Export: the editor's `onExported(blob)` uploads through the existing media
+  upload path (multipart above the single-upload cap) and creates a
+  `mediaItems` doc tagged like the source, then runs playback preparation.
+- Removal after parity: `MediaSnipEditor`, `MediaTrimTimeline`,
+  `MediaClipEditor`, `MediaClipExportList`, `media-clips-worker.ts`,
+  `media-clip-render.ts`, the `showcase/media-trim` page, and the
+  `mediaClipJobs` queue once no job is in flight.
+- House rules: pills and segmented controls, no `<select>` or checkboxes,
+  whole-box clicks, `--theme-*` tokens, phone layout checked.
+
+## Testing
+
+- Package: the TKA-free tests (about 65 files) move as they are under
+  `packages/video-editor/test`; core tests with TKA fixtures (edits, compiler,
+  evaluator) get plugin-free fixtures. Component tests run in vitest browser
+  mode inside the package (the first in shared-packages; config copied from
+  tka's `tests/config/vitest.components.config.ts`).
+- tka-platform: plugin tests stay; the parity test above; `npm run check`,
+  `npm run test:ci`, `npm run build`.
+- Ringmaster: store and schema tests (`tests/unit`), a browser-runes test for
+  the store's undo caching, `npm run check`, `npm test`, `npm run build`.
+- Each step ends with the app opened in the in-app browser on a worktree
+  dev server: tka `/post` with a real sequence; Ringmaster `/studio/<id>`
+  with a real library video, including one export.
+
+## Steps and exit criteria
+
+| Step | Work | Exit criteria |
+| --- | --- | --- |
+| 0 Spike | Package skeleton with one Svelte component, one module worker and the token CSS; alias wiring in both app worktrees | The worker runs in both apps' dev servers and production builds; svelte-check resolves the subpaths |
+| 1 Core | `./core`, `./render`, `./encoder` moved with plugin seams; tka consumes them; TKA plugin's compile, painters, alignment and surfaces | Parity test green; tka check, tests and build green; animation and 3D exports still work |
+| 2 UI | `VideoEditor` and the editor UI moved with the plugin's panels, lanes, modes and overlays; PostModule switched | Parity test green; `/post` works for a real sequence and a feature video in the app browser; tests moved |
+| 3 Ringmaster | Store, schema, media library, routes, Spotlight entry, export, old editor removed | Open, trim, keyframe, add music, export a real clip on a worktree server; gate scripts green |
+| 4 Release | Changeset, publish 0.1.0, swap aliases for pins, clean lockfiles, integrate all three repos, rebase `codex/feature-video-captures` | CI green in all three repos; captures branch rebased and its tests green |
+
+Each step gets its own plan under `docs/superpowers/plans/` in this repo and
+runs subagent-driven (sonnet implementers, opus review between tasks, haiku
+for mechanical moves and censuses).
+
+## Worktrees and branches
+
+- shared-packages: `E:/worktrees/shared-packages/video-editor`, branch
+  `video-editor`, from `main`.
+- tka-platform: `E:/worktrees/tka-platform/video-editor`, branch
+  `codex/video-editor`, from local `main`, `node_modules` junctioned to the
+  primary as the other tka worktrees are; integrate with
+  `npm run wt:finish -- codex/video-editor --route /post`.
+- cirque-aflame: `E:/worktrees/cirque-aflame/video-editor`, branch
+  `video-editor`, created with `git -c core.autocrlf=false worktree add`,
+  `core.autocrlf false` set in the worktree, three junctions (root,
+  `cirque-website/node_modules`, `mcp-server/node_modules`), `.env` copied,
+  dev server on a free port with the scratchpad vite config.
+- Never edit a primary checkout. Unlink every junction before removing a
+  worktree.
+
+## Gates that wait for Austen
+
+One bundled yes at the end of step 4 for: pushing shared-packages `main`
+(which also publishes media-manager 1.7.1 through changesets), publishing
+`@austencloud/video-editor`, pushing tka-platform and cirque-aflame `main`.
+Nothing else needs a decision from him; recommended options are taken.
+
+## Risks
+
+- Workers from a package: unproven in this monorepo. Step 0 exists to retire
+  this risk before anything moves.
+- The three monoliths: splitting `PostEditorWorkspace`, `PostEditorCanvas` and
+  `PostItemTool` along the plugin seam is the largest single job; step 2 is
+  planned file by file with the parity test as the safety net.
+- Duplicate Svelte: alias resolution can pull a second Svelte copy from the
+  shared-packages worktree; `resolve.dedupe: ["svelte"]` in both apps (tka
+  adds it) and a startup check in step 0.
+- Ringmaster CSP: no `worker-src` today; step 3 adds `worker-src 'self' blob:`
+  and `'wasm-unsafe-eval'` to `hooks.server.ts` and verifies on the preview.
+- Captures branch rebase: its editor-domain edits (`post-project-ops.ts`,
+  `post-project-edits.ts`, `post-project-bridge-guard.ts`, `take-timing.ts`)
+  are small; the uncommitted worktree edits are committed to that branch
+  first so nothing is lost.
