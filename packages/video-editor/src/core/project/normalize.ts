@@ -19,7 +19,8 @@ import {
 	sameChannelValue,
 } from "./keyframes.js";
 import type { PostTake } from "../plan/post-plan.js";
-import type { ItemKindDefinition, VideoEditorPlugin } from "../../plugin.js";
+import type { VideoEditorPlugin } from "../../plugin.js";
+import { kindDefinition } from "./kind-lookup.js";
 
 /**
  * The timeline's rules, applied after every edit so the stored project is
@@ -44,17 +45,9 @@ import type { ItemKindDefinition, VideoEditorPlugin } from "../../plugin.js";
  * items a transition can join and how much intro they carry before `start`.
  */
 export function normalizeProject(stored: PostProject, plugin?: VideoEditorPlugin): PostProject {
-	const before = plugin?.normalize?.before?.(stored) ?? stored;
+	const before = plugin?.normalize?.before ? plugin.normalize.before(stored) : stored;
 	const laidOut = normalizeLayout(before, plugin);
-	return plugin?.normalize?.after?.(laidOut) ?? laidOut;
-}
-
-/** The plugin's definition of an item kind, or undefined for a core kind. */
-function kindDefinition(
-	plugin: VideoEditorPlugin | undefined,
-	kind: string,
-): ItemKindDefinition | undefined {
-	return plugin?.itemKinds.find((entry) => entry.kind === kind);
+	return plugin?.normalize?.after ? plugin.normalize.after(laidOut) : laidOut;
 }
 
 function normalizeLayout(project: PostProject, plugin: VideoEditorPlugin | undefined): PostProject {
@@ -101,10 +94,10 @@ function normalizeLayout(project: PostProject, plugin: VideoEditorPlugin | undef
 		const sized = sizeItem(item, takes);
 		const anchored = sized.anchor ? mainById.get(sized.anchor.itemId) : null;
 
-		// An animation with a tunnel intro opens that long before its footage, so
-		// the intro and the animation are one item on one canvas. When the
-		// footage plays behind the intro, it opens with the footage instead. The
-		// plugin's kind says how much intro and lead an item carries.
+		// A plugin kind may carry an intro before its `start` (tka: an
+		// animation's tunnel intro). `placement` says how long the intro is and
+		// how much of it comes before the clip under it; a kind without one
+		// carries neither.
 		const placed = kindDefinition(plugin, sized.kind)?.placement?.(sized) ?? null;
 		const intro = placed?.intro ?? 0;
 		const lead = placed?.lead ?? intro;

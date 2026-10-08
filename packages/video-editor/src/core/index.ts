@@ -26,3 +26,8 @@ export * from "./project/normalize.js";
 // post-plan.ts and project/schema.ts both declare a PostFraming; the project one is the public PostFraming.
 export { PostFramingSchema, type PostFraming } from "./project/schema.js";
 export type { ItemKindDefinition, ShapeExtension, VideoEditorPlugin } from "../plugin.js";
+export * from "./compile/hooks.js";
+export * from "./compile/compiler.js";
+export * from "./pip-sample.js";
+export * from "./roles.js";
+export * from "./music/audio-plan.js";

@@ -3,6 +3,7 @@ import { PostTakeRefSchema, PostTakeSchema } from "../plan/post-plan.js";
 import { BREAKDOWN_GEOMETRY } from "../plan/presets.js";
 import { createPostMusicSchema } from "../music/post-music.js";
 import type { VideoEditorPlugin } from "../../plugin.js";
+import { kindDefinition } from "./kind-lookup.js";
 import type {
 	CoreItemKind,
 	PostItem,
@@ -671,7 +672,7 @@ export function defaultBoxFor(kind: PostItemKind, plugin?: VideoEditorPlugin): P
 			return textBox("top");
 		default: {
 			// A plugin's kind: its definition knows where it first appears.
-			const definition = plugin?.itemKinds.find((entry) => entry.kind === kind);
+			const definition = kindDefinition(plugin, kind);
 			if (!definition) throw new Error(`Unknown post item kind "${String(kind)}"`);
 			return definition.defaultBox();
 		}
