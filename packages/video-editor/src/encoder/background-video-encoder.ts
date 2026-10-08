@@ -19,20 +19,22 @@ export interface BackgroundExportConfig {
 	bitrate: number;
 	totalFrames: number;
 	/** "h264" (default, 4:2:0) or "av1" (4:4:4, near-exact parity). */
-	codec?: "h264" | "av1";
+	codec?: "h264" | "av1" | undefined;
 	/** Mux fragmented MP4 (MSE-appendable) instead of progressive. Default false. */
-	fragmented?: boolean;
+	fragmented?: boolean | undefined;
 	/**
 	 * Optional source whose original audio track is decoded, normalized to AAC,
 	 * and muxed into the exported MP4. Visual frames still use the existing
 	 * worker encoder; this extends that one output rather than creating a second
 	 * composition pipeline.
 	 */
-	originalAudio?: {
-		url: string;
-		startSeconds?: number;
-		endSeconds?: number;
-	};
+	originalAudio?:
+		| {
+				url: string;
+				startSeconds?: number;
+				endSeconds?: number;
+		  }
+		| undefined;
 }
 import type { ExportWorkerMessage, ExportWorkerResponse } from "./codec.js";
 import type { CapturedFrame } from "./captured-frame.js";

@@ -3,7 +3,7 @@ export interface PostVideoColorGrade {
 	contrast: number;
 	saturation: number;
 	/** Older saved clips have no hue value; zero keeps their original hues. */
-	hue?: number;
+	hue?: number | undefined;
 }
 
 const IDENTITY: PostVideoColorGrade = {

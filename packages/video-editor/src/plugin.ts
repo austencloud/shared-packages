@@ -3,6 +3,8 @@ import type { CompileItemEnv, ProjectCompileHooks } from "./core/compile/hooks.j
 import type { CoreItemKind, PostItem, PostProject } from "./core/project/item-kinds.js";
 import type { PostBox } from "./core/project/schema.js";
 import type { AlignmentProvider } from "./render/alignment.js";
+import type { PainterFactory } from "./render/painter-registry.js";
+import type { SurfaceCapture } from "./render/surfaces.js";
 
 export interface ShapeExtension {
 	shape: z.ZodRawShape;
@@ -66,6 +68,17 @@ export interface VideoEditorPlugin {
 	 * one; the host calls this and passes the result in.
 	 */
 	alignment?: AlignmentProvider;
+	/**
+	 * Painters for the plugin's painted roles, asked in order after the core
+	 * factories; a factory returns null for a role that is not its own.
+	 */
+	painters?: readonly PainterFactory[];
+	/**
+	 * DOM surfaces for the render modes the compositor cannot draw from media or
+	 * a painter. A surface may hold state across the frames of one export; the
+	 * exporter releases each when the export ends.
+	 */
+	surfaces?: readonly SurfaceCapture[];
 	/** The music URL check; core accepts any non-empty string, and a host that allows only some URLs passes its own check. */
 	isMediaUrl?(url: unknown): url is string;
 }
