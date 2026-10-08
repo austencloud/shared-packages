@@ -68,22 +68,37 @@ export function scriptBlocks(text) {
 
 const isBlank = (char) => char === " " || char === "\t";
 
+const isPackageSpecifier = (spec) => spec === PACKAGE || spec.startsWith(`${PACKAGE}/`);
+
 /**
- * Merge the top-level named imports of one script block that share a specifier of this package
- * (the package itself or one of its entries) and a kind. Kind is `import { ... }` against
- * `import type { ... }`, and the two are never merged: under verbatimModuleSyntax an inline
- * `type` still keeps a runtime import, an `import type` does not. A default, namespace or
- * side-effect import is left where it is. The merged declaration takes the first declaration's
- * place as one line, with the bindings of the group in order of first appearance, an identical
- * binding listed once and each inline `type` and `as` kept; the other declarations of the group
- * go with the line break after them. Returns the text of the block, unchanged when nothing merges.
+ * The route strings of the splits that are not package specifiers: the tka modules a split leaves
+ * behind as its host half: the plugin folder, and the modules that keep their own path. Every
+ * split counts, whatever its task.
+ */
+export const ROUTE_SPECIFIERS = new Set(
+	table.splits.flatMap((split) => split.routes).filter((route) => !isPackageSpecifier(route)),
+);
+
+/** The specifiers whose imports are merged and normalized: the package and its entries, and the split routes. */
+export const isTidySpecifier = (spec) => isPackageSpecifier(spec) || ROUTE_SPECIFIERS.has(spec);
+
+/**
+ * Merge the top-level named imports of one script block that share a tidy specifier (the package
+ * itself, one of its entries or a split route; see isTidySpecifier) and a kind. Kind is
+ * `import { ... }` against `import type { ... }`, and the two are never merged: under
+ * verbatimModuleSyntax an inline `type` still keeps a runtime import, an `import type` does not.
+ * A default, namespace or side-effect import is left where it is. The merged declaration takes the
+ * first declaration's place as one line, with the bindings of the group in order of first
+ * appearance, an identical binding listed once and each inline `type` and `as` kept; the other
+ * declarations of the group go with the line break after them. Returns the text of the block,
+ * unchanged when nothing merges.
  */
 export function mergePackageImports(text) {
 	const groups = new Map();
 	for (const node of parse("block.ts", text).statements) {
 		if (!ts.isImportDeclaration(node) || !ts.isStringLiteral(node.moduleSpecifier)) continue;
 		const spec = node.moduleSpecifier.text;
-		if (spec !== PACKAGE && !spec.startsWith(`${PACKAGE}/`)) continue;
+		if (!isTidySpecifier(spec)) continue;
 		const clause = node.importClause;
 		const named =
 			clause && !clause.name && clause.namedBindings && ts.isNamedImports(clause.namedBindings)
@@ -140,6 +155,50 @@ export function mergePackageImports(text) {
 		out = out.slice(0, start) + value + out.slice(end);
 	}
 	return out;
+}
+
+/**
+ * Rewrite each top-level `import { type A, type B as C } from "spec"` of a tidy specifier as
+ * `import type { A, B as C } from "spec"`. Under verbatimModuleSyntax the inline form keeps a
+ * runtime `import {} from "spec"` edge and the type-only form keeps none. A declaration with any
+ * value binding, a default or namespace binding, an import attribute or no binding at all is left
+ * as it is. Only the keywords change, so layout and comments stay. Returns the text of the block,
+ * unchanged when nothing qualifies.
+ */
+export function typeOnlyImports(text) {
+	const edits = [];
+	for (const node of parse("block.ts", text).statements) {
+		if (!ts.isImportDeclaration(node) || !ts.isStringLiteral(node.moduleSpecifier)) continue;
+		if (!isTidySpecifier(node.moduleSpecifier.text)) continue;
+		const clause = node.importClause;
+		const named =
+			clause && !clause.name && clause.namedBindings && ts.isNamedImports(clause.namedBindings)
+				? clause.namedBindings
+				: null;
+		if (!named || clause.isTypeOnly || (node.attributes ?? node.assertClause)) continue;
+		if (named.elements.length === 0 || !named.elements.every((element) => element.isTypeOnly))
+			continue;
+		const at = named.getStart();
+		edits.push([at, at, /\s/.test(text[at - 1]) ? "type " : " type "]);
+		for (const element of named.elements) {
+			edits.push([element.getStart(), (element.propertyName ?? element.name).getStart(), ""]);
+		}
+	}
+	let out = text;
+	for (const [start, end, value] of edits.sort((a, b) => b[0] - a[0])) {
+		out = out.slice(0, start) + value + out.slice(end);
+	}
+	return out;
+}
+
+/**
+ * The import tidying every walked tka file gets: merge the declarations of one tidy specifier,
+ * then write the ones left with only inline `type` members as `import type`, then merge again so
+ * those join an `import type` the file already had. Merging first lets two all-type value
+ * declarations become one `import type` line; the second merge makes a rerun change nothing.
+ */
+export function tidyImports(text) {
+	return mergePackageImports(typeOnlyImports(mergePackageImports(text)));
 }
 
 /**

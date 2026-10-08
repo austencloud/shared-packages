@@ -178,10 +178,18 @@ const ENCODER = "@austencloud/video-editor/encoder";
 const CORE_ENTRY = "@austencloud/video-editor/core";
 const RENDER_ENTRY = "@austencloud/video-editor/render";
 
-// Runs rewrite-imports.mjs for task 4 over a fixture tka tree (STEP1_TKA), never over the real one.
-function rewriteImports(files, { dry = false } = {}) {
+const PLUGIN = "$lib/shared/post-studio-plugin";
+
+// Runs rewrite-imports.mjs (task 4 unless told otherwise) over a fixture tka tree (STEP1_TKA),
+// never over the real one.
+function rewriteImports(files, { dry = false, task = 4 } = {}) {
 	const root = tree(files);
-	const args = [stepScript("rewrite-imports.mjs"), "--task", "4", ...(dry ? ["--dry"] : [])];
+	const args = [
+		stepScript("rewrite-imports.mjs"),
+		"--task",
+		String(task),
+		...(dry ? ["--dry"] : []),
+	];
 	const run = spawnSync(process.execPath, args, {
 		encoding: "utf8",
 		env: { ...process.env, STEP1_TKA: root },
@@ -418,6 +426,234 @@ test("rewrite-imports skips a file that is moving and still rewrites the files t
 		lines(`import { frameSize } from "${ENCODER}";`, "export const used = frameSize;"),
 	);
 	assert.deepEqual(run.out, ["changed 1 files"]);
+});
+
+test("rewrite-imports leaves a split source untouched in its task and rewrites its staying importers", () => {
+	// post-project-normalize is a split in task 7 and imports post-project-keyframes, a move in task 7.
+	const split = lines(
+		'import { keyframeAt } from "$lib/shared/media-composition/domain/post-project-keyframes";',
+		`import { A } from "${CORE_ENTRY}";`,
+		`import { B } from "${CORE_ENTRY}";`,
+		"export const normalizeProject = [keyframeAt, A, B];",
+	);
+	const run = rewriteImports(
+		{
+			"src/lib/shared/media-composition/domain/post-project-normalize.ts": split,
+			"src/lib/shared/media-composition/domain/post-project-keyframes.ts": lines(
+				"export const keyframeAt = 1;",
+			),
+			"src/lib/shared/post-studio-plugin/index.ts": lines("export const normalizeProject = 1;"),
+			"src/lib/features/uses.ts": lines(
+				'import { normalizeProject } from "$lib/shared/media-composition/domain/post-project-normalize";',
+				"export const used = normalizeProject;",
+			),
+		},
+		{ task: 7 },
+	);
+	assert.equal(run.status, 0, run.stderr);
+	assert.equal(
+		run.read("src/lib/shared/media-composition/domain/post-project-normalize.ts"),
+		split,
+	);
+	assert.equal(
+		run.read("src/lib/features/uses.ts"),
+		lines(
+			"import {",
+			"  normalizeProject,",
+			`} from "${PLUGIN}";`,
+			"export const used = normalizeProject;",
+		),
+	);
+	assert.deepEqual(run.out, ["changed 1 files"]);
+});
+
+test("rewrite-imports merges two value imports from a route specifier", () => {
+	const run = rewriteImports({
+		"src/lib/a.ts": lines(
+			`import { A } from "${PLUGIN}";`,
+			'import { z } from "zod";',
+			`import { B, type C } from "${PLUGIN}";`,
+			"export const used = [A, B, z];",
+		),
+	});
+	assert.equal(run.status, 0, run.stderr);
+	assert.equal(
+		run.read("src/lib/a.ts"),
+		lines(
+			`import { A, B, type C } from "${PLUGIN}";`,
+			'import { z } from "zod";',
+			"export const used = [A, B, z];",
+		),
+	);
+});
+
+test("rewrite-imports turns an all-type inline import into import type and keeps aliases", () => {
+	const run = rewriteImports({
+		"src/lib/a.ts": lines(
+			`import { type A, type B as Bee } from "${PLUGIN}";`,
+			"import {",
+			"\ttype D,",
+			"\ttype E,",
+			`} from "${PLUGIN}2";`,
+			`import { type X } from "${ENCODER}";`,
+			"export type Used = [A, Bee, D, E, X];",
+		),
+	});
+	assert.equal(run.status, 0, run.stderr);
+	// Only the plugin route and the package entry are eligible; the route plus a 2 is another module.
+	assert.equal(
+		run.read("src/lib/a.ts"),
+		lines(
+			`import type { A, B as Bee } from "${PLUGIN}";`,
+			"import {",
+			"\ttype D,",
+			"\ttype E,",
+			`} from "${PLUGIN}2";`,
+			`import type { X } from "${ENCODER}";`,
+			"export type Used = [A, Bee, D, E, X];",
+		),
+	);
+});
+
+test("rewrite-imports keeps the layout of a multi-line all-type import", () => {
+	const run = rewriteImports({
+		"src/lib/a.ts": lines(
+			"import {",
+			"\ttype A, // first",
+			"\ttype B,",
+			`} from "${PLUGIN}";`,
+			"export type Used = [A, B];",
+		),
+	});
+	assert.equal(run.status, 0, run.stderr);
+	assert.equal(
+		run.read("src/lib/a.ts"),
+		lines(
+			"import type {",
+			"\tA, // first",
+			"\tB,",
+			`} from "${PLUGIN}";`,
+			"export type Used = [A, B];",
+		),
+	);
+});
+
+test("rewrite-imports merges all-type declarations into one import type", () => {
+	const run = rewriteImports({
+		"src/lib/a.ts": lines(
+			`import { type A } from "${PLUGIN}";`,
+			`import { type B, type C } from "${PLUGIN}";`,
+			`import type { D } from "${PLUGIN}";`,
+			"export type Used = [A, B, C, D];",
+		),
+	});
+	assert.equal(run.status, 0, run.stderr);
+	// The inline-type declarations merge first, become import type, and then join the existing one.
+	assert.equal(
+		run.read("src/lib/a.ts"),
+		lines(`import type { A, B, C, D } from "${PLUGIN}";`, "export type Used = [A, B, C, D];"),
+	);
+	const again = spawnSync(
+		process.execPath,
+		[stepScript("rewrite-imports.mjs"), "--task", "4", "--dry"],
+		{ encoding: "utf8", env: { ...process.env, STEP1_TKA: run.root } },
+	);
+	assert.equal(again.stdout.trim(), "would change 0 files");
+});
+
+test("rewrite-imports leaves a mixed declaration as a value import", () => {
+	const mixed = lines(
+		`import { type A, B } from "${PLUGIN}";`,
+		`import { C, type D as Dee } from "${PLUGIN}";`,
+		"export const used = [B, C];",
+		"export type Used = [A, Dee];",
+	);
+	const run = rewriteImports({ "src/lib/a.ts": mixed });
+	assert.equal(run.status, 0, run.stderr);
+	assert.equal(
+		run.read("src/lib/a.ts"),
+		lines(
+			`import { type A, B, C, type D as Dee } from "${PLUGIN}";`,
+			"export const used = [B, C];",
+			"export type Used = [A, Dee];",
+		),
+	);
+});
+
+test("rewrite-imports does not touch a specifier that is not a route", () => {
+	const text = lines(
+		'import { a } from "$lib/other";',
+		'import { b } from "$lib/other";',
+		'import { type T } from "$lib/other";',
+		'import { type U } from "zod";',
+		"export const used = [a, b];",
+	);
+	const run = rewriteImports({ "src/lib/a.ts": text }, { dry: true });
+	assert.equal(run.status, 0, run.stderr);
+	assert.deepEqual(run.out, ["would change 0 files"]);
+	assert.equal(run.read("src/lib/a.ts"), text);
+});
+
+test("rewrite-imports leaves default, namespace, side-effect and empty imports of a route alone", () => {
+	const text = lines(
+		`import Def, { type X } from "${PLUGIN}";`,
+		`import * as ns from "${PLUGIN}";`,
+		`import "${PLUGIN}";`,
+		`import {} from "${PLUGIN}";`,
+		`import type { T } from "${PLUGIN}";`,
+		"export type Used = [X, T];",
+	);
+	const run = rewriteImports({ "src/lib/a.ts": text }, { dry: true });
+	assert.equal(run.status, 0, run.stderr);
+	assert.deepEqual(run.out, ["would change 0 files"]);
+});
+
+test("rewrite-imports normalizes inside each svelte script block only", () => {
+	const run = rewriteImports({
+		"src/lib/Panel.svelte": lines(
+			'<script context="module" lang="ts">',
+			`\timport { type A } from "${PLUGIN}";`,
+			`\timport { type B } from "${PLUGIN}";`,
+			"</script>",
+			"",
+			'<script lang="ts">',
+			`\timport { type C, D } from "${PLUGIN}";`,
+			`\timport { type E } from "${PLUGIN}";`,
+			"</script>",
+			"",
+			`<p>import { type F } from "${PLUGIN}";</p>`,
+		),
+	});
+	assert.equal(run.status, 0, run.stderr);
+	assert.equal(
+		run.read("src/lib/Panel.svelte"),
+		lines(
+			'<script context="module" lang="ts">',
+			`\timport type { A, B } from "${PLUGIN}";`,
+			"</script>",
+			"",
+			'<script lang="ts">',
+			`\timport { type C, D, type E } from "${PLUGIN}";`,
+			"</script>",
+			"",
+			`<p>import { type F } from "${PLUGIN}";</p>`,
+		),
+	);
+});
+
+test("a normalization alone in a script is listed as a change and raises no ERROR", () => {
+	const run = rewriteImports(
+		{
+			"scripts/tool.ts": lines(
+				`import { type A } from "${PLUGIN}";`,
+				`import { type B } from "${PLUGIN}";`,
+				"export type Used = [A, B];",
+			),
+		},
+		{ dry: true },
+	);
+	assert.equal(run.status, 0, run.stderr);
+	assert.deepEqual(run.out, [`would change ${run.root}/scripts/tool.ts`, "would change 1 files"]);
 });
 
 function asciiFile(text) {

@@ -6,10 +6,12 @@
 // module, an import type of a split module, any use of a worker module (workers move but are never
 // routed: their names surface through the entry), and a script that imports a moved module.
 //
-// A file that moves whole in this task is left alone: it leaves tka with its own imports as they
-// are, and move.mjs rewrites them where it places the file. After the rewrite, every walked file
-// has its imports of one package specifier merged (see mergePackageImports in lib.mjs), whether
-// or not the rewrite touched it.
+// A file that moves whole in this task, and the source of a split in this task, are left alone:
+// the first leaves tka with its own imports as they are, move.mjs rewrites them where it places
+// the file, and the second is cut into a package part and a tka part by hand. After the rewrite,
+// every walked file has its imports of one package or route specifier merged and its all-type
+// declarations written as `import type` (see tidyImports in lib.mjs), whether or not the rewrite
+// touched it.
 import fs from "node:fs";
 import ts from "typescript";
 import {
@@ -17,12 +19,12 @@ import {
 	TKA,
 	exportsOf,
 	fileOf,
-	mergePackageImports,
 	moduleIdOf,
 	parse,
 	scriptBlocks,
 	table,
 	taskArg,
+	tidyImports,
 	walk,
 } from "./lib.mjs";
 
@@ -36,11 +38,12 @@ for (const m of table.moves) {
 	else routes.set(m.from, [m.entry]);
 }
 for (const s of table.splits) if (s.task <= task) routes.set(s.from, s.routes);
-// Files that move whole leave tka in their task; nothing in them is edited here.
+// Files that move whole leave tka in their task, and a split source is cut by hand in its task;
+// nothing in either is edited here.
 const moving = new Set(
-	table.moves
-		.filter((m) => m.task <= task)
-		.map((m) => fileOf(m.from))
+	[...table.moves, ...table.splits]
+		.filter((entry) => entry.task <= task)
+		.map((entry) => fileOf(entry.from))
 		.filter(Boolean),
 );
 const exportCache = new Map();
@@ -177,11 +180,12 @@ for (const file of files) {
 		const edits = rewriteScript(file, body, start, original).sort((x, y) => y[0] - x[0]);
 		for (const [a, b, value] of edits) next = next.slice(0, a) + value + next.slice(b);
 		if (next !== body) rewrote = true;
-		next = mergePackageImports(next);
+		next = tidyImports(next);
 		text = text.slice(0, start) + next + text.slice(end);
 	}
 	if (text !== original) {
-		// A merge alone changes no import path, so only a rewrite calls for a look at a script.
+		// A merge or a type-only rewrite changes no import path, so only a rewrite calls for a look at
+		// a script.
 		if (rewrote && file.includes("/scripts/"))
 			errors.push(`${file}: a script imports a moved module; check it still runs`);
 		pending.push([file, text]);
