@@ -2,6 +2,7 @@ import type { z } from "zod";
 import type { CompileItemEnv, ProjectCompileHooks } from "./core/compile/hooks.js";
 import type { CoreItemKind, PostItem, PostProject } from "./core/project/item-kinds.js";
 import type { PostBox } from "./core/project/schema.js";
+import type { AlignmentProvider } from "./render/alignment.js";
 
 export interface ShapeExtension {
 	shape: z.ZodRawShape;
@@ -59,6 +60,12 @@ export interface VideoEditorPlugin {
 	 * throws.
 	 */
 	compileOutputs?: Readonly<Record<string, () => unknown>>;
+	/**
+	 * Builds the alignment the frame evaluator reads: how the project's clock
+	 * maps onto the plugin's repeating sequence. The evaluator never builds
+	 * one; the host calls this and passes the result in.
+	 */
+	alignment?: AlignmentProvider;
 	/** The music URL check; core accepts any non-empty string, and a host that allows only some URLs passes its own check. */
 	isMediaUrl?(url: unknown): url is string;
 }
