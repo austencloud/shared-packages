@@ -21,6 +21,8 @@ export * from "./project/clip-edge.js";
 export * from "./project/take-labels.js";
 export * from "./music/post-music.js";
 export * from "./music/music-grid.js";
+export * from "./project/keyframes.js";
+export * from "./project/normalize.js";
 // post-plan.ts and project/schema.ts both declare a PostFraming; the project one is the public PostFraming.
 export { PostFramingSchema, type PostFraming } from "./project/schema.js";
 export type { ItemKindDefinition, ShapeExtension, VideoEditorPlugin } from "../plugin.js";
