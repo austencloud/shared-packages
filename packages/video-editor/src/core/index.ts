@@ -13,3 +13,14 @@ export * from "./plan/plan-compiler.js";
 export * from "./caption-layout.js";
 export * from "./color-grade.js";
 export * from "./preview-video.js";
+export * from "./project/item-kinds.js";
+export * from "./project/schema.js";
+export * from "./project/schema-factory.js";
+export * from "./project/canvas.js";
+export * from "./project/clip-edge.js";
+export * from "./project/take-labels.js";
+export * from "./music/post-music.js";
+export * from "./music/music-grid.js";
+// post-plan.ts and project/schema.ts both declare a PostFraming; the project one is what tka imports.
+export { PostFramingSchema, type PostFraming } from "./project/schema.js";
+export type { ItemKindDefinition, ShapeExtension, VideoEditorPlugin } from "../plugin.js";
