@@ -11,7 +11,7 @@ import type { CapturedFrame } from "./captured-frame.js";
 // Mobile GPUs (Qualcomm/Mali/Apple) reliably silicon-accelerate H.264
 // Constrained Baseline; many do NOT accelerate High and silently fall back to
 // a software path, which on phones encodes at ~0.5fps. Desktop Windows Media
-// Foundation is the opposite  -  it accelerates Main/High, not Baseline. So pick
+// Foundation is the opposite - it accelerates Main/High, not Baseline. So pick
 // the profile by platform.
 const IS_MOBILE = (() => {
 	try {
@@ -108,9 +108,9 @@ export interface ExportConfig {
 	bitrate: number;
 	totalFrames: number;
 	/**
-	 * Video codec. "h264" (default) = H.264 High profile, 4:2:0  -  max
+	 * Video codec. "h264" (default) = H.264 High profile, 4:2:0 - max
 	 * compatibility but chroma-subsampled (fringes saturated edges on black).
-	 * "av1" = AV1 High profile (4:4:4), no chroma subsampling  -  eliminates the
+	 * "av1" = AV1 High profile (4:4:4), no chroma subsampling - eliminates the
 	 * edge/gradient fringe for near-exact parity with the on-screen render, at
 	 * the cost of slower (often software) encode. WebCodecs path only.
 	 */
@@ -155,7 +155,7 @@ export function selectCodec(width: number, height: number, isMobile: boolean = I
 
 /**
  * AV1 High profile (profile 1) = 4:4:4, no chroma subsampling, so saturated
- * red/blue edges and soft glow gradients survive intact  -  the lever for
+ * red/blue edges and soft glow gradients survive intact - the lever for
  * near-exact parity. seq_level_idx scales with resolution (08=4.0 covers 1080p,
  * 13=5.1 covers 4K, 16=6.0 for 8K). `bitDepth` is "10" for max fidelity (10-bit
  * reconstruction kills the encoder-introduced banding/quantization noise on the

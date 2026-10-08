@@ -1,4 +1,3 @@
-// src/lib/shared/video-export/domain/CapturedFrame.ts
 /**
  * Captured Frame
  *

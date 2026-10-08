@@ -3,7 +3,7 @@
  *
  * Delegates WebCodecs encoding and MP4 muxing to a dedicated Web Worker so the
  * main thread stays responsive during export. Communicates via structured
- * messages (see video-export.worker.ts for the protocol).
+ * messages (see codec.ts for the protocol).
  *
  * Lifecycle:
  *   1. initialize() - spawns worker, posts config, waits for "ready"

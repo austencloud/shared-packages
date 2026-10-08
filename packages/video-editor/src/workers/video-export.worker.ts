@@ -1,5 +1,3 @@
-/// <reference lib="webworker" />
-
 /**
  * Video Export Web Worker
  *
@@ -46,7 +44,7 @@ import { workerScope } from "./worker-scope.js";
 
 const hasWebCodecs = typeof VideoEncoder !== "undefined";
 
-// h264-mp4-encoder type (mirrors WasmVideoEncoder.ts)
+// h264-mp4-encoder type (mirrors tka's WasmVideoEncoder)
 
 type H264MP4Encoder = {
 	width: number;
@@ -87,7 +85,7 @@ let encoderErrored = false;
  * the queue runs thousands deep and drains inside `flush()`. Reporting receipts
  * as progress made the readout hit 100% while most of the work was still
  * pending, so the last minutes of a long export looked like a frozen "Frame N
- * of N"  -  a 73s take measured 189s between `finish` and `complete` with the
+ * of N" - a 73s take measured 189s between `finish` and `complete` with the
  * counter parked at the end the whole time. Count what has landed instead.
  */
 let encodedFrames = 0;
@@ -153,12 +151,10 @@ function padRgbaData(
  * copied, which avoids duplicating potentially large MP4 data in memory.
  */
 function post(response: ExportWorkerResponse): void {
-	const scope = self as DedicatedWorkerGlobalScope;
-
 	if (response.type === "complete") {
-		scope.postMessage(response, [response.buffer]);
+		workerScope.postMessage(response, [response.buffer]);
 	} else {
-		scope.postMessage(response);
+		workerScope.postMessage(response);
 	}
 }
 
@@ -285,7 +281,7 @@ async function handleConfigWebCodecs(config: ExportConfig): Promise<void> {
 		output: async (chunk, meta) => {
 			const packet = EncodedPacket.fromEncodedChunk(chunk);
 			await localVideoSource.add(packet, meta);
-			// Progress is reported HERE, not on frame receipt  -  see `encodedFrames`.
+			// Progress is reported HERE, not on frame receipt - see `encodedFrames`.
 			post({ type: "progress", frameIndex: encodedFrames++ });
 		},
 		error: (e) => {
@@ -317,7 +313,7 @@ async function handleConfigWebCodecs(config: ExportConfig): Promise<void> {
 		// Constant bitrate floors the per-frame allocation. Under the default VBR,
 		// the encoder spends few bits on the "simple" near-black frames, so the
 		// dark background gradient quantizes coarsely and reads as speckle/noise.
-		// CBR keeps the dark regions clean  -  the visible noise lever alongside
+		// CBR keeps the dark regions clean - the visible noise lever alongside
 		// 10-bit depth.
 		bitrateMode: "constant",
 		hardwareAcceleration: "prefer-hardware",
@@ -544,7 +540,7 @@ async function handleConfigWasm(config: ExportConfig): Promise<void> {
 	wasmEncoder.kbps = Math.round(config.bitrate / 1000);
 	wasmEncoder.groupOfPictures = 30;
 	// Lower QP = higher quality. 20 left visible banding on the trail gradients;
-	// 16 tightens quantization for smoother glow (fallback path only  -  Chrome
+	// 16 tightens quantization for smoother glow (fallback path only - Chrome
 	// takes the WebCodecs High-profile branch above).
 	wasmEncoder.quantizationParameter = 16;
 
@@ -616,7 +612,7 @@ function handleFrame(msg: FrameMessage): void {
 	if (cancelled) return;
 
 	// Only the WASM encoder reports on receipt, because it encodes synchronously
-	// inside addFrameRgba  -  receipt and completion are the same moment there. The
+	// inside addFrameRgba - receipt and completion are the same moment there. The
 	// WebCodecs path reports from the encoder's own output callback instead.
 	if (msg.type === "frame-captured") {
 		if (hasWebCodecs) {
