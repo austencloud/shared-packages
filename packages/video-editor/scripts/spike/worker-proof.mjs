@@ -1,12 +1,15 @@
 import { createServer } from "node:http";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
-import { extname, join, resolve } from "node:path";
+import { extname, isAbsolute, join, relative, resolve } from "node:path";
 import { withHeadlessPage } from "./cdp.mjs";
 
 // usage: node worker-proof.mjs <sveltekit client output dir> [port]
 // Serves a production client build statically, loads the emitted
 // preview-video worker chunk from a bare page, and checks its reply. This
 // runs the built worker without the app's auth gates or dev-only route guards.
+// It also requires that some other module under _app/immutable names the
+// chunk, so the proof covers the app pointing at the worker and not only the
+// worker running.
 const [clientDir, portArg] = process.argv.slice(2);
 if (!clientDir) {
 	console.error("usage: node worker-proof.mjs <clientDir> [port]");
@@ -14,20 +17,36 @@ if (!clientDir) {
 }
 const root = resolve(clientDir);
 const port = Number(portArg ?? 18444);
-const workersDir = join(root, "_app/immutable/workers");
-const worker = existsSync(workersDir)
-	? readdirSync(workersDir).find((file) => file.startsWith("preview-video.worker") && file.endsWith(".js"))
-	: undefined;
-if (!worker) {
-	console.error(`no preview-video.worker chunk under ${workersDir}`);
+const immutableDir = join(root, "_app/immutable");
+const workersDir = join(immutableDir, "workers");
+const chunks = existsSync(workersDir)
+	? readdirSync(workersDir).filter((file) => file.startsWith("preview-video.worker") && file.endsWith(".js"))
+	: [];
+if (chunks.length !== 1) {
+	console.error(`expected exactly one preview-video.worker chunk under ${workersDir}, found ${chunks.length}:`);
+	console.error(JSON.stringify(chunks));
 	process.exit(1);
 }
+const worker = chunks[0];
 console.log("worker chunk:", worker);
 
-const html = `<!doctype html><meta charset="utf-8"><body><script type="module">
+const referencedBy = readdirSync(immutableDir, { recursive: true })
+	.map((entry) => entry.replaceAll("\\", "/"))
+	.filter((entry) => entry.endsWith(".js") && !entry.startsWith("workers/"))
+	.find((entry) => {
+		const file = join(immutableDir, entry);
+		return statSync(file).isFile() && readFileSync(file, "utf8").includes(worker);
+	});
+if (!referencedBy) {
+	console.log(`FAIL: no module references ${worker}`);
+	process.exit(1);
+}
+console.log("referenced by:", `_app/immutable/${referencedBy}`);
+
+const html = `<!doctype html><meta charset="utf-8"><link rel="icon" href="data:,"><body><script type="module">
 const worker = new Worker("/_app/immutable/workers/${worker}", { type: "module" });
 worker.onmessage = (event) => { document.body.dataset.result = JSON.stringify(event.data); };
-worker.onerror = (event) => { document.body.dataset.result = "error:" + event.message; };
+worker.onerror = (event) => { document.body.dataset.result = "error:" + (event.message || "worker failed to load"); };
 worker.postMessage({ type: "ping", seconds: 83.5 });
 </script></body>`;
 const types = {
@@ -45,7 +64,8 @@ const server = createServer((request, response) => {
 		return response.end(html);
 	}
 	const file = resolve(root, "." + path);
-	if (!file.startsWith(root) || !existsSync(file) || statSync(file).isDirectory()) {
+	const rel = relative(root, file);
+	if (rel.startsWith("..") || isAbsolute(rel) || !existsSync(file) || statSync(file).isDirectory()) {
 		response.writeHead(404);
 		return response.end();
 	}
@@ -55,10 +75,12 @@ const server = createServer((request, response) => {
 await new Promise((resolve) => server.listen(port, "127.0.0.1", resolve));
 
 try {
-	const result = await withHeadlessPage(`http://127.0.0.1:${port}/proof.html`, (page) =>
-		page.waitFor("document.body.dataset.result || null", 30_000),
-	);
+	const { result, errors } = await withHeadlessPage(`http://127.0.0.1:${port}/proof.html`, async (page) => {
+		const result = await page.waitFor("document.body.dataset.result || null", 30_000);
+		return { result, errors: page.consoleErrors() };
+	});
 	console.log("worker reply:", result);
+	console.log("console errors:", JSON.stringify(errors));
 	const ok = result.includes('"timecode":"1:23.500"') && result.includes('"mediabunny":true');
 	console.log(ok ? "PASS" : "FAIL");
 	process.exitCode = ok ? 0 : 1;
