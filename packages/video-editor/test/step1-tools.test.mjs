@@ -488,6 +488,51 @@ test("rewrite-imports skips a split source only in its own task and tidies it in
 	assert.deepEqual(next.out, ["changed 1 files"]);
 });
 
+test("rewrite-imports leaves an import of a kept-path split source alone when every name stays in tka", () => {
+	// pip-handoff is a task 8 split that keeps its path. pipHandoffOf stays in tka and
+	// pipHandoffSample is core, so only an import naming the second needs a new route.
+	const PIP = "$lib/shared/media-composition/domain/pip-handoff";
+	const source = {
+		"src/lib/shared/media-composition/domain/pip-handoff.ts": lines(
+			"export const pipHandoffOf = 1;",
+		),
+	};
+	const tkaHalf = lines(
+		`import { pipHandoffOf } from "${PIP}";`,
+		"export const used = pipHandoffOf;",
+	);
+	for (const task of [8, 9]) {
+		const kept = rewriteImports({ ...source, "src/lib/features/uses.ts": tkaHalf }, { task });
+		assert.equal(kept.status, 0, kept.stderr);
+		assert.equal(kept.read("src/lib/features/uses.ts"), tkaHalf);
+		assert.deepEqual(kept.out, ["changed 0 files"]);
+		const both = rewriteImports(
+			{
+				...source,
+				"src/lib/features/uses.ts": lines(
+					`import { pipHandoffOf, pipHandoffSample } from "${PIP}";`,
+					"export const used = [pipHandoffOf, pipHandoffSample];",
+				),
+			},
+			{ task },
+		);
+		assert.equal(both.status, 0, both.stderr);
+		assert.equal(
+			both.read("src/lib/features/uses.ts"),
+			lines(
+				"import {",
+				"  pipHandoffOf,",
+				`} from "${PIP}";`,
+				"import {",
+				"  pipHandoffSample,",
+				`} from "${CORE_ENTRY}";`,
+				"export const used = [pipHandoffOf, pipHandoffSample];",
+			),
+		);
+		assert.deepEqual(both.out, ["changed 1 files"]);
+	}
+});
+
 test("rewrite-imports merges two value imports from a route specifier", () => {
 	const run = rewriteImports({
 		"src/lib/a.ts": lines(

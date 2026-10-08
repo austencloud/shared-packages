@@ -157,6 +157,9 @@ function planDeclaration(node, dests, file, id) {
 		if (!groups.has(dest)) groups.set(dest, []);
 		groups.get(dest).push(element.getText());
 	}
+	// Every name routes back to the declaration's own module (a split source that keeps its path):
+	// leave the declaration as written, so a formatter's layout survives the next run.
+	if (groups.size === 1 && groups.has(id)) return [];
 	const keyword = ts.isImportDeclaration(node) ? "import" : "export";
 	const typeOnly = (ts.isImportDeclaration(node) ? clause.isTypeOnly : node.isTypeOnly)
 		? " type"
