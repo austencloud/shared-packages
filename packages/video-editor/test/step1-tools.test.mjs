@@ -467,6 +467,27 @@ test("rewrite-imports leaves a split source untouched in its task and rewrites i
 	assert.deepEqual(run.out, ["changed 1 files"]);
 });
 
+test("rewrite-imports skips a split source only in its own task and tidies it in the next", () => {
+	// pip-handoff is a split in task 8 whose source keeps its path in tka.
+	const name = "src/lib/shared/media-composition/domain/pip-handoff.ts";
+	const source = lines(
+		`import { A } from "${CORE_ENTRY}";`,
+		`import { B } from "${CORE_ENTRY}";`,
+		"export const pip = [A, B];",
+	);
+	const own = rewriteImports({ [name]: source }, { task: 8 });
+	assert.equal(own.status, 0, own.stderr);
+	assert.equal(own.read(name), source);
+	assert.deepEqual(own.out, ["changed 0 files"]);
+	const next = rewriteImports({ [name]: source }, { task: 9 });
+	assert.equal(next.status, 0, next.stderr);
+	assert.equal(
+		next.read(name),
+		lines(`import { A, B } from "${CORE_ENTRY}";`, "export const pip = [A, B];"),
+	);
+	assert.deepEqual(next.out, ["changed 1 files"]);
+});
+
 test("rewrite-imports merges two value imports from a route specifier", () => {
 	const run = rewriteImports({
 		"src/lib/a.ts": lines(

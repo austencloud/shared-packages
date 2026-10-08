@@ -6,12 +6,12 @@
 // module, an import type of a split module, any use of a worker module (workers move but are never
 // routed: their names surface through the entry), and a script that imports a moved module.
 //
-// A file that moves whole in this task, and the source of a split in this task, are left alone:
-// the first leaves tka with its own imports as they are, move.mjs rewrites them where it places
-// the file, and the second is cut into a package part and a tka part by hand. After the rewrite,
-// every walked file has its imports of one package or route specifier merged and its all-type
-// declarations written as `import type` (see tidyImports in lib.mjs), whether or not the rewrite
-// touched it.
+// A file that moves whole in this task or earlier, and the source of a split in this task only, are
+// left alone: the first leaves tka with its own imports as they are, move.mjs rewrites them where
+// it places the file, and the second is cut into a package part and a tka part by hand. After the
+// rewrite, every walked file has its imports of one package or route specifier merged and its
+// all-type declarations written as `import type` (see tidyImports in lib.mjs), whether or not the
+// rewrite touched it.
 import fs from "node:fs";
 import ts from "typescript";
 import {
@@ -38,11 +38,14 @@ for (const m of table.moves) {
 	else routes.set(m.from, [m.entry]);
 }
 for (const s of table.splits) if (s.task <= task) routes.set(s.from, s.routes);
-// Files that move whole leave tka in their task, and a split source is cut by hand in its task;
-// nothing in either is edited here.
+// A file that moves whole leaves tka in its task or earlier, so it is never edited here. A split
+// source is cut by hand in its own task only; from the next task on it is an ordinary tka file
+// that keeps its path, so its imports are routed and tidied like any other.
 const moving = new Set(
-	[...table.moves, ...table.splits]
-		.filter((entry) => entry.task <= task)
+	[
+		...table.moves.filter((entry) => entry.task <= task),
+		...table.splits.filter((entry) => entry.task === task),
+	]
 		.map((entry) => fileOf(entry.from))
 		.filter(Boolean),
 );
