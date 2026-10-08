@@ -36,7 +36,7 @@ export interface PreviewVideoState {
 	sourceUrl: string;
 	url: string;
 	progress: number;
-	reason?: string;
+	reason?: string | undefined;
 	width?: number;
 	height?: number;
 	sourceWidth?: number;
