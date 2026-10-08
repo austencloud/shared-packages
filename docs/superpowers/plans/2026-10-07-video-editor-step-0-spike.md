@@ -21,7 +21,7 @@
 - Commit with explicit pathspecs only. Never `git add -A`, never `git add .`, never stash.
 - No em dashes and no emojis in any file or commit message.
 - Commit messages end with the line `Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>`.
-- Dev servers for proofs are started and stopped by `scripts/spike/dev-proof.mjs`, which kills only the process tree it spawned. Never kill a process by port. Ports 3000, 1871 and 5173 belong to Austen; the spike uses 5221 (tka), 5222 (Ringmaster), 18444 and 18445 (static proof servers). Before starting a server, confirm the port is free: `netstat -ano | grep ":5221 "` must print nothing.
+- Dev servers for proofs are started and stopped by `scripts/spike/dev-proof.mjs`, which kills only the process tree it spawned. Never kill a process by port. Ports 3000, 1871 and 5173 belong to Austen; the spike uses 5221 (tka), 5222 (Ringmaster), 18444 and 18445 (static proof servers). Before starting a server, confirm the port is free: `netstat -ano | grep ":5221 "` must print no LISTENING line. `dev-proof.mjs` also refuses to start (exit 3) when something already listens on the URL port, and the command after `--` must begin with `node`, which it spawns directly so the server dies with the proof. Run each dev-proof and each build from Bash with `timeout: 600000`.
 - Before a build or svelte-check, confirm at least 4096 MB of memory is available and no other `svelte-check` is running:
   ```powershell
   (Get-Counter '\Memory\Available MBytes').CounterSamples[0].CookedValue
@@ -473,6 +473,8 @@ Expected: the staged list contains only `packages/video-editor/...` and `pnpm-lo
 
 Four small Node scripts under `packages/video-editor/scripts/spike/` (outside `files`, so never published). They drive a private headless Chrome through CDP with Node's built-in `fetch` and `WebSocket`, so no browser library is installed.
 
+Amendment (2026-10-07, after review): the committed scripts (commits 114fbe5 and 6f6063b) supersede the listings below. The review added a port-in-use refusal, an ANSI-stripped `ready in N ms` match (Vite's "already in use" error contains "ready in"), a direct `node` spawn with no shell, DevToolsActivePort port discovery, worker auto-attach for console errors, a navigation and socket-close fail-fast, and a single-chunk-with-a-referencing-module assertion in worker-proof. Read the files, not the blocks, when a later step needs their behaviour.
+
 **Files:**
 - Create: `packages/video-editor/scripts/spike/cdp.mjs`
 - Create: `packages/video-editor/scripts/spike/page-proof.mjs`
@@ -895,9 +897,9 @@ Expected: check:fast reports 0 errors; the vitest file passes. If check:fast rep
 
 Confirm the port is free (`netstat -ano | grep ":5221 "` prints nothing), then run:
 ```bash
-cd /e/worktrees/shared-packages/video-editor/packages/video-editor && node scripts/spike/dev-proof.mjs --url http://127.0.0.1:5221/test/video-editor-spike --shot "$TEMP/ve-tka-dev.png" --cwd E:/worktrees/tka-platform/video-editor -- pnpm --dir E:/worktrees/tka-platform/video-editor exec vite --port 5221 --strictPort --host 127.0.0.1 2>&1 | tail -30
+cd /e/worktrees/shared-packages/video-editor/packages/video-editor && node scripts/spike/dev-proof.mjs --url http://127.0.0.1:5221/test/video-editor-spike --shot "$TEMP/ve-tka-dev.png" --cwd E:/worktrees/tka-platform/video-editor -- node E:/worktrees/tka-platform/video-editor/node_modules/vite/bin/vite.js --port 5221 --strictPort --host 127.0.0.1 2>&1 | tail -40
 ```
-Expected: Vite's ready lines, then the JSON summary with `"status": "pong 1:23.500 mediabunny"` and `"singleSvelte": "true"`, then `PASS`. The first start pre-bundles dependencies and can take a few minutes. Afterwards `netstat -ano | grep ":5221 "` prints nothing (the tree was killed).
+Expected: `dev server root PID <n>`, Vite's ready lines, then the JSON summary with `"status": "pong 1:23.500 mediabunny"` and `"singleSvelte": "true"`, then `PASS`. The first start pre-bundles dependencies and can take a few minutes. Afterwards `netstat -ano | grep ":5221 "` shows no LISTENING line (the tree was killed).
 
 If `singleSvelte` is `false`: dedupe did not take; report which `svelte` path the package resolved (search the page's network requests for `/@fs/E:/worktrees/shared-packages/` + `svelte`). If status is `error ...`: capture the message and the Vite terminal output in the report.
 
