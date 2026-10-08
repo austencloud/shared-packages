@@ -4,6 +4,7 @@ import { BREAKDOWN_GEOMETRY } from "../plan/presets.js";
 import { createPostMusicSchema } from "../music/post-music.js";
 import type { VideoEditorPlugin } from "../../plugin.js";
 import type {
+	CoreItemKind,
 	PostItem,
 	PostItemKind,
 	PostProject,
@@ -17,8 +18,8 @@ import type {
  * `tracks[0]` is the main track. Clips normally follow one another, but a
  * dragged clip keeps its chosen start and can leave a gap. Every later track is drawn
  * above the ones before it; its items keep their own times and follow the
- * main clip they are anchored to. `normalizeProject` in
- * `post-project-normalize.ts` owns those rules; every edit ends there.
+ * main clip they are anchored to. `normalizeProject` in `normalize.ts` owns
+ * those rules; every edit ends there.
  *
  * The compiler turns a project into the free-layout preset the evaluator,
  * the preview and the export already play.
@@ -133,15 +134,16 @@ export type PostFraming = z.infer<typeof PostFramingSchema>;
 function postKeyframeSchema<V extends z.ZodTypeAny>(value: V) {
 	return z
 		.object({
-			/** Content time: see `post-project-keyframes.ts` for the two clocks. */
+			/** Content time: see `keyframes.ts` for the two clocks. */
 			t: z.number().finite(),
 			value,
 			/** How the value travels to the next keyframe. */
 			easing: PostEasingSchema,
 			/**
-			 * Written by the opening tunnel or the picture-in-picture hand-off, and
-			 * kept in step with them until edited; an edit makes the key the
-			 * author's own (see `post-project-motion-keys.ts`).
+			 * Marks keys written by the opening tunnel or the picture-in-picture
+			 * hand-off. A plugin's normalize hooks keep them in step with the opening
+			 * tunnel and the hand-off until edited; an edit makes the key the
+			 * author's own.
 			 */
 			auto: PostMotionKeySchema.optional(),
 		})
@@ -485,7 +487,7 @@ export const CORE_ITEM_SHAPES = {
 	image: imageItemShape,
 	card: cardItemShape,
 	text: textItemShape,
-} as const;
+} as const satisfies Record<CoreItemKind, z.ZodRawShape>;
 
 /** Kinds the main track holds; anything else lives on an overlay track. */
 export const MAIN_TRACK_KINDS: readonly PostItemKind[] = ["video", "image", "card"];

@@ -9,17 +9,24 @@ import {
 	refineUniqueIds,
 } from "./schema.js";
 
-/** Joins a base shape and an extension in one key order, so parsed objects keep today's order. */
+/**
+ * Joins a base shape and an extension in one key order, so parsed objects keep the order a host
+ * names. An extension adds keys and never replaces one: a key the base already has throws, so an
+ * extension cannot drop the core's constraints on `tracks` or `id`.
+ */
 export function orderedShape(
 	base: z.ZodRawShape,
 	extension: z.ZodRawShape | undefined,
 	order: readonly string[] | undefined,
 ): z.ZodRawShape {
+	for (const key of Object.keys(extension ?? {})) {
+		if (Object.hasOwn(base, key)) throw new Error(`shape extension overrides core key "${key}"`);
+	}
 	const merged: z.ZodRawShape = { ...base, ...extension };
 	if (!order) return merged;
 	const keys = Object.keys(merged);
 	const missing = keys.filter((key) => !order.includes(key));
-	const extra = order.filter((key) => !(key in merged));
+	const extra = order.filter((key) => !Object.hasOwn(merged, key));
 	if (missing.length > 0 || extra.length > 0) {
 		throw new Error(
 			`shape order mismatch: missing ${missing.join(", ") || "none"}, extra ${extra.join(", ") || "none"}`,
@@ -47,8 +54,9 @@ export function createProjectSchema(plugin?: VideoEditorPlugin): z.ZodType<PostP
 	const pluginKinds = (plugin?.itemKinds ?? []).map((definition) => definition.schema);
 	const item = z.discriminatedUnion("kind", [...coreKinds, ...pluginKinds] as never, {
 		error: (issue) => {
-			const input = issue.input as { kind?: unknown } | undefined;
-			return `Unknown post item kind "${String(input?.kind)}"`;
+			// Something that is not an object has no kind to name; zod's own message applies.
+			if (typeof issue.input !== "object" || issue.input === null) return undefined;
+			return `Unknown post item kind "${String((issue.input as { kind?: unknown }).kind)}"`;
 		},
 	});
 	// PostTrackSchema and PostProjectSchema are both .strict() today, and a project has a track.
