@@ -3,8 +3,14 @@ import ts from "typescript";
 import { parse } from "./lib.mjs";
 
 const BACKSLASH = String.fromCharCode(92);
+const EM_DASH = 0x2014;
+// An em dash becomes a hyphen with a space on each side, except where a space is already there:
+// "word - word" stays one space wide and "word-word" gains the two.
+const spacedHyphen = (text, i) => {
+	const open = (char) => char === undefined || /\s/.test(char);
+	return `${open(text[i - 1]) ? "" : " "}-${open(text[i + 1]) ? "" : " "}`;
+};
 const COMMENT = new Map([
-	[0x2014, " - "],
 	[0x2013, "-"],
 	[0x2212, "-"],
 	[0x2192, "->"],
@@ -56,7 +62,7 @@ for (const file of process.argv.slice(2)) {
 			out += `${BACKSLASH}u${code.toString(16).padStart(4, "0")}`;
 			continue;
 		}
-		const swap = COMMENT.get(code);
+		const swap = code === EM_DASH ? spacedHyphen(text, i) : COMMENT.get(code);
 		if (swap === undefined) {
 			const line = text.slice(0, i).split(String.fromCharCode(10)).length;
 			console.error(

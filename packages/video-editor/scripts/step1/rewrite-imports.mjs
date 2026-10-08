@@ -5,6 +5,11 @@
 // hand edit: a call such as vi.mock on a moved path, a default, namespace or star import of a split
 // module, an import type of a split module, any use of a worker module (workers move but are never
 // routed: their names surface through the entry), and a script that imports a moved module.
+//
+// A file that moves whole in this task is left alone: it leaves tka with its own imports as they
+// are, and move.mjs rewrites them where it places the file. After the rewrite, every walked file
+// has its imports of one package specifier merged (see mergePackageImports in lib.mjs), whether
+// or not the rewrite touched it.
 import fs from "node:fs";
 import ts from "typescript";
 import {
@@ -12,6 +17,7 @@ import {
 	TKA,
 	exportsOf,
 	fileOf,
+	mergePackageImports,
 	moduleIdOf,
 	parse,
 	scriptBlocks,
@@ -30,7 +36,7 @@ for (const m of table.moves) {
 	else routes.set(m.from, [m.entry]);
 }
 for (const s of table.splits) if (s.task <= task) routes.set(s.from, s.routes);
-// Files that move whole leave tka in their task, so their own use of a worker moves with them.
+// Files that move whole leave tka in their task; nothing in them is edited here.
 const moving = new Set(
 	table.moves
 		.filter((m) => m.task <= task)
@@ -55,11 +61,9 @@ function rewriteScript(file, text, offset, whole) {
 	const workerUse = (literal) => {
 		const id = moduleIdOf(literal.text.replace(/[?].*$/, ""), file);
 		if (!id || !workers.has(id)) return false;
-		if (!moving.has(file)) {
-			errors.push(
-				`${file}:${lineOf(literal)}: uses worker module ${id}, which moves to the package (${workers.get(id)}); needs a hand edit`,
-			);
-		}
+		errors.push(
+			`${file}:${lineOf(literal)}: uses worker module ${id}, which moves to the package (${workers.get(id)}); needs a hand edit`,
+		);
 		return true;
 	};
 	const visit = (node) => {
@@ -162,18 +166,23 @@ function planDeclaration(node, dests, file, id) {
 
 const pending = [];
 for (const file of files) {
+	if (moving.has(file)) continue;
 	const original = fs.readFileSync(file, "utf8");
 	let text = original;
+	let rewrote = false;
 	const blocks = file.endsWith(".svelte") ? scriptBlocks(text) : [[0, text.length]];
 	for (const [start, end] of blocks.reverse()) {
 		const body = text.slice(start, end);
 		let next = body;
 		const edits = rewriteScript(file, body, start, original).sort((x, y) => y[0] - x[0]);
 		for (const [a, b, value] of edits) next = next.slice(0, a) + value + next.slice(b);
+		if (next !== body) rewrote = true;
+		next = mergePackageImports(next);
 		text = text.slice(0, start) + next + text.slice(end);
 	}
 	if (text !== original) {
-		if (file.includes("/scripts/"))
+		// A merge alone changes no import path, so only a rewrite calls for a look at a script.
+		if (rewrote && file.includes("/scripts/"))
 			errors.push(`${file}: a script imports a moved module; check it still runs`);
 		pending.push([file, text]);
 	}

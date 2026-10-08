@@ -3,7 +3,8 @@ import path from "node:path";
 import ts from "typescript";
 
 export const NL = String.fromCharCode(10);
-export const TKA = "E:/worktrees/tka-platform/video-editor";
+// STEP1_TKA points the tools at a fixture tree; the node tests set it so they never touch tka.
+export const TKA = process.env.STEP1_TKA ?? "E:/worktrees/tka-platform/video-editor";
 export const PKG = "E:/worktrees/shared-packages/video-editor/packages/video-editor";
 export const PACKAGE = "@austencloud/video-editor";
 export const ENTRIES = {
@@ -63,6 +64,82 @@ export function scriptBlocks(text) {
 		from = close + 9;
 	}
 	return blocks;
+}
+
+const isBlank = (char) => char === " " || char === "\t";
+
+/**
+ * Merge the top-level named imports of one script block that share a specifier of this package
+ * (the package itself or one of its entries) and a kind. Kind is `import { ... }` against
+ * `import type { ... }`, and the two are never merged: under verbatimModuleSyntax an inline
+ * `type` still keeps a runtime import, an `import type` does not. A default, namespace or
+ * side-effect import is left where it is. The merged declaration takes the first declaration's
+ * place as one line, with the bindings of the group in order of first appearance, an identical
+ * binding listed once and each inline `type` and `as` kept; the other declarations of the group
+ * go with the line break after them. Returns the text of the block, unchanged when nothing merges.
+ */
+export function mergePackageImports(text) {
+	const groups = new Map();
+	for (const node of parse("block.ts", text).statements) {
+		if (!ts.isImportDeclaration(node) || !ts.isStringLiteral(node.moduleSpecifier)) continue;
+		const spec = node.moduleSpecifier.text;
+		if (spec !== PACKAGE && !spec.startsWith(`${PACKAGE}/`)) continue;
+		const clause = node.importClause;
+		const named =
+			clause && !clause.name && clause.namedBindings && ts.isNamedImports(clause.namedBindings)
+				? clause.namedBindings
+				: null;
+		if (!named || named.elements.length === 0 || (node.attributes ?? node.assertClause)) continue;
+		const key = `${clause.isTypeOnly ? "type" : "value"} ${spec}`;
+		if (!groups.has(key)) groups.set(key, []);
+		groups.get(key).push(node);
+	}
+	const edits = [];
+	for (const [first, ...rest] of groups.values()) {
+		if (rest.length === 0) continue;
+		const seen = new Set();
+		const bindings = [];
+		for (const node of [first, ...rest]) {
+			for (const element of node.importClause.namedBindings.elements) {
+				const imported = element.propertyName ? element.propertyName.getText() : "";
+				const local = element.name.getText();
+				const key = `${element.isTypeOnly}|${imported}|${local}`;
+				if (seen.has(key)) continue;
+				seen.add(key);
+				bindings.push(
+					`${element.isTypeOnly ? "type " : ""}${imported ? `${imported} as ${local}` : local}`,
+				);
+			}
+		}
+		const keyword = first.importClause.isTypeOnly ? "import type" : "import";
+		edits.push([
+			first.getStart(),
+			first.end,
+			`${keyword} { ${bindings.join(", ")} } from "${first.moduleSpecifier.text}";`,
+		]);
+		for (const node of rest) {
+			// A declaration alone on its line goes with its indentation and line break; one sharing
+			// its line (or followed by a comment) goes alone.
+			let from = node.getStart();
+			let to = node.end;
+			let before = from;
+			while (before > 0 && isBlank(text[before - 1])) before--;
+			let after = to;
+			while (after < text.length && isBlank(text[after])) after++;
+			const lineBreak = text.startsWith("\r\n", after) ? 2 : text[after] === "\n" ? 1 : 0;
+			const startsLine = before === 0 || text[before - 1] === "\n";
+			if (startsLine && (lineBreak > 0 || after === text.length)) {
+				from = before;
+				to = after + lineBreak;
+			}
+			edits.push([from, to, ""]);
+		}
+	}
+	let out = text;
+	for (const [start, end, value] of edits.sort((a, b) => b[0] - a[0])) {
+		out = out.slice(0, start) + value + out.slice(end);
+	}
+	return out;
 }
 
 /**

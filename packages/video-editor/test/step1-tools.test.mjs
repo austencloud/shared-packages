@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import { barrelImports, definersIn, placeText } from "../scripts/step1/lib.mjs";
 
 const NL = String.fromCharCode(10);
@@ -168,4 +170,296 @@ test("barrelImports flags a file importing a barrel of its own folder or the pac
 		"src/core/plan/uses-core.ts:1: ../index.js (a barrel of its own folder)",
 		"src/core/self.ts:1: ./index.js (a barrel of its own folder)",
 	]);
+});
+
+const STEP1 = new URL("../scripts/step1/", import.meta.url);
+const stepScript = (name) => fileURLToPath(new URL(name, STEP1));
+const ENCODER = "@austencloud/video-editor/encoder";
+const CORE_ENTRY = "@austencloud/video-editor/core";
+const RENDER_ENTRY = "@austencloud/video-editor/render";
+
+// Runs rewrite-imports.mjs for task 4 over a fixture tka tree (STEP1_TKA), never over the real one.
+function rewriteImports(files, { dry = false } = {}) {
+	const root = tree(files);
+	const args = [stepScript("rewrite-imports.mjs"), "--task", "4", ...(dry ? ["--dry"] : [])];
+	const run = spawnSync(process.execPath, args, {
+		encoding: "utf8",
+		env: { ...process.env, STEP1_TKA: root },
+	});
+	return {
+		root,
+		status: run.status,
+		stderr: run.stderr,
+		out: run.stdout
+			.split(NL)
+			.map((row) => row.trimEnd())
+			.filter(Boolean),
+		read: (name) => fs.readFileSync(`${root}/${name}`, "utf8"),
+	};
+}
+
+test("rewrite-imports merges value imports from one package entry into the first, in order", () => {
+	const run = rewriteImports({
+		"src/lib/a.ts": lines(
+			`import { BackgroundVideoEncoder, selectCodec } from "${ENCODER}";`,
+			'import { z } from "zod";',
+			`import { CanvasFrameCapturer, encodeFrames } from "${ENCODER}";`,
+			"export const used = [BackgroundVideoEncoder];",
+		),
+	});
+	assert.equal(run.status, 0, run.stderr);
+	assert.equal(
+		run.read("src/lib/a.ts"),
+		lines(
+			`import { BackgroundVideoEncoder, selectCodec, CanvasFrameCapturer, encodeFrames } from "${ENCODER}";`,
+			'import { z } from "zod";',
+			"export const used = [BackgroundVideoEncoder];",
+		),
+	);
+	assert.deepEqual(run.out, ["changed 1 files"]);
+});
+
+test("rewrite-imports never merges a type import into a value import or the reverse", () => {
+	const run = rewriteImports({
+		"src/lib/a.ts": lines(
+			`import { A } from "${ENCODER}";`,
+			`import type { T1 } from "${ENCODER}";`,
+			`import { B } from "${ENCODER}";`,
+			`import type { T2 } from "${ENCODER}";`,
+			"export const used = [A, B];",
+		),
+	});
+	assert.equal(run.status, 0, run.stderr);
+	assert.equal(
+		run.read("src/lib/a.ts"),
+		lines(
+			`import { A, B } from "${ENCODER}";`,
+			`import type { T1, T2 } from "${ENCODER}";`,
+			"export const used = [A, B];",
+		),
+	);
+});
+
+test("rewrite-imports lists a duplicate binding once and keeps inline type and as", () => {
+	const run = rewriteImports({
+		"src/lib/a.ts": lines(
+			`import { selectCodec, type CodecChoice, encode as run } from "${ENCODER}";`,
+			`import { selectCodec, type CodecChoice, type Frame as F, encode as run, encode } from "${ENCODER}";`,
+			`import type { Size, Size as Dimensions } from "${ENCODER}";`,
+			`import type { Size, Pixels } from "${ENCODER}";`,
+		),
+	});
+	assert.equal(run.status, 0, run.stderr);
+	assert.equal(
+		run.read("src/lib/a.ts"),
+		lines(
+			`import { selectCodec, type CodecChoice, encode as run, type Frame as F, encode } from "${ENCODER}";`,
+			`import type { Size, Size as Dimensions, Pixels } from "${ENCODER}";`,
+		),
+	);
+});
+
+test("rewrite-imports leaves default, namespace and side-effect imports alone while merging the rest", () => {
+	const run = rewriteImports({
+		"src/lib/a.ts": lines(
+			`import { A } from "${CORE_ENTRY}";`,
+			`import Def, { X } from "${CORE_ENTRY}";`,
+			`import * as ns from "${CORE_ENTRY}";`,
+			`import "${CORE_ENTRY}";`,
+			`import { B } from "${CORE_ENTRY}";`,
+			`import type Kind from "${CORE_ENTRY}";`,
+		),
+	});
+	assert.equal(run.status, 0, run.stderr);
+	assert.equal(
+		run.read("src/lib/a.ts"),
+		lines(
+			`import { A, B } from "${CORE_ENTRY}";`,
+			`import Def, { X } from "${CORE_ENTRY}";`,
+			`import * as ns from "${CORE_ENTRY}";`,
+			`import "${CORE_ENTRY}";`,
+			`import type Kind from "${CORE_ENTRY}";`,
+		),
+	);
+});
+
+test("rewrite-imports merges inside each svelte script block and never across blocks", () => {
+	const run = rewriteImports({
+		"src/lib/Panel.svelte": lines(
+			'<script context="module" lang="ts">',
+			`\timport { A } from "${RENDER_ENTRY}";`,
+			`\timport { B } from "${RENDER_ENTRY}";`,
+			"</script>",
+			"",
+			'<script lang="ts">',
+			`\timport { A } from "${RENDER_ENTRY}";`,
+			`\timport type { C } from "${RENDER_ENTRY}";`,
+			`\timport { D } from "${RENDER_ENTRY}";`,
+			"</script>",
+			"",
+			"<p>{A}{B}{D}</p>",
+		),
+	});
+	assert.equal(run.status, 0, run.stderr);
+	assert.equal(
+		run.read("src/lib/Panel.svelte"),
+		lines(
+			'<script context="module" lang="ts">',
+			`\timport { A, B } from "${RENDER_ENTRY}";`,
+			"</script>",
+			"",
+			'<script lang="ts">',
+			`\timport { A, D } from "${RENDER_ENTRY}";`,
+			`\timport type { C } from "${RENDER_ENTRY}";`,
+			"</script>",
+			"",
+			"<p>{A}{B}{D}</p>",
+		),
+	);
+});
+
+test("rewrite-imports does not merge specifiers outside the package", () => {
+	const run = rewriteImports(
+		{
+			"src/lib/a.ts": lines(
+				'import { a } from "$lib/x";',
+				'import { b } from "$lib/x";',
+				'import { c } from "zod";',
+				'import { d } from "zod";',
+			),
+		},
+		{ dry: true },
+	);
+	assert.equal(run.status, 0, run.stderr);
+	assert.deepEqual(run.out, ["would change 0 files"]);
+	assert.equal(
+		run.read("src/lib/a.ts"),
+		lines(
+			'import { a } from "$lib/x";',
+			'import { b } from "$lib/x";',
+			'import { c } from "zod";',
+			'import { d } from "zod";',
+		),
+	);
+});
+
+test("rewrite-imports keeps CRLF line endings when it merges", () => {
+	const crlf = (...rows) => rows.join(String.fromCharCode(13, 10)) + String.fromCharCode(13, 10);
+	const run = rewriteImports({
+		"src/lib/a.ts": crlf(
+			`import { A } from "${ENCODER}";`,
+			'import { z } from "zod";',
+			`import { B } from "${ENCODER}";`,
+			"export const used = [A, B];",
+		),
+	});
+	assert.equal(run.status, 0, run.stderr);
+	assert.equal(
+		run.read("src/lib/a.ts"),
+		crlf(
+			`import { A, B } from "${ENCODER}";`,
+			'import { z } from "zod";',
+			"export const used = [A, B];",
+		),
+	);
+});
+
+test("a merge alone in a script is listed as a change, a dry run counts it, and it raises no ERROR", () => {
+	const run = rewriteImports(
+		{
+			"scripts/tool.mjs": lines(
+				`import { A } from "${ENCODER}";`,
+				`import { B } from "${ENCODER}";`,
+				"console.log(A, B);",
+			),
+		},
+		{ dry: true },
+	);
+	assert.equal(run.status, 0, run.stderr);
+	assert.deepEqual(run.out, [`would change ${run.root}/scripts/tool.mjs`, "would change 1 files"]);
+});
+
+test("a script that imports a moved module still raises its ERROR", () => {
+	const run = rewriteImports(
+		{
+			"scripts/tool.mjs": lines(
+				'import { frameSize } from "$lib/shared/video-export/domain/captured-frame";',
+			),
+		},
+		{ dry: true },
+	);
+	assert.equal(run.status, 1);
+	assert.deepEqual(run.out, [
+		`would change ${run.root}/scripts/tool.mjs`,
+		"would change 1 files",
+		`ERROR ${run.root}/scripts/tool.mjs: a script imports a moved module; check it still runs`,
+	]);
+});
+
+test("rewrite-imports skips a file that is moving and still rewrites the files that import it", () => {
+	const moving = lines(
+		'import type { Encoded } from "$lib/shared/animation-engine/services/background-video-encoder";',
+		'import { size } from "$lib/shared/video-export/services/canvas-frame-capturer";',
+		`import { A } from "${ENCODER}";`,
+		`import { B } from "${ENCODER}";`,
+		"export const frameSize = [size, A, B];",
+	);
+	const run = rewriteImports({
+		"src/lib/shared/video-export/domain/captured-frame.ts": moving,
+		"src/lib/features/uses.ts": lines(
+			'import { frameSize } from "$lib/shared/video-export/domain/captured-frame";',
+			"export const used = frameSize;",
+		),
+	});
+	assert.equal(run.status, 0, run.stderr);
+	assert.equal(run.read("src/lib/shared/video-export/domain/captured-frame.ts"), moving);
+	assert.equal(
+		run.read("src/lib/features/uses.ts"),
+		lines(`import { frameSize } from "${ENCODER}";`, "export const used = frameSize;"),
+	);
+	assert.deepEqual(run.out, ["changed 1 files"]);
+});
+
+function asciiFile(text) {
+	const root = tree({ "x.ts": text });
+	const run = spawnSync(process.execPath, [stepScript("ascii.mjs"), `${root}/x.ts`], {
+		encoding: "utf8",
+	});
+	return { status: run.status, stderr: run.stderr, text: fs.readFileSync(`${root}/x.ts`, "utf8") };
+}
+
+test("ascii.mjs keeps one space either side of an em dash and spaces a bare one", () => {
+	const EM = String.fromCharCode(0x2014);
+	const EN = String.fromCharCode(0x2013);
+	const result = asciiFile(
+		lines(
+			`// a ${EM} b`,
+			`// a${EM}b`,
+			`// a ${EM}b`,
+			`// a${EM} b`,
+			`// a ${EN} b`,
+			`// a${EN}b`,
+			"export const ok = 1;",
+		),
+	);
+	assert.equal(result.status, 0, result.stderr);
+	assert.equal(
+		result.text,
+		lines(
+			"// a - b",
+			"// a - b",
+			"// a - b",
+			"// a - b",
+			"// a - b",
+			"// a-b",
+			"export const ok = 1;",
+		),
+	);
+});
+
+test("ascii.mjs leaves a file with no non-ASCII text unchanged", () => {
+	const plain = lines("// a - b", 'export const text = "a - b";');
+	const result = asciiFile(plain);
+	assert.equal(result.status, 0, result.stderr);
+	assert.equal(result.text, plain);
 });
