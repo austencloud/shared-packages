@@ -66,6 +66,61 @@ describe("compilePostProject", () => {
 		expect(compiled.durationSeconds).toBe(5);
 	});
 
+	it("rejects a compile output named like a core output", () => {
+		const plugin: VideoEditorPlugin = {
+			id: "fake",
+			itemKinds: [],
+			compileOutputs: { texts: () => [] },
+		};
+		expect(() => compilePostProject(project([], plugin), { now: 0 }, plugin)).toThrow(
+			/collides with a core output/,
+		);
+	});
+
+	it("rejects a compile output factory that does not return an array", () => {
+		const plugin: VideoEditorPlugin = {
+			id: "fake",
+			itemKinds: [],
+			compileOutputs: { extra: () => null as unknown },
+		};
+		expect(() => compilePostProject(project([], plugin), { now: 0 }, plugin)).toThrow(
+			/must return an array/,
+		);
+	});
+
+	it("calls the footage intro, then begin, then each plugin item", () => {
+		const calls: string[] = [];
+		const plugin: VideoEditorPlugin = {
+			id: "fake",
+			itemKinds: [
+				{
+					kind: "sticker",
+					schema: z.object({ kind: z.literal("sticker") }),
+					label: "Sticker",
+					defaultBox: () => ({ ...POST_BOX.full }),
+					compile: (_item, env) => {
+						calls.push("compile");
+						try {
+							env.addOutput("nope", 1);
+						} catch (error) {
+							calls.push("addOutput threw");
+							expect((error as Error).message).toMatch(/not declared/);
+						}
+						return true;
+					},
+				},
+			],
+			compileHooks: {
+				footageIntro: () => (calls.push("footageIntro"), null),
+				begin: () => void calls.push("begin"),
+			},
+		};
+		const stored = project([item("s1", "sticker", 0, 5)], plugin);
+		compilePostProject(stored, { now: 0 }, plugin);
+		expect(calls.slice(0, 2)).toEqual(["footageIntro", "begin"]);
+		expect(calls.slice(2)).toEqual(["compile", "addOutput threw"]);
+	});
+
 	it("skips a kind with no definition without extending the duration", () => {
 		const compiled = compilePostProject(project([item("m1", "mystery", 0, 10)]), { now: 0 });
 		expect(compiled!.durationSeconds).toBe(2);

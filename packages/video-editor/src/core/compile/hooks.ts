@@ -98,22 +98,25 @@ export interface CompileItemEnv extends CompileEnv {
  * Hooks into `compilePostProject` for the work a plugin does around the core
  * kinds. Each must push regions, keyframes, clips and roles in the same order
  * on every run (array order is part of the compiled preset), and none may
- * change the project.
+ * change the project. Call order: `footageIntro`, then `begin`, then each item
+ * in track order, where `regionSpan` runs through `env.regionKeyframesFor` for
+ * the items that get region keys (from `begin` too) and `videoCompanions` runs
+ * right after a video's own clip.
  */
 export interface ProjectCompileHooks {
-	/** Before the item loop (TKA: the picture-in-picture hand-off pre-pass). */
-	begin?(env: CompileEnv): void;
 	/** The footage intro for the main track (TKA: an animation item's tunnel intro over footage). */
 	footageIntro?(env: CompileEnv): FootageIntro | null;
-	/**
-	 * Extra clips right after a video's own clip (TKA: the `~staff` effect
-	 * clip). `footage` is the object the video's clip was built from.
-	 */
-	videoCompanions?(item: PostVideoItem, env: CompileItemEnv, footage: VideoFootage): void;
+	/** Before the item loop (TKA: the picture-in-picture hand-off pre-pass). */
+	begin?(env: CompileEnv): void;
 	/**
 	 * An intro span the item's region keys start with, or null (TKA: an
 	 * animation's tunnel intro). It runs before any item env exists, from the
 	 * pre-pass too, so it sees only the `CompileEnv`.
 	 */
 	regionSpan?(item: PostItem, env: CompileEnv): { start: number; seconds: number } | null;
+	/**
+	 * Extra clips right after a video's own clip (TKA: the `~staff` effect
+	 * clip). `footage` is the object the video's clip was built from.
+	 */
+	videoCompanions?(item: PostVideoItem, env: CompileItemEnv, footage: VideoFootage): void;
 }

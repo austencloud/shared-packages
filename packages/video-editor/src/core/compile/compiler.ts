@@ -115,6 +115,16 @@ export interface CompiledTextItem {
 	endSeconds: number;
 }
 
+/** Output names a plugin's `compileOutputs` may not reuse. */
+const CORE_OUTPUT_KEYS = new Set([
+	"preset",
+	"durationSeconds",
+	"takeIds",
+	"imageIds",
+	"videoSegments",
+	"texts",
+]);
+
 /** The core's outputs; a plugin's (`PluginCompiledOutputs`) follow `texts`. */
 export interface CompiledPostProject extends PluginCompiledOutputs {
 	preset: MediaCompositionPreset;
@@ -497,7 +507,14 @@ export function compilePostProject(
 	// Each plugin output starts as its factory's empty array, in declaration order.
 	const outputs: Record<string, unknown> = {};
 	for (const [name, create] of Object.entries(plugin?.compileOutputs ?? {})) {
-		outputs[name] = create();
+		if (CORE_OUTPUT_KEYS.has(name)) {
+			throw new Error(`compile output "${name}" collides with a core output`);
+		}
+		const value = create();
+		if (!Array.isArray(value)) {
+			throw new Error(`compile output "${name}" factory must return an array`);
+		}
+		outputs[name] = value;
 	}
 	let maxEnd = 0;
 
@@ -873,7 +890,7 @@ export function compilePostProject(
 	} satisfies MediaCompositionPreset);
 
 	// The core's outputs in their order, then the plugin's in `compileOutputs` order.
-	const compiled = {
+	const compiled: CompiledPostProject = {
 		preset,
 		durationSeconds: maxEnd,
 		takeIds,
@@ -882,5 +899,5 @@ export function compilePostProject(
 		texts,
 		...outputs,
 	};
-	return compiled as CompiledPostProject;
+	return compiled;
 }

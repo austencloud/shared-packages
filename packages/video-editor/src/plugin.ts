@@ -53,7 +53,10 @@ export interface VideoEditorPlugin {
 	/**
 	 * Extra compile outputs: each factory returns the empty array that
 	 * `env.addOutput` pushes onto, set on the result after `texts` in this key
-	 * order.
+	 * order. Each factory returns a new empty array on every call; a shared
+	 * array would pile up entries across compiles and change the compiled
+	 * output from the second compile on. A name that is also a core output key
+	 * throws.
 	 */
 	compileOutputs?: Readonly<Record<string, () => unknown>>;
 	/** The music URL check; core accepts any non-empty string, and a host that allows only some URLs passes its own check. */
