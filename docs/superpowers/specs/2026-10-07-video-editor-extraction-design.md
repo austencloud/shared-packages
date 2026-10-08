@@ -95,15 +95,17 @@ pattern):
 `sideEffects: false` except the CSS. `files: ["dist", "css"]` (not `src`,
 so the published tarball stays small; `svelte` conditions point at `dist`).
 
-Dependencies (runtime): `mediabunny ^1.44`, `zod ^4`, `wavesurfer.js ^7`,
-`modern-screenshot ^4`, `dexie ^4`, `@fortawesome/free-solid-svg-icons ^7`,
-`h264-mp4-encoder ^1` (WASM fallback). Peer: `svelte ^5`. No `bits-ui`: the
+Dependencies (runtime): `zod ^4`, `wavesurfer.js ^7`, `modern-screenshot ^4`,
+`dexie ^4`, `@fortawesome/free-solid-svg-icons ^7`, `h264-mp4-encoder ^1`
+(WASM fallback). Peer: `svelte ^5` and `mediabunny ^1.44` (step 0 made
+mediabunny a peer so the package shares the host's copy; the package
+type-checks against `~1.44.2`, the oldest host version). No `bits-ui`: the
 two components that use it get plain replacements. No `firebase`.
 
 Workers ship as `dist/workers/*.worker.js` and `dist/encoder/*.worker.js`,
 created by `new Worker(new URL("./x.worker.js", import.meta.url), { type: "module" })`
 from the module beside them. Hosts add `@austencloud/video-editor` to
-`optimizeDeps.exclude` and keep `resolve.dedupe: ["svelte"]`.
+`optimizeDeps.exclude` and keep `resolve.dedupe: ["svelte", "mediabunny"]`.
 
 Icons render as inline SVG from `@fortawesome/free-solid-svg-icons` through
 one `Icon.svelte`; the `fa-*` class usage (89 classes) is replaced.
@@ -185,14 +187,16 @@ stays 2. Unknown kinds fail parsing with a message naming the kind.
 During steps 0 to 3 the apps resolve the package by Vite alias and tsconfig
 `paths`, not by installing it:
 
-- tka worktree: `vite.config.ts` gets `resolve.alias["@austencloud/video-editor"]`
-  entries pointing at `E:/worktrees/shared-packages/video-editor/packages/video-editor/dist`
-  (one per subpath), `server.fs.allow` includes that worktree, and
-  `optimizeDeps.exclude` lists the package. `tsconfig.json` `paths` mirror it
-  for svelte-check. The package's runtime deps resolve from the
+- tka worktree: `svelte.config.js` `kit.alias` gets `@austencloud/video-editor/css`
+  and `@austencloud/video-editor` entries pointing at
+  `E:/worktrees/shared-packages/video-editor/packages/video-editor/{css,dist}`
+  (SvelteKit derives the Vite aliases and the generated tsconfig `paths` from
+  them), `kit.typescript.config` pins every svelte subpath to the app's own
+  copy, `server.fs.allow` reaches that worktree, and `optimizeDeps.exclude`
+  lists the package. The package's runtime deps resolve from the
   shared-packages worktree's `node_modules` (pnpm install there once).
-- Ringmaster worktree: the same, in `ringmaster/vite.config.ts` and
-  `ringmaster/tsconfig.json`.
+- Ringmaster worktree: the same, in `ringmaster/svelte.config.js` and
+  `ringmaster/vite.config.ts`.
 - This keeps both primary checkouts' `node_modules` and lockfiles untouched
   until step 4, which matters because tka worktrees junction `node_modules`
   into the primary and Ringmaster CI fails on linked lock entries.
@@ -200,6 +204,80 @@ During steps 0 to 3 the apps resolve the package by Vite alias and tsconfig
 Step 4 replaces the alias with a real dependency: publish
 `@austencloud/video-editor@0.1.0` through changesets, pin `^0.1.0` in both
 apps, regenerate Ringmaster's lockfile from a clean install, run both gates.
+
+### Step 0 findings (2026-10-07)
+
+- Aliases live in `kit.alias` in each app's `svelte.config.js`, not in
+  `vite.config.ts` or hand-written tsconfig `paths`: SvelteKit derives both
+  the Vite alias list and the generated tsconfig `paths` from it. The
+  `@austencloud/video-editor/css` entry precedes the package entry because
+  Vite takes the first matching prefix. tka's `server.fs.allow` already
+  reaches `E:/worktrees` through `"../../"`; Ringmaster's committed
+  `server.fs.allow` adds the shared-packages worktree, because the worker
+  file is reached through `new URL(..., import.meta.url)`, which Vite
+  rewrites without marking the file safe.
+- An alias that points outside `node_modules` makes TypeScript load a second
+  copy of svelte's ambient types from the shared-packages worktree (5.49.1
+  there; tka 5.49.2, Ringmaster 5.43.6), which surfaces as `Snippet`
+  mismatches in untouched files (tka +41 errors, Ringmaster +10). Both apps
+  pin TypeScript's svelte to their own copy through `kit.typescript.config`,
+  generating one `paths` entry per subpath from svelte's exports map
+  (`svelte`, `svelte/store`, `svelte/elements`, ... 14 entries), because a
+  bare `svelte` entry is an exact match and would not cover subpath imports
+  once the real UI moves in. Vite's `resolve.dedupe` handles the runtime.
+  Both pins go away with the aliases in step 4.
+- Both apps dedupe `mediabunny`; the explicit `svelte` entry is
+  documentation, since vite-plugin-svelte already dedupes every svelte
+  export. The package declares both as peer dependencies and type-checks
+  against mediabunny `~1.44.2`, the oldest host version (tka 1.44.2,
+  Ringmaster 1.61.0). The package is `"private": true` until step 4, because
+  `changeset publish` on a push to shared-packages main would otherwise ship
+  the placeholder as 0.1.0; `changeset publish` skips private packages
+  silently, so step 4 removes the flag in the same commit as the changeset.
+- The worker chunk lands at `_app/immutable/workers/preview-video.worker-<hash>.js`
+  in both production builds as a self-contained IIFE with mediabunny bundled
+  in (Ringmaster: `preview-video.worker-Dkmj8Ue1.js`, 46 KB, referenced from
+  a route node; tka: `preview-video.worker-DGlyAZgN.js`, 36 KB, beside tka's
+  own 540 KB `preview-video.worker` from `media-composition/workers/`, which
+  step 1 moves into the package, so worker-proof picks the package chunk by
+  its ping handler), and runs from a static server with no
+  app shell (`scripts/spike/worker-proof.mjs`).
+- tka's `/test/*` routes are emptied from a normal production build and the
+  `/test` layout redirects outside dev, so the spike route and its
+  machine-specific alias never reach a normal build. `npm run build:all`
+  keeps them but fails on main for an unrelated reason (the primary's
+  installed `@austencloud/backgrounds` 0.7.12 lacks
+  `setOceanFishSimulationSeed`, which the ocean-character-lab test page
+  imports), so the tka proof used the normal production build
+  (`NODE_ENV=production vite build`, not `npm run build`, whose chain ends
+  in `upload-sourcemaps.js`) with a temporary uncommitted copy of the spike
+  page outside `/test`; it passed in 3m 46s.
+  tka's `check:fast` gate exits 1 on main (624 pre-existing errors); the
+  branch is judged by intersecting error files with its own diff, and the
+  intersection is empty at 622 errors. Ringmaster's `/showcase/*` pages
+  ship behind the login gate; the spike page adds the `+page.ts` dev guard
+  its siblings have (404 outside dev). `npm run check` reports 0 errors and
+  the 18 pre-existing warnings; `npm test` passes (296 files).
+- Merge hold: the aliases are absolute `E:/` paths, so both app branches
+  stay unmerged and unpushed until step 4 swaps them for the published
+  dependency. On CI's ubuntu runners `svelte-kit sync` would turn them into
+  paths that do not exist, and tka's `check` and Ringmaster's `gate.yml`
+  and `deploy-ringmaster.yml` would fail.
+- What the alias loop does not exercise: the package's exports map, `files`,
+  `sideEffects` and `optimizeDeps.exclude` are all ignored while the package
+  resolves from a path outside `node_modules`. Step 4's exit criteria add a
+  worker-proof PASS on both apps' production builds against the installed
+  published version.
+- Proof scripts: `packages/video-editor/scripts/spike/` (cdp.mjs,
+  page-proof.mjs, dev-proof.mjs, worker-proof.mjs). They are outside `files`
+  and stay for steps 1 to 3. dev-proof refuses a busy port, spawns `node`
+  directly so the server dies with the proof, and kills by PID only.
+- For step 1: worker globals type-check as `Window` under the package's
+  single tsconfig, so `postMessage(msg, [buffer])` fails; each worker gets a
+  typed `self` shim rather than a second WebWorker-lib tsconfig (svelte-check
+  reads one). For step 2: the `--ve-*` mapping is declared on the editor root
+  as well as `:root`, so subtree `--theme-*` overrides apply. For step 4:
+  package tests do not run in CI yet (root has no `test` script).
 
 ## tka-platform integration
 
@@ -272,7 +350,7 @@ apps, regenerate Ringmaster's lockfile from a clean install, run both gates.
 | 1 Core | `./core`, `./render`, `./encoder` moved with plugin seams; tka consumes them; TKA plugin's compile, painters, alignment and surfaces | Parity test green; tka check, tests and build green; animation and 3D exports still work |
 | 2 UI | `VideoEditor` and the editor UI moved with the plugin's panels, lanes, modes and overlays; PostModule switched | Parity test green; `/post` works for a real sequence and a feature video in the app browser; tests moved |
 | 3 Ringmaster | Store, schema, media library, routes, Spotlight entry, export, old editor removed | Open, trim, keyframe, add music, export a real clip on a worktree server; gate scripts green |
-| 4 Release | Changeset, publish 0.1.0, swap aliases for pins, clean lockfiles, integrate all three repos, rebase `codex/feature-video-captures` | CI green in all three repos; captures branch rebased and its tests green |
+| 4 Release | Changeset, publish 0.1.0, swap aliases for pins, clean lockfiles, integrate all three repos, rebase `codex/feature-video-captures` | CI green in all three repos; worker-proof PASS on both apps' production builds against the installed published version (the alias loop never exercises the exports map, `files`, `sideEffects` or `optimizeDeps.exclude`); `private` removed and the package description corrected in the changeset commit; captures branch rebased and its tests green |
 
 Each step gets its own plan under `docs/superpowers/plans/` in this repo and
 runs subagent-driven (sonnet implementers, opus review between tasks, haiku
@@ -303,14 +381,19 @@ Nothing else needs a decision from him; recommended options are taken.
 
 ## Risks
 
-- Workers from a package: unproven in this monorepo. Step 0 exists to retire
-  this risk before anything moves.
+- Workers from a package: retired for the alias dev loop by step 0 on
+  2026-10-07 (dev servers and production builds of both apps run the
+  packaged worker; see the Step 0 findings above). The installed-package
+  path is proven in step 4.
 - The three monoliths: splitting `PostEditorWorkspace`, `PostEditorCanvas` and
   `PostItemTool` along the plugin seam is the largest single job; step 2 is
   planned file by file with the parity test as the safety net.
 - Duplicate Svelte: alias resolution can pull a second Svelte copy from the
-  shared-packages worktree; `resolve.dedupe: ["svelte"]` in both apps (tka
-  adds it) and a startup check in step 0.
+  shared-packages worktree. Runtime: `resolve.dedupe: ["svelte", "mediabunny"]`
+  in both apps and the `singleSvelte` probe in the spike pages (true in
+  both). Types: the `kit.typescript.config` pin of every svelte subpath (see
+  the step 0 findings); without it svelte-check loads the worktree's copy of
+  the ambient types and every Snippet prop mismatches.
 - Ringmaster CSP: no `worker-src` today; step 3 adds `worker-src 'self' blob:`
   and `'wasm-unsafe-eval'` to `hooks.server.ts` and verifies on the preview.
 - Captures branch rebase: its editor-domain edits (`post-project-ops.ts`,

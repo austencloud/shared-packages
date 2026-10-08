@@ -810,6 +810,8 @@ git log --oneline -1
 - Modify: `vite.config.ts` (`resolve.dedupe` near line 1053; `optimizeDeps.exclude` near line 1318)
 - Create: `src/routes/test/video-editor-spike/+page.svelte`
 
+Amendment (2026-10-07, after review): commit 0e3cbcab landed the steps below. The alias alone made svelte-check load a second copy of svelte's ambient types from the shared-packages worktree (5.49.1 beside tka's 5.49.2), which showed up as 41 new `Snippet` errors in untouched files. The fix is a `kit.typescript.config` hook in `svelte.config.js` that pins TypeScript's svelte to this app's copy. A bare `paths.svelte` entry is an exact match and would not cover `svelte/store` or `svelte/elements`, so the hook reads `node_modules/svelte/package.json` and writes one entry per export subpath with a `types` field (`"../node_modules/svelte/" + entry.types`, relative to `.svelte-kit/`), commit 812842e4. Vite is untouched; `resolve.dedupe` handles the runtime. The hook, its `node:fs` import and the aliases all go in step 4. Merge hold: the aliases are absolute `E:/` paths, so this branch stays unmerged until step 4 (CI on ubuntu would fail `check`).
+
 - [ ] **Step 1: Add the aliases**
 
 In `svelte.config.js`, inside `kit.alias`, insert these two entries before the `// Core aliases` comment. Order matters: SvelteKit emits Vite aliases in object order and Vite takes the first prefix match, so the `css` entry must come before the package entry.
@@ -926,6 +928,8 @@ git log --oneline -1
 
 **Files:** none edited. Build output lands in `E:/worktrees/tka-platform/video-editor/.svelte-kit/output/`.
 
+Amendment (2026-10-07, after the run): `npm run build:all` fails on main for a reason unrelated to this work: the primary's installed `@austencloud/backgrounds` 0.7.12 lacks `setOceanFishSimulationSeed`, which `src/routes/test/ocean-character-lab/+page.svelte` imports, and `BUILD_ALL=true` keeps that route. The proof used the normal production build instead: a temporary, uncommitted copy of the spike page at `src/routes/video-editor-spike-proof/` (with a `+page.ts` exporting `ssr = false`), then `npm run build:packages && node scripts/svelte-kit-sync-if-needed.mjs && node scripts/generate-svg-precache-manifest.cjs` and `npx cross-env NODE_OPTIONS=--max-old-space-size=8192 NODE_ENV=production vite build` (not `npm run build`, whose chain ends in `upload-sourcemaps.js`). The build passed in 3m 46s and emitted `preview-video.worker-DGlyAZgN.js` (36 KB, referenced from node 345) beside tka's own 540 KB `preview-video.worker-CBHUuI3V.js` from `src/lib/shared/media-composition/workers/`, which step 1 moves into the package. worker-proof now picks the package chunk by its ping handler and passes against this output; the temporary route was deleted afterwards.
+
 - [ ] **Step 1: Check the resource budget**
 
 Run the two PowerShell probes from the ground rules. Proceed only with at least 4096 MB available and no other `svelte-check` process.
@@ -970,6 +974,8 @@ Run `cd /e/worktrees/tka-platform/video-editor && git status --short`. Expected:
 - Create (gitignored, never committed): `tmp/vite.worktree.config.mts`, `tmp/dev.mjs`
 
 Ringmaster uses tabs for indentation.
+
+Amendment (2026-10-07, after review): commits fed1c717, b503228f and 99cc7f67 landed the steps below plus three review fixes. (1) The same `kit.typescript.config` hook as tka (Task 5 amendment), with paths relative to `ringmaster/.svelte-kit/`, so `"../../node_modules/svelte/" + entry.types`; without it svelte-check gained 10 `Snippet` errors from a second svelte copy (5.43.6 here, 5.49.1 in the worktree). (2) `server.fs.allow` in the committed `ringmaster/vite.config.ts` adds `E:/worktrees/shared-packages/video-editor`: the worker file is reached through `new URL(..., import.meta.url)`, which Vite rewrites without marking it safe, so a launcher without that allow entry showed `error worker failed to load`. (3) `showcase/video-editor-spike/+page.ts` copies the `video-crop` dev guard (404 outside dev). Merge hold as in Task 5: the branch stays unmerged until step 4, because `gate.yml` and `deploy-ringmaster.yml` would fail on the absolute aliases.
 
 - [ ] **Step 1: Add the aliases**
 
@@ -1226,3 +1232,4 @@ git log --oneline -1
 - The worker runs in both apps' production builds: Task 6 step 4 and Task 8 step 3 print `PASS`.
 - svelte-check resolves the subpaths: Task 5 step 5 and Task 7 step 5 report 0 errors with `@austencloud/video-editor` and `@austencloud/video-editor/core` imported.
 - One Svelte runtime in each app: both page proofs report `"singleSvelte": "true"`.
+- Merge hold: neither app branch merges or pushes before step 4 swaps the absolute `E:/` aliases for the published dependency; CI on ubuntu would fail on them.
