@@ -19,11 +19,17 @@ const root = resolve(clientDir);
 const port = Number(portArg ?? 18444);
 const immutableDir = join(root, "_app/immutable");
 const workersDir = join(immutableDir, "workers");
+// The host app may ship its own preview-video worker (tka does until step 1
+// moves it into the package), so the package chunk is picked by its ping
+// handler and not by name alone.
+const answersPing = (file) => readFileSync(join(workersDir, file), "utf8").includes('"pong"');
 const chunks = existsSync(workersDir)
-	? readdirSync(workersDir).filter((file) => file.startsWith("preview-video.worker") && file.endsWith(".js"))
+	? readdirSync(workersDir).filter(
+			(file) => file.startsWith("preview-video.worker") && file.endsWith(".js") && answersPing(file),
+		)
 	: [];
 if (chunks.length !== 1) {
-	console.error(`expected exactly one preview-video.worker chunk under ${workersDir}, found ${chunks.length}:`);
+	console.error(`expected exactly one preview-video.worker chunk answering ping under ${workersDir}, found ${chunks.length}:`);
 	console.error(JSON.stringify(chunks));
 	process.exit(1);
 }
