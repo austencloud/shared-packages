@@ -5,7 +5,7 @@ import { withHeadlessPage } from "./cdp.mjs";
 
 // usage: node worker-proof.mjs <sveltekit client output dir> [port]
 // Serves a production client build statically, loads the emitted
-// preview-video worker chunk from a bare page, and checks its reply. This
+// spike worker chunk from a bare page, and checks its reply. This
 // runs the built worker without the app's auth gates or dev-only route guards.
 // It also requires that some other module under _app/immutable names the
 // chunk, so the proof covers the app pointing at the worker and not only the
@@ -19,17 +19,16 @@ const root = resolve(clientDir);
 const port = Number(portArg ?? 18444);
 const immutableDir = join(root, "_app/immutable");
 const workersDir = join(immutableDir, "workers");
-// The host app may ship its own preview-video worker (tka does until step 1
-// moves it into the package), so the package chunk is picked by its ping
-// handler and not by name alone.
+// The host app may ship its own workers (tka has a preview-video worker), so
+// the package chunk is picked by its name and its ping handler.
 const answersPing = (file) => readFileSync(join(workersDir, file), "utf8").includes('"pong"');
 const chunks = existsSync(workersDir)
 	? readdirSync(workersDir).filter(
-			(file) => file.startsWith("preview-video.worker") && file.endsWith(".js") && answersPing(file),
+			(file) => file.startsWith("spike.worker") && file.endsWith(".js") && answersPing(file),
 		)
 	: [];
 if (chunks.length !== 1) {
-	console.error(`expected exactly one preview-video.worker chunk answering ping under ${workersDir}, found ${chunks.length}:`);
+	console.error(`expected exactly one spike.worker chunk answering ping under ${workersDir}, found ${chunks.length}:`);
 	console.error(JSON.stringify(chunks));
 	process.exit(1);
 }

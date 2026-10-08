@@ -17,6 +17,14 @@
       "types": "./dist/core/index.d.ts",
       "import": "./dist/core/index.js"
     },
+    "./render": {
+      "types": "./dist/render/index.d.ts",
+      "import": "./dist/render/index.js"
+    },
+    "./encoder": {
+      "types": "./dist/encoder/index.d.ts",
+      "import": "./dist/encoder/index.js"
+    },
     "./css/*": "./css/*"
   },
   "sideEffects": [
@@ -30,8 +38,13 @@
     "build": "svelte-package -i src -o dist",
     "dev": "svelte-package -i src -o dist --watch",
     "check": "svelte-check --tsconfig ./tsconfig.json",
-    "test": "node --test test/*.test.mjs",
+    "test": "node --test test/*.test.mjs && vitest run",
     "clean": "rimraf dist"
+  },
+  "dependencies": {
+    "dexie": "^4.2.1",
+    "h264-mp4-encoder": "^1.0.12",
+    "zod": "^4.2.1"
   },
   "peerDependencies": {
     "mediabunny": "^1.44.0",
@@ -39,11 +52,13 @@
   },
   "devDependencies": {
     "@sveltejs/package": "^2.3.0",
+    "jsdom": "^27.4.0",
     "mediabunny": "~1.44.2",
     "rimraf": "^5.0.0",
     "svelte": "^5.0.0",
     "svelte-check": "^4.0.0",
-    "typescript": "^5.0.0"
+    "typescript": "^5.0.0",
+    "vitest": "^4.0.16"
   },
   "keywords": [
     "svelte",

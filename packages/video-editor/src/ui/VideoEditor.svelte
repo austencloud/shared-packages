@@ -6,8 +6,8 @@
 -->
 <script lang="ts">
 	import { onMount } from "svelte";
-	import { createPreviewWorker } from "../workers/index.js";
-	import type { PreviewWorkerPing, PreviewWorkerPong } from "../workers/messages.js";
+	import { createSpikeWorker } from "../workers/index.js";
+	import type { SpikeWorkerPing, SpikeWorkerPong } from "../workers/messages.js";
 
 	let { seconds = 83.5 }: { seconds?: number } = $props();
 	let status = $state("waiting");
@@ -15,12 +15,12 @@
 	onMount(() => {
 		let worker: Worker;
 		try {
-			worker = createPreviewWorker();
+			worker = createSpikeWorker();
 		} catch (error) {
 			status = `error construct ${String(error)}`;
 			return;
 		}
-		worker.addEventListener("message", (event: MessageEvent<PreviewWorkerPong>) => {
+		worker.addEventListener("message", (event: MessageEvent<SpikeWorkerPong>) => {
 			const { timecode, mediabunny } = event.data;
 			status = `pong ${timecode} ${mediabunny ? "mediabunny" : "no-mediabunny"}`;
 		});
@@ -31,7 +31,7 @@
 		worker.addEventListener("messageerror", () => {
 			status = "error messageerror";
 		});
-		worker.postMessage({ type: "ping", seconds } satisfies PreviewWorkerPing);
+		worker.postMessage({ type: "ping", seconds } satisfies SpikeWorkerPing);
 		return () => worker.terminate();
 	});
 </script>
