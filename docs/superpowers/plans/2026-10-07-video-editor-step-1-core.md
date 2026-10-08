@@ -91,7 +91,7 @@
 - **Fixtures (2):**
   - `dck.project.json`: the stored project from `C:/Users/Austen/.tka/post-studio-drafts/1790895873030-4bd8d599-f8b8-4cfc-b133-135191673d3a.json` (record key `tka:post-studio:project:v2:DCK` plus the Greek letter Psi and a hyphen), extracted by a one-liner in Task 1. Main track of two videos and a choreo card, five text items and a credit, a `moves` item and an `animation` item with the overlay turned off, mirrored, dark background, take audio. It exercises the TKA kinds, the `video.staffEffect` and `card.cardAppearance` extensions only where present, take clocks and the choreo-card and sequence-animation surfaces.
   - `plain.project.json`: a plugin-free project generated once in Task 1 from the existing builders in `tests/unit/media-composition/post-project-fixtures.ts`: two videos with a crossfade, an image with keyframes, a plain card, two text items (one animated), a fade-black transition at the end, blur background, 4:5 canvas.
-- **Timestamps (6 each):** DCK at 0, 10.5, 21.9 (inside the transition at the first cut), 40, 70.25 and 80 seconds (on the card). Plain at 0.2, 2.5, 4.9 (inside the crossfade), 7, 9.6 (inside the fade-black) and 11 seconds; Task 1 Step 3 prints the plain project's duration and adjusts the last two only if the builder output is shorter.
+- **Timestamps (6 each):** DCK at 0, 10.5, 21.9 (inside the transition at the first cut), 41 (text-2 on screen), 70.25 and 81 seconds (on the card with the credit). Plain at 0.2, 2.5, 4.9 (inside the crossfade), 7, 9.6 (inside the fade-black) and 11 seconds; Task 1 Step 3 prints the plain project's duration and adjusts the last two only if the builder output is shorter.
 - **What is hashed, per fixture:** (a) `JSON.stringify` of the parsed and normalized project, which proves the schema factory keeps key order; (b) `JSON.stringify` of the compile result; and per timestamp (c) `JSON.stringify` of the evaluated layers and (d) the recorded draw log. Hashes are SHA-256 hex from `node:crypto`. Numbers in the draw log are rounded to 6 decimals so harmless float noise cannot fail the gate, but no other normalization is applied.
 - **Recording context:** a `Proxy` over a plain object installed by stubbing `HTMLCanvasElement.prototype.getContext`. Every method call logs `name(args)`; every property set logs `name=value`; getters return the last set value (or the canvas default). `measureText` returns a deterministic width (`text.length * fontSizePx * 0.5`, font size parsed from the last `font` set) so text layout runs. Canvas arguments log as `canvas#<data-standin or width x height>`; gradients and patterns are recording objects too.
 - **Media stand-ins:** `videoFrames` is a stand-in object with `has(role)` true for every take role and image role and `frameFor(role, t)` returning a canvas tagged `data-standin="<role>@<t rounded to 3 places>"` (1080x1920 for takes, 1200x900 for images). Each call is logged.
@@ -714,6 +714,8 @@ export function createEmptyPostProject(input: { sequenceId: string; now: number 
 
 Runs on the untouched tka tree. Nothing in `src/` changes.
 
+As built (tka cd0751608b): the DCK times are 41 and 81 instead of 40 and 80 so that text-2 and the end card with its credit are on screen; the plain fade-black sits on `v2` (9.2 to 10.2 s) instead of the card, because the compiler only builds a transition between an item and the next item on the same track; non-ASCII characters in `dck.project.json` are stored as JSON escapes. Later tasks compare against that commit's `before.json`.
+
 **Files:**
 - Create: `TKA/tests/unit/video-editor-parity/harness.ts`
 - Create: `TKA/tests/unit/video-editor-parity.test.ts`
@@ -1061,7 +1063,7 @@ vi.mock("modern-screenshot", () => ({
 const DIR = "tests/fixtures/video-editor-parity";
 const WRITE = process.env.PARITY_WRITE === "1";
 const TIMES: Record<string, number[]> = {
-  dck: [0, 10.5, 21.9, 40, 70.25, 80],
+  dck: [0, 10.5, 21.9, 41, 70.25, 81],
   plain: [0.2, 2.5, 4.9, 7, 9.6, 11],
 };
 
@@ -1258,7 +1260,7 @@ PARITY_WRITE=1 npx vitest run --config tests/config/vitest.config.ts tests/unit/
 npx vitest run --config tests/config/vitest.config.ts tests/unit/video-editor-parity.test.ts
 npx vitest run --config tests/config/vitest.config.ts tests/unit/video-editor-parity.test.ts
 node -e 'const b = require("./tests/fixtures/video-editor-parity/before.json"); for (const [k, v] of Object.entries(b)) console.log(k, v.drawCalls.join(" "))'
-grep -c "domToCanvas" /c/Users/Austen/AppData/Local/Temp/claude/video-editor-step1/parity-before-dck-80.txt
+grep -c "domToCanvas" /c/Users/Austen/AppData/Local/Temp/claude/video-editor-step1/parity-before-dck-81.txt
 ```
 Expected: the write run passes; both verify runs pass 4 tests (two runs prove the capture is deterministic); every `drawCalls` entry is above 0; the DCK log at 80 s contains at least one `domToCanvas` line (the card surface ran). A draw count of 0 where layers are visible, or no capture on the card frame, means the harness does not reach the drawing code: fix the harness, delete `before.json` and `plain.project.json`, and recapture. A hash that changes between the two verify runs means something in the path depends on time or order: find it before going on.
 
