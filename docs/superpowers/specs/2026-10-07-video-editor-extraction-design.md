@@ -15,7 +15,7 @@ editor from now on happens in the package and reaches both apps.
 
 | Topic | Decision |
 | --- | --- |
-| Parity scope | The generic editor is identical in both apps: timeline, trim, split, speed, reorder, snapping, zoom, undo, keyframes with easing, transitions, looks, text, cards, music lane, media sources, export, drafts. Sequence overlays (animation, moves, carousel, titles), the Tutorial preset, take timing, tap-fit and staff-tip tracking stay in tka-platform behind a plugin interface. |
+| Parity scope | The generic editor is identical in both apps: timeline, trim, split, speed, reorder, snapping, zoom, undo, keyframes with easing, transitions, looks, text, cards (once step 3 settles the card, see "Step 1 as built"), music lane, media sources, export, drafts. Sequence overlays (animation, moves, carousel, titles), the Tutorial preset, take timing, tap-fit and staff-tip tracking stay in tka-platform behind a plugin interface. |
 | Ringmaster persistence | A Firestore `videoProjects` collection scoped to the signed-in user, through the existing store port, with the same device and session caching TKA uses. |
 | In-flight work | Extract from tka-platform `main` now. The `codex/feature-video-captures` branch (CLI and server work, plus a few editor-domain edits) is rebased onto the package afterwards. |
 | Name | `@austencloud/video-editor`, folder `E:/shared-packages/packages/video-editor`. Screens may still say Post Studio (TKA) or Studio (Ringmaster). |
@@ -158,9 +158,12 @@ export interface VideoEditorPlugin {
 }
 ```
 
-Core item kinds: `video`, `image`, `card`, `text`. `card` in the core is a
-plain card (background, text lines, optional image or QR); TKA's choreo card
-is a plugin surface drawn into a `card` item through `surfaces`.
+Core item kinds: `video`, `image`, `card`, `text`. Step 3 target: `card` in the
+core is a plain card (background, text lines, optional image or QR); TKA's
+choreo card is a plugin surface drawn into a `card` item through `surfaces`.
+Step 1 built neither the core card's content fields nor a core card painter, so
+this is the intent and not the as-built state; see "The card as built" under
+"Step 1 as built".
 
 `createProjectSchema(plugin?)` builds the discriminated union from the core
 kinds plus the plugin's and merges `projectExtension`. The core project has
@@ -196,9 +199,10 @@ import `createProjectSchema`, `createEmptyPostProject`, `defaultBoxFor`,
 `normalizeProject` and `compilePostProject` from the package core, and
 `evaluatePresetLayers` and `evaluatePresetFrame` from the package render
 entry, because each takes the plugin or the package's alignment as an argument;
-a whole-module import is caught too. The value-closure test keeps the plugin
-index out of what `bound.ts` loads by value, because the index re-exports
-`bound.ts` and an import back is a load-time cycle.
+a whole-module import is caught too. The value-closure test has two roots,
+`bound.ts` and `surfaces.ts` (the second since the Task 10 fix round), and keeps
+the plugin index out of what either loads by value, because the index
+re-exports `bound.ts` and an import back is a load-time cycle.
 
 Parity is draw-call parity in jsdom, not pixel parity (step 1 plan,
 "Parity-test decision"): jsdom has no pixels and the DCK draft's footage is not
@@ -219,10 +223,37 @@ names but reject tka fields. `POST_BOX` carries the strip boxes from
 `IS_MOBILE` in an IIFE that now also runs on the main thread; it is guarded by
 try/catch and must not become an unguarded `navigator` read.
 
-The package suite is 23 vitest files with 176 tests plus 34 node tests of the
-step 1 tools. Its Task 13 additions came from earlier reviews: the encoder
-entry test (Task 4), the schema-factory messages and comment wraps (Task 6b),
-the frame-evaluator test (Task 9), the painter-registry test (Task 10), and the
+**The card as built.** The core card is not the plain card the design above
+describes, and step 3 plans from this record:
+
+- The core card shape is `itemBase` plus `kind: "card"` and nothing more: no
+  background, text lines, image or QR field.
+- `core/compile/compiler.ts:729` compiles every card to the one shared role
+  `presetRole(POST_STUDIO_ROLE.card, "Choreo card", "linked-choreo-card", ["choreo-card"])`.
+- The package has no card painter: `render/painter-registry.ts:48` exports only
+  `textPainterFactory`.
+- `render/frame-compositor.ts:469` lists `choreo-card` among the DOM surface
+  modes. A plugin-free host that offers a card therefore gets a role with no
+  content to draw, and the compositor throws: at `:553-556` ("has no surface for
+  its choreo-card render mode") when the host binds that mode, or at `:505`
+  ("not ready to render") when no media element is mounted for the layer.
+
+The card's `qrUrl` scan link, which tka main added on 2026-10-08 (commit
+`ad6afcaf73`), is ported into tka's card kind extension in the plugin and not
+into the core card, which matches this as-built state. Step 3 may lift it into
+the core if the core card gains content fields.
+
+Step 3 decides the card, and the decision is Austen's. The options, as the step
+1 carry-over recorded them: (a) drop the card kind for Ringmaster, (b) bind
+cards as external-media images, (c) give cards per-item roles, content fields
+and a core card painter. The intent in "Plugin contract" and "Render path"
+points at (c). The same decision settles whether `qrUrl` is a core card field.
+
+The package suite is 23 vitest files with 176 tests plus 34 node tests: 31 tool
+tests in `test/step1-tools.test.mjs` and 3 core tests in `test/core.test.mjs`.
+Its Task 13 additions came from earlier reviews: the encoder entry test (Task
+4), the schema-factory messages and comment wraps (Task 6b), the
+frame-evaluator test (Task 9), the painter-registry test (Task 10), and the
 `PreviewMediaReading` rename, the store options rename, the comment fixes and
 the node-entry test (Task 11). Five package-only tests stay in tka until the
 package has a setup file or browser mode (they need `Blob.prototype.arrayBuffer`
@@ -236,8 +267,12 @@ now five files.
   video boundaries moves into the TKA kinds' hooks.
 - `evaluatePresetLayers(preset, duration, t, alignment?)`: alignment stays an
   optional argument supplied by `plugin.alignment`.
-- Painters come from a registry: core (text, backdrop, card) plus
-  `plugin.painters`. The `PostStudioLayerPainter` interface is unchanged.
+- Painters come from a registry: core plus `plugin.painters`. The
+  `PostStudioLayerPainter` interface is unchanged. The step 3 target for the
+  core list is text, backdrop and card. Step 1 built the text factory only
+  (`textPainterFactory`, `render/painter-registry.ts:48`); the compositor draws
+  the backdrop itself through `backdrop-painter.ts`, and there is no card
+  painter until step 3 settles the card.
 - The compositor's `renderMode` DOM captures become `plugin.surfaces`.
 - The encoder is `./encoder`; tka-platform's animation and 3D exporters import
   it from the package (their `get-*` deferred registrations keep working).
