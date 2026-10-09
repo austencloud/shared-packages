@@ -335,7 +335,7 @@ export type PostProject = Omit<PostProjectCore, "tracks"> & {
 
 `schema.ts` keeps today's schemas and helpers from `post-project.ts` for the core kinds, renamed only where a type was inferred from the full union: `PostVideoItemCore = z.infer<typeof PostVideoItemSchema>` and so on, `PostTrackCore`, `PostProjectCore` (with a new optional `subjectId`). Helper signatures (`findItem`, `mainItems`, `itemEnd`, `clampBox`, `trackHasRoom`, `createIdAllocator`, ...) take and return the augmented `PostItem`, `PostTrack` and `PostProject` from `item-kinds.ts`.
 
-`TKA/src/lib/shared/post-studio-plugin/item-kinds.ts` holds the TKA schemas cut from `post-project.ts` (animation, moves, carousel, titles, `PostStaffEffectSchema`, `POST_STAFF_EFFECTS`, the card appearance schema, `POST_SEQUENCE_ACTIONS`, `PostAnimationAppearanceSchema`, the `auto` motion key schema) and the augmentation:
+`TKA/src/lib/shared/post-studio-plugin/item-kinds.ts` holds the TKA schemas cut from `post-project.ts` (animation, moves, carousel, titles, `PostStaffEffectSchema`, `POST_STAFF_EFFECTS`, the card appearance schema, `POST_SEQUENCE_ACTIONS`, `PostAnimationAppearanceSchema`; the `auto` motion key schema is core vocabulary and stays in the package) and the augmentation:
 
 ```ts
 import type { z } from "zod";
@@ -702,7 +702,7 @@ export function createEmptyPostProject(input: { sequenceId: string; now: number 
 }
 ```
 
-`createEmptyCore(input, extensionFields)` returns the core empty project merged with the extension fields in the plugin's project key order. `tkaPlugin.emptyProjectFields` is a TKA-only member of the object `createTkaPlugin` returns (its return type is `VideoEditorPlugin & { emptyProjectFields(...) }`). The import rewriter (Task 2) routes each imported name to the first destination that exports it, and the post-project route lists `$lib/shared/post-studio-plugin` before the package, so these five names resolve to the bound versions and every other name to the core.
+`createEmptyCore(input, extensionFields)` returns the core empty project with the extension fields spread right after `schemaVersion` (the core function takes no plugin; the key order is the order of the fields the host passes). `tkaPlugin.emptyProjectFields` is a TKA-only member of the object `createTkaPlugin` returns (its return type is `VideoEditorPlugin & { emptyProjectFields(...) }`). The import rewriter (Task 2) routes each imported name to the first destination that exports it, and the post-project route lists `$lib/shared/post-studio-plugin` before the package, so these five names resolve to the bound versions and every other name to the core.
 
 ---
 
