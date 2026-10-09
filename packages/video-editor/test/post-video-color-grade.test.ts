@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { analyzeVideoColor, videoColorFilter } from "../src/core/index.js";
 
-function frame(colors: readonly [number, number, number][]): ImageData {
+function frame(colors: readonly Rgb[]): ImageData {
 	const data = new Uint8ClampedArray(colors.length * 4);
 	colors.forEach(([r, g, b], index) => {
 		data.set([r, g, b, 255], index * 4);

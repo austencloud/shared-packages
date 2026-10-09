@@ -71,7 +71,9 @@ describe("createProjectSchema without a plugin", () => {
 	};
 
 	it("names the kind of an item no schema knows", () => {
-		expect(messages(withItem({ kind: "animation" }))).toContain('Unknown post item kind "animation"');
+		expect(messages(withItem({ kind: "animation" }))).toContain(
+			'Unknown post item kind "animation"',
+		);
 	});
 
 	it("says an item has no kind when the kind is missing or not a string", () => {

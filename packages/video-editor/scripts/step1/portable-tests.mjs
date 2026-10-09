@@ -26,17 +26,9 @@ const OK = (spec) =>
 // Tests that guard tka's own tree. They read tka's plugin folder with node:fs and stay.
 const TKA_GUARDS = ["tests/unit/video-editor-bound-only.test.ts"];
 
-// Portable by imports, but they fail in the package without tka's tests/setup/vitest-setup.ts:
-// it stubs canvas getContext on created elements and polyfills Blob.prototype.arrayBuffer, and
-// jsdom provides neither. They stay until the package gets a setup file of its own.
-const NEEDS_TKA_SETUP = {
-	"tests/unit/video-export/CanvasFrameCapturer.test.ts": "canvas getContext(2d) is null",
-	"tests/unit/animation-engine/background-encoder-timeout.test.ts": "Blob.arrayBuffer is missing",
-	"tests/unit/media-composition/post-audio-plan.test.ts": "Blob.arrayBuffer is missing",
-	"tests/unit/media-composition/post-audio-track.test.ts": "Blob.arrayBuffer is missing",
-	"tests/unit/media-composition/preview-video-frame-recovery.test.ts":
-		"canvas getContext(2d) is null",
-};
+// Tests that are portable by imports but need tka's setup file. The package has its own setup
+// since step 2A (test/setup/), so none are kept back; an entry here names a new one.
+const NEEDS_TKA_SETUP = {};
 
 const analyses = new Map();
 

@@ -34,7 +34,7 @@ function recorder(filter: string | undefined) {
 			source: unknown;
 			args: number[];
 			alpha: number;
-			filter?: string;
+			filter?: string | undefined;
 		}[],
 		save() {},
 		restore() {},

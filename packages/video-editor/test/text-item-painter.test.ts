@@ -348,7 +348,7 @@ describe("createTextItemPainter", () => {
 						() => ({
 							...base,
 							style: { ...base.style!, alignment },
-							animation: animated ? animation : undefined,
+							...(animated ? { animation } : {}),
 						}),
 						rect,
 						{ ...FRAME, projectTimeSeconds: 2 },
