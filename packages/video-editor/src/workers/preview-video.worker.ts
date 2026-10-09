@@ -17,6 +17,18 @@ import {
 	previewVideoDimensions,
 } from "../core/preview-video.js";
 
+// A failed source reports its error twice: once through the awaited call, which the reply below
+// carries, and once more when `input.dispose()` in the `finally` chains onto the demuxer promise
+// that already failed. That second report has no handler, so it would surface as an uncaught
+// rejection after the reply. Only an error this worker has already replied with is silenced here;
+// any other unhandled rejection still reaches the console.
+const repliedErrors = new WeakSet<object>();
+workerScope.addEventListener("unhandledrejection", (event) => {
+	const reason: unknown = event.reason;
+	if (typeof reason === "object" && reason !== null && repliedErrors.has(reason))
+		event.preventDefault();
+});
+
 workerScope.onmessage = async (event: MessageEvent<{ sourceUrl: string }>) => {
 	let input: Input | undefined;
 	try {
@@ -96,6 +108,7 @@ workerScope.onmessage = async (event: MessageEvent<{ sourceUrl: string }>) => {
 			[buffer],
 		);
 	} catch (error) {
+		if (typeof error === "object" && error !== null) repliedErrors.add(error);
 		workerScope.postMessage({
 			type: "error",
 			reason: error instanceof Error ? error.message : "The preview could not be prepared",

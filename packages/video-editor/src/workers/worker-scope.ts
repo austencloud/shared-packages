@@ -8,6 +8,10 @@
 export interface WorkerScope {
 	postMessage(message: unknown, transfer?: Transferable[]): void;
 	addEventListener(type: "message", listener: (event: MessageEvent) => void): void;
+	addEventListener(
+		type: "unhandledrejection",
+		listener: (event: PromiseRejectionEvent) => void,
+	): void;
 	onmessage: ((event: MessageEvent) => void) | null;
 }
 

@@ -1,5 +1,3 @@
-import { z } from "zod";
-
 /**
  * Editing copies: the editor plays and scrubs a small H.264 copy of each
  * recording with a key frame every half second, so a seek decodes a few
@@ -60,26 +58,6 @@ export function previewVideoCacheKey(sourceUrl: string, assetKey: string) {
 	// A replaced upload must never inherit an older file's playback copy.
 	return JSON.stringify([PREVIEW_VIDEO_POLICY, assetKey, sourceUrl]);
 }
-
-/**
- * What `scripts/make-edit-copies.ts` writes beside a recording as
- * `<name>.edit.json`, describing `<name>.edit.mp4`.
- */
-export const EditCopyManifestSchema = z.object({
-	policy: z.literal(PREVIEW_VIDEO_POLICY),
-	source: z.object({
-		bytes: z.number().int().positive(),
-		width: z.number().int().positive(),
-		height: z.number().int().positive(),
-		durationSeconds: z.number().positive(),
-	}),
-	copy: z.object({
-		width: z.number().int().positive(),
-		height: z.number().int().positive(),
-		durationSeconds: z.number().positive(),
-	}),
-});
-export type EditCopyManifest = z.infer<typeof EditCopyManifestSchema>;
 
 /** Where a prepared copy of a same-site recording would be, or null. */
 export function editCopyPaths(sourceUrl: string): { video: string; manifest: string } | null {

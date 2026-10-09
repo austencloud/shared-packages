@@ -13,6 +13,7 @@ export * from "./plan/plan-compiler.js";
 export * from "./caption-layout.js";
 export * from "./color-grade.js";
 export * from "./preview-video.js";
+export * from "./edit-copy-manifest.js";
 export * from "./project/item-kinds.js";
 export * from "./project/schema.js";
 export * from "./project/schema-factory.js";

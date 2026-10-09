@@ -15,6 +15,7 @@ export * from "./preview-cache/preview-video-cache-contract.js";
 export * from "./preview-cache/preview-video-cache.js";
 export * from "./preview-cache/preview-video-store.js";
 export * from "./preview-cache/preview-video-render.js";
+export * from "./edit-copy-lookup.js";
 export * from "./preview-frame-recovery.js";
 export * from "./video-preview-seek.js";
 export * from "./preview-clock.js";
