@@ -27,6 +27,8 @@ export * from "./project/normalize.js";
 export * from "./project/subject.js";
 export * from "./edit/context.js";
 export * from "./edit/project-edits.js";
+export * from "./edit/music-edits.js";
+export * from "./edit/mirror.js";
 // post-plan.ts and project/schema.ts both declare a PostFraming;
 // the project one is the public type and the only one exported here.
 export { PostFramingSchema, type PostFraming } from "./project/schema.js";
