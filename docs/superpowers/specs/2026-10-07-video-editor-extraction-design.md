@@ -495,3 +495,6 @@ Nothing else needs a decision from him; recommended options are taken.
   `post-project-edits.ts`, `post-project-bridge-guard.ts`, `take-timing.ts`)
   are small; the uncommitted worktree edits are committed to that branch
   first so nothing is lost.
+
+Everything step 1 left for steps 2 to 4, with file, line and proposed fix, is
+listed in `2026-10-09-video-editor-open-items-after-step-1.md` beside this spec.
