@@ -22,6 +22,10 @@ export interface PluginItemKinds {}
 export interface PluginProjectFields {}
 /** Entries a plugin adds to the compile result, after `texts`. */
 export interface PluginCompiledOutputs {}
+/** Fields a plugin adds to the Add spec (augment it). */
+export interface PluginOverlaySpec {}
+/** Fields a plugin adds to an item patch (augment it). */
+export interface PluginItemPatch {}
 /* eslint-enable @typescript-eslint/no-empty-object-type */
 
 export type PostVideoItem = PostVideoItemCore & PluginVideoFields;

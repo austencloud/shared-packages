@@ -1,5 +1,8 @@
 import type { z } from "zod";
 import type { CompileItemEnv, ProjectCompileHooks } from "./core/compile/hooks.js";
+import type { EditContext } from "./core/edit/context.js";
+import type { NewItemBase, NewOverlaySpec, PostItemPatch } from "./core/edit/project-edits.js";
+import type { PostTake } from "./core/plan/post-plan.js";
 import type { CoreItemKind, PostItem, PostProject } from "./core/project/item-kinds.js";
 import type { PostBox } from "./core/project/schema.js";
 import type { AlignmentProvider } from "./render/alignment.js";
@@ -37,6 +40,11 @@ export interface ItemKindDefinition {
 	 * nothing and does not extend the post's duration.
 	 */
 	compile(item: PostItem, env: CompileItemEnv): boolean;
+	/**
+	 * Builds a new item of this kind for addOverlayItem from the shared base and the Add spec.
+	 * Absent: { ...base, kind }.
+	 */
+	create?: (base: NewItemBase, spec: NewOverlaySpec) => PostItem;
 }
 
 export interface VideoEditorPlugin {
@@ -90,4 +98,35 @@ export interface VideoEditorPlugin {
 	 * URLs passes its own check.
 	 */
 	isMediaUrl?(url: unknown): url is string;
+	/** The project field naming what a project is about. Default "subjectId"; tka "sequenceId". */
+	subjectKey?: string;
+	/** Plugin behaviour inside the edit engine. */
+	editHooks?: EditHooks;
 }
+
+export interface EditHooks {
+	/** A take points at other media; return the project with plugin data that follows the take. Runs before finish. */
+	takeMediaChanged?: (
+		project: PostProject,
+		change: TakeMediaChange,
+		ctx: EditContext,
+	) => PostProject;
+	/** Applies the plugin's patch fields to next, a copy of item, after the core fields. next is updateItem's `{ ...item } as Record<string, unknown>`. */
+	patchItem?: (item: PostItem, next: Record<string, unknown>, patch: PostItemPatch) => void;
+}
+
+export type TakeMediaChange =
+	| {
+			kind: "replace";
+			takeId: string;
+			offsetSeconds: number;
+			takeKey: string;
+			durationSeconds: number;
+	  }
+	| {
+			kind: "relink";
+			takeId: string;
+			ref: PostTake["ref"];
+			takeKey: string;
+			durationSeconds: number;
+	  };

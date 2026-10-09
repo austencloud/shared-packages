@@ -24,10 +24,19 @@ export * from "./music/post-music.js";
 export * from "./music/music-grid.js";
 export * from "./project/keyframes.js";
 export * from "./project/normalize.js";
+export * from "./project/subject.js";
+export * from "./edit/context.js";
+export * from "./edit/project-edits.js";
 // post-plan.ts and project/schema.ts both declare a PostFraming;
 // the project one is the public type and the only one exported here.
 export { PostFramingSchema, type PostFraming } from "./project/schema.js";
-export type { ItemKindDefinition, ShapeExtension, VideoEditorPlugin } from "../plugin.js";
+export type {
+	EditHooks,
+	ItemKindDefinition,
+	ShapeExtension,
+	TakeMediaChange,
+	VideoEditorPlugin,
+} from "../plugin.js";
 export * from "./compile/hooks.js";
 export * from "./compile/compiler.js";
 export * from "./pip-sample.js";
