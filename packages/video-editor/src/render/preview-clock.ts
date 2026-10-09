@@ -1,3 +1,4 @@
+/** A media element's clock as the preview reads it each frame: position, whether it can play, whether it ended. */
 export interface PreviewMediaReading {
 	currentTime: number;
 	ready: boolean;

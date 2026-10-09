@@ -25,19 +25,19 @@ describe("orderedShape", () => {
 
 	it("throws when the order leaves out a merged key", () => {
 		expect(() => orderedShape(base, extension, ["a", "c"])).toThrow(
-			"shape order mismatch: missing b, extra none",
+			"shape extension order mismatch: missing b, extra none",
 		);
 	});
 
 	it("throws when the order names a key the shape does not have", () => {
 		expect(() => orderedShape(base, extension, ["a", "b", "c", "d"])).toThrow(
-			"shape order mismatch: missing none, extra d",
+			"shape extension order mismatch: missing none, extra d",
 		);
 	});
 
 	it("does not take a prototype key such as toString for a shape key", () => {
 		expect(() => orderedShape(base, extension, ["a", "b", "c", "toString"])).toThrow(
-			"shape order mismatch: missing none, extra toString",
+			"shape extension order mismatch: missing none, extra toString",
 		);
 	});
 

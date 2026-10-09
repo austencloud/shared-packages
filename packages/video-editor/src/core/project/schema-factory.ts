@@ -31,7 +31,7 @@ export function orderedShape(
 	const extra = order.filter((key) => !Object.hasOwn(merged, key));
 	if (missing.length > 0 || extra.length > 0) {
 		throw new Error(
-			`shape order mismatch: missing ${missing.join(", ") || "none"}, extra ${extra.join(", ") || "none"}`,
+			`${extensionName} order mismatch: missing ${missing.join(", ") || "none"}, extra ${extra.join(", ") || "none"}`,
 		);
 	}
 	return Object.fromEntries(order.map((key) => [key, merged[key]!]));

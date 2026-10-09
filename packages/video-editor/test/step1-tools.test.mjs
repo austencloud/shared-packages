@@ -765,3 +765,53 @@ test("ascii.mjs leaves a file with no non-ASCII text unchanged", () => {
 	assert.equal(result.status, 0, result.stderr);
 	assert.equal(result.text, plain);
 });
+
+// Runs portable-tests.mjs over a fixture tka tree (STEP1_TKA), never over the real one.
+function portableTests(files) {
+	const root = tree(files);
+	const run = spawnSync(process.execPath, [stepScript("portable-tests.mjs")], {
+		encoding: "utf8",
+		env: { ...process.env, STEP1_TKA: root },
+	});
+	return { status: run.status, stderr: run.stderr, out: run.stdout.split(NL) };
+}
+
+test("portable-tests lists both tests that reach the package through a helper cycle, in either order", () => {
+	// h1 imports h2 before p, so a walk that starts at h1 meets h2 while h1 is still open.
+	const helpers = {
+		"tests/unit/p.ts": lines(
+			'import { core } from "@austencloud/video-editor/core";',
+			"export const p = core;",
+		),
+		"tests/unit/h1.ts": lines(
+			'import { h2 } from "./h2";',
+			'import { p } from "./p";',
+			"export const h1 = [h2, p];",
+		),
+		"tests/unit/h2.ts": lines('import { h1 } from "./h1";', "export const h2 = h1;"),
+	};
+	const testUsing = (helper) =>
+		lines(
+			'import { it } from "vitest";',
+			`import { ${helper} } from "./${helper}";`,
+			`it("uses ${helper}", () => void ${helper});`,
+		);
+	// The second pass swaps which test file imports which helper, so each helper is met first once.
+	for (const [first, second] of [
+		["h1", "h2"],
+		["h2", "h1"],
+	]) {
+		const run = portableTests({
+			...helpers,
+			"tests/unit/a.test.ts": testUsing(first),
+			"tests/unit/b.test.ts": testUsing(second),
+		});
+		assert.equal(run.status, 0, run.stderr);
+		for (const name of ["tests/unit/a.test.ts", "tests/unit/b.test.ts"]) {
+			assert.ok(
+				run.out.some((row) => row.startsWith(`${name}  `)),
+				`${name} is listed when a imports ${first} and b imports ${second}:${NL}${run.out.join(NL)}`,
+			);
+		}
+	}
+});

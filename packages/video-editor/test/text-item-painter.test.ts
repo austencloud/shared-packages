@@ -37,8 +37,8 @@ interface Mark {
  * A 2D context stand-in with a deterministic `measureText` (proportional to
  * character count and the current font size) so wrapping and shrink-to-fit
  * behave predictably, and a real save/restore stack for globalAlpha the way
- * a canvas has - see `post-painter-fade-and-cache.test.ts`'s recordingContext
- * for the same shape used against other painters.
+ * a canvas has. tka's `post-painter-fade-and-cache.test.ts` (it stays in tka, under
+ * tests/unit/media-composition/) has a recordingContext of the same shape for other painters.
  */
 class FakeContext {
 	marks: Mark[] = [];

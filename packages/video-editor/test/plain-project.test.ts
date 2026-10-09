@@ -5,7 +5,8 @@ import plain from "./fixtures/plain.project.json";
 
 // The fixture is tka's plain parity project with `sequenceId` renamed to the core's `subjectId`:
 // the plugin-free schema is strict and rejects the tka project-extension key. It is imported, not
-// read with fs, because import.meta.url is not a file URL under the jsdom environment.
+// read with fs, because Vite turns `new URL(..., import.meta.url)` into an http URL under jsdom,
+// which fs cannot read.
 const stored: unknown = plain;
 
 describe("plain project without a plugin", () => {

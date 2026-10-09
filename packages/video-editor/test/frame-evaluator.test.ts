@@ -11,7 +11,8 @@ if (!compiled) throw new Error("the plain fixture must compile");
 const { preset, durationSeconds } = compiled;
 
 // The plain fixture, by time: 0.2 has v1 alone; 2.5 has v1 and a text; 4.9 has v1, v2 and an image;
-// 7 has v2, a text and a faded image. The two videos are the only clips that read a take clock.
+// 7 has v2, a text and a faded image; 9.6 has v2, a not-yet-visible card and t2; 11 has the card
+// alone. The two videos are the only clips that read a take clock.
 const TIMES = [0.2, 2.5, 4.9, 7, 9.6, 11];
 
 const ALIGNMENT_KEYS = [
