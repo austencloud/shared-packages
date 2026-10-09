@@ -25,6 +25,7 @@ export * from "./music/music-grid.js";
 export * from "./project/keyframes.js";
 export * from "./project/normalize.js";
 export * from "./project/subject.js";
+export * from "./take-keys.js";
 export * from "./edit/context.js";
 export * from "./edit/project-edits.js";
 export * from "./edit/music-edits.js";

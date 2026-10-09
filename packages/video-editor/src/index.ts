@@ -24,3 +24,11 @@ export {
 	type DeviceStoreOptions,
 } from "./store/device-store.js";
 export { createHistoryStorage, type HistoryStorageOptions } from "./store/history-storage.js";
+export {
+	createVideoEditorState,
+	type LibraryTakeSource,
+	type PostEdit,
+	type StateExtension,
+	type VideoEditorState,
+	type VideoEditorStateOptions,
+} from "./state/video-editor-state.svelte.js";
