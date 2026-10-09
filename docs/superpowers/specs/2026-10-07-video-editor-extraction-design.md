@@ -59,8 +59,11 @@ feature-video folder backend (`/api/dev/*`, `feature-video-store.ts`,
 `scripts/feature-video/*`).
 
 **Deleted, not moved** (dead since the slots iteration):
-`state/media-composition-state.svelte.ts`, `composition-playback-adapter.ts`,
-`media-composition-preset-repository.ts`, `caption-painter.ts` and their tests.
+`composition-playback-adapter.ts`, `media-composition-preset-repository.ts`,
+`caption-painter.ts` and their tests. `state/media-composition-state.svelte.ts`
+stays until step 2: it is dead at run time but still supplies the types
+`CompositionSourceBinding` and `MediaCompositionState` to three components and
+the context file, so step 2 moves the binding type and then deletes it.
 
 ## Package anatomy
 

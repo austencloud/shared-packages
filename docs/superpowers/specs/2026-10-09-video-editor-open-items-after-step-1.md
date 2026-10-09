@@ -25,19 +25,37 @@ Applies at the start of steps 2, 3 and 4 and in every task after.
   `PostEditorCanvas`, `PostItemTool`, `PostStudioMediaLayer`,
   `PostStudioChoreoLayer` and `docs/development/post-studio-manifest-bridge.md`.
   A textual merge cannot resolve an edit to lines that now live in the package,
-  so each one is ported by hand. The first known case is main commit
-  `ad6afcaf73` (2026-10-08), which adds the card field `qrUrl` with
-  `POST_MAX_QR_URL_LENGTH`, `POST_QR_URL_RULE` and `isPostCardQrUrl`. It goes
-  into tka's card kind extension
-  (`tka:src/lib/shared/post-studio-plugin/item-kinds.ts`, with `"qrUrl"` added
-  to its `order` array where main's key order puts it), together with main's
-  `post-card-qr-url.test.ts`. The package's item and project schemas are
-  `.strict()` (`src/core/project/schema-factory.ts:53`, `:74`, `:88`), so a
-  draft saved on main with a card link fails to parse on the branch until that
-  port lands. Step 2 moves `PostItemTool` and the workspace, so the conflict
-  grows every day main keeps editing them. After the sync, rerun the gates
-  below, and run tka's `check:docs` if main has it (this branch predates that
-  script, so docs citing moved paths are unchecked until main arrives).
+  so each one is ported by hand. The first case is done: main commit
+  `ad6afcaf73` (2026-10-08) added the card field `qrUrl` with
+  `POST_MAX_QR_URL_LENGTH`, `POST_QR_URL_RULE` and `isPostCardQrUrl`, and the
+  merge `10ca855e29` (2026-10-09, main at `533b9d1355`) ported it into tka's
+  plugin: `tka:src/lib/shared/post-studio-plugin/card-qr.ts` holds the three
+  names, `item-kinds.ts` adds `qrUrl` to `tkaCardShape` with the card order
+  `kind`, `qrUrl`, `cardAppearance`, and `post-card-qr-url.test.ts` parses a
+  card through the bound `PostProjectSchema`. The package's item and project
+  schemas are `.strict()` (`src/core/project/schema-factory.ts:53`, `:74`,
+  `:88`), so any later main edit to a moved schema needs the same treatment.
+  Step 2 moves `PostItemTool` and the workspace, so the conflict grows every
+  day main keeps editing them. After a sync, rerun the gates below, and run
+  tka's `check:docs` if main has it.
+- **Guard the core per-kind schemas in tka.** The core exports strict
+  `PostCardItemSchema` and `PostVideoItemSchema` with no TKA fields. No tka
+  file imports them today, but a main sync can bring one in and the rewriter
+  maps it to the strict core name, so tka's `qrUrl`, `cardAppearance` and
+  `staffEffect` then fail at run time while type-checking cleanly. List both
+  names as forbidden in tka in `tests/unit/video-editor-bound-only.test.ts`;
+  if tka needs a per-kind schema, export one from `bound.ts`, taken from the
+  bound union. (Step 1 re-review, 2026-10-09.)
+- **Fix the type-gate tooling before relying on it again.** After the main
+  merge, `scripts/step1/check-intersection.mjs` printed `new 9` against a
+  baseline taken in the primary checkout: eight keys differ only by the
+  worktree junction prefix `../../../tka-platform/` on pnpm-store paths, and
+  one (`Viewer3DScene.svelte:961:23`) is the same error with a union member
+  printed in another order. Normalize each path up to its last `node_modules/`
+  before comparing (lines 19-20), compare error text with union members sorted,
+  and take baselines from a clean main worktree so both runs share one
+  environment (the primary's 951 errors against the branch's 625 cluster where
+  generated SvelteKit types are stale, not in branch code).
 - **Gates to rerun after a sync and in any task that touches the plugin
   folder.** Expected results at the two commits above:
   - Parity,
@@ -213,9 +231,14 @@ typed but unread. Settle each before anything wires it.
   on its inputs, never per frame.
   - tka `media-composition-state.svelte.ts` (324-337) builds a second, different
     alignment (`timeMap`, `startPlacementDuration`, `mediaTimeOffsetSeconds`, no
-    clocks) that the design must cover. The spec lists this file under "Deleted,
-    not moved", yet it still exists at `7b1deab32c`, so first check what reads
-    it.
+    clocks). It is dead at run time (re-review, 2026-10-09): every production
+    import is type-only (`CompositionSourceBinding`, `MediaCompositionState`),
+    `setMediaCompositionContext` has no caller, so `PostStudioMediaLayer.svelte`
+    line 121 always gets null, and `createMediaCompositionState` runs only in
+    its own test. The alignment design need not cover it. Step 2 task: move
+    `CompositionSourceBinding` to where its readers live, then delete the state
+    file, its context file, the null branch in `PostStudioMediaLayer` and its
+    test.
   - Before wiring, add an equivalence case to `alignment.test.ts`: the bound
     wrapper with the editor's literal against the package evaluator with the
     provider, deep-equal layers at a few timestamps.
