@@ -169,6 +169,66 @@ parse and normalize to the same object as today; a test loads real drafts from
 `~/.tka/post-studio-drafts` fixtures copied into the test tree. Schema version
 stays 2. Unknown kinds fail parsing with a message naming the kind.
 
+### Step 1 as built (2026-10-08)
+
+The plugin object in `src/plugin.ts` has these members: `id`, `itemKinds` (each
+with `kind`, `schema`, `label`, `defaultBox`, `compile` and the optional
+`transitionVisual`, `placement` and `ownsIntroKeys`), `kindExtensions` (extra
+fields on a core kind), `projectExtension` (a zod shape plus an `order` array
+naming every merged key, so parsed objects keep today's key order), `normalize`
+(`before`, `after`), `compileHooks` (`begin`, `footageIntro`,
+`videoCompanions`, `regionSpan`), `compileOutputs`, `isMediaUrl`, `alignment`,
+`painters` and `surfaces`. The last three are typed but unread: the host hands
+an alignment to the evaluator, painter factories to `createPainterRegistry` and
+surfaces to the compositor and exporter, and step 2 decides whether they stay
+plugin members. `presets`, `looks`, `modes`, `canvasOverlays` and the kind's
+tool panel, lane renderer and media sublayer wait for step 2. Against the
+sketch above, `projectExtension` is `{ shape, order }` rather than a bare shape,
+`itemKinds` is readonly, and `kindExtensions`, `normalize`, `compileHooks`,
+`compileOutputs` and `isMediaUrl` are additions.
+
+tka binds the plugin in `post-studio-plugin/bound.ts`, which exports
+`tkaPlugin`, `PostProjectSchema`, `PostMusicSchema`, `defaultBoxFor`,
+`normalizeProject`, `compilePostProject`, `createEmptyPostProject`,
+`evaluatePresetFrame` and `evaluatePresetLayers`, so call sites change an
+import path and not a call shape. The bound-only test lets only `bound.ts`
+import `createProjectSchema`, `createEmptyPostProject`, `defaultBoxFor`,
+`normalizeProject` and `compilePostProject` from the package core, and
+`evaluatePresetLayers` and `evaluatePresetFrame` from the package render
+entry, because each takes the plugin or the package's alignment as an argument;
+a whole-module import is caught too. The value-closure test keeps the plugin
+index out of what `bound.ts` loads by value, because the index re-exports
+`bound.ts` and an import back is a load-time cycle.
+
+Parity is draw-call parity in jsdom, not pixel parity (step 1 plan,
+"Parity-test decision"): jsdom has no pixels and the DCK draft's footage is not
+on disk. For two fixtures, the DCK draft and a plugin-free project, tka's
+`tests/unit/video-editor-parity.test.ts` hashes (a) the normalized project JSON,
+(b) the compiled preset JSON and, per timestamp, (c) the evaluated layers and
+(d) the log of every call on a recording 2D context, with video, images and DOM
+captures replaced by stand-ins. The committed "before" hashes and 12 draw logs
+come from the tree before the extraction. `PARITY_WRITE=1` regenerates them and
+is set neither in CI nor by an agent.
+
+Corrections from the Task 6 review. The `auto` motion key schema (`tunnel`,
+`handoff`) is core vocabulary, not a tka cut. The core `createEmptyPostProject`
+takes no plugin; it spreads the extension fields right after `schemaVersion`.
+The core-only `Post{Video,Image,Card,Text}ItemSchema` exports keep their old
+names but reject tka fields. `POST_BOX` carries the strip boxes from
+`BREAKDOWN_GEOMETRY`. From the Task 4 review: `encoder/codec.ts` computes
+`IS_MOBILE` in an IIFE that now also runs on the main thread; it is guarded by
+try/catch and must not become an unguarded `navigator` read.
+
+The package suite is 23 vitest files with 176 tests plus 34 node tests of the
+step 1 tools. Its Task 13 additions came from earlier reviews: the encoder
+entry test (Task 4), the schema-factory messages and comment wraps (Task 6b),
+the frame-evaluator test (Task 9), the painter-registry test (Task 10), and the
+`PreviewMediaReading` rename, the store options rename, the comment fixes and
+the node-entry test (Task 11). Five package-only tests stay in tka until the
+package has a setup file or browser mode (they need `Blob.prototype.arrayBuffer`
+and canvas `getContext("2d")`); two of them are in the export smoke, which is
+now five files.
+
 ## Render path
 
 - `compileProject(project, context, plugin?)`: core regions and clips; each
