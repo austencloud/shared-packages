@@ -144,6 +144,14 @@ export interface MediaLibrary {
 saveProject, timing load and save, history load and save) with the owner id
 passed in instead of read from Firebase.
 
+Step 2A as planned (2026-10-09): timing load and save leave the store port.
+Take timing is a tka concern, so it lives in a tka state extension beside the
+package state, and `VideoEditorStore` carries `openProject`, `saveProject`,
+`backupBeforeImport`, `loadHistory` and `saveHistory` only, all synchronous.
+The Ringmaster store (step 3) prefetches Firestore into a device cache before
+the editor mounts and syncs in the background, so the port stays synchronous.
+See the step 2A plan, Risks R4.
+
 ## Plugin contract
 
 ```ts
