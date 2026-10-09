@@ -566,7 +566,7 @@ In the package:
   - no spike.
 - Delete `scripts/step1/` except `forbidden-imports.mjs`. Make that one path-relative, with no absolute E: roots, and run it from the package `test` or `check` script. `ascii.mjs` can stay only if it is wired into `check`.
 - Delete most of `test/step1-tools.test.mjs`; keep the forbidden-imports cases as `test/forbidden-imports.test.mjs`.
-- Delete the spike: `scripts/spike/` (keep `cdp.mjs` only if step 2's browser tests use it), `createSpikeWorker`, the spike message types, and their exports in `src/index.ts` and `src/workers/index.ts`. Move `worker-proof-preview.mjs` in as the kept production-build proof.
+- Delete the spike: `scripts/spike/` (keep `cdp.mjs` only if step 2's browser tests use it), `createSpikeWorker`, the spike message types, and their exports in `src/index.ts` and `src/workers/index.ts`. Keep `worker-proof-preview.mjs` and `trail-parity-proof.mjs` (already in `scripts/spike/`) as the production-build and parity proofs; move them to `scripts/proofs/` with `cdp.mjs` when the spike folder goes.
 - Add a CI test script. Run the trail export parity harness in a GPU Chrome on the branch and on main before the merge.
 
 ### Other step 4 items
@@ -610,10 +610,10 @@ In the package:
 - **Keep the preview worker proof.** `worker-proof-preview.mjs` is the proof
   that passes on a production build (the reply is
   `{"type":"error","reason":"Error fetching http://127.0.0.1:18444/missing.mp4: 404 Not Found"}`).
-  Its only copy is
-  `C:/Users/Austen/AppData/Local/Temp/claude/video-editor-step1/worker-proof-preview.mjs`,
-  a Temp path that can be cleaned: copy it into the package `scripts/` folder at
-  the next opportunity instead of waiting for step 4. The step 0 spike worker
+  It lives at `scripts/spike/worker-proof-preview.mjs` beside
+  `scripts/spike/trail-parity-proof.mjs` (the trail parity driver), both kept in
+  commit 7d899e6 on 2026-10-09; step 4 moves them out of the spike folder
+  before deleting it. The step 0 spike worker
   proof cannot pass on a production build, because the only importer of the
   package root is `tka:src/routes/test/video-editor-spike/+page.svelte` and
   production builds empty `src/routes/test/` (`tka:src/config/feature-flags.ts`,
