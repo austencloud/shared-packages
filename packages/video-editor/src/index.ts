@@ -16,3 +16,11 @@ export type {
 } from "./store/types.js";
 export { EN, type StringKey } from "./strings/en.js";
 export { englishString, formatString, translatorFor, type Translate } from "./strings/translate.js";
+export {
+	createDeviceStore,
+	deviceStoreKeys,
+	type DeviceStore,
+	type DeviceStoreKeys,
+	type DeviceStoreOptions,
+} from "./store/device-store.js";
+export { createHistoryStorage, type HistoryStorageOptions } from "./store/history-storage.js";
