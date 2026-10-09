@@ -5,7 +5,6 @@ import type { NewItemBase, NewOverlaySpec, PostItemPatch } from "./core/edit/pro
 import type { PostTake } from "./core/plan/post-plan.js";
 import type { CoreItemKind, PostItem, PostProject } from "./core/project/item-kinds.js";
 import type { PostBox } from "./core/project/schema.js";
-import type { AlignmentProvider } from "./render/alignment.js";
 import type { PainterFactory } from "./render/painter-registry.js";
 import type { SurfaceCapture } from "./render/surfaces.js";
 
@@ -76,12 +75,6 @@ export interface VideoEditorPlugin {
 	 * throws.
 	 */
 	compileOutputs?: Readonly<Record<string, () => unknown>>;
-	/**
-	 * Builds the alignment the frame evaluator reads: how the project's clock
-	 * maps onto the plugin's repeating sequence. The evaluator never builds
-	 * one; the host calls this and passes the result in.
-	 */
-	alignment?: AlignmentProvider;
 	/**
 	 * Painters for the plugin's painted roles, asked in order after the core
 	 * factories; a factory returns null for a role that is not its own.
