@@ -1,0 +1,15 @@
+{
+	"moves": [
+		{ "task": 5, "from": "$lib/shared/media-composition/services/edit-copy-lookup", "to": "render/edit-copy-lookup.ts", "entry": "@austencloud/video-editor/render" },
+		{ "task": 7, "from": "$lib/shared/media-composition/domain/post-music-edits", "to": "core/edit/music-edits.ts", "entry": "@austencloud/video-editor/core" },
+		{ "task": 7, "from": "$lib/shared/media-composition/domain/post-project-mirror", "to": "core/edit/mirror.ts", "entry": "@austencloud/video-editor/core" },
+		{ "task": 12, "from": "$lib/shared/media-composition/state/post-video-previews.svelte", "to": "state/video-previews.svelte.ts", "entry": "@austencloud/video-editor" },
+		{ "task": 12, "from": "$lib/shared/media-composition/services/post-tab-sync", "to": "state/tab-sync.ts", "entry": "@austencloud/video-editor" }
+	],
+	"splits": [
+		{ "task": 6, "from": "$lib/shared/media-composition/domain/post-project-edits", "to": "core/edit/project-edits.ts", "routes": ["$lib/shared/media-composition/domain/post-project-edits", "@austencloud/video-editor/core"] },
+		{ "task": 9, "from": "$lib/shared/media-composition/services/post-editor-history-store", "to": "store/history-storage.ts", "routes": ["$lib/shared/media-composition/services/post-editor-history-store", "@austencloud/video-editor"] },
+		{ "task": 9, "from": "$lib/shared/media-composition/services/post-project-store", "to": "store/device-store.ts", "routes": ["$lib/shared/media-composition/services/post-project-store", "@austencloud/video-editor"] },
+		{ "task": 10, "from": "$lib/shared/media-composition/state/post-editor-state.svelte", "to": "state/video-editor-state.svelte.ts", "routes": ["$lib/shared/media-composition/state/post-editor-state.svelte", "@austencloud/video-editor"] }
+	]
+}

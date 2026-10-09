@@ -3,8 +3,8 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { spawnSync } from "node:child_process";
-import { fileURLToPath } from "node:url";
+import { execFileSync, spawnSync } from "node:child_process";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { barrelImports, definersIn, placeText } from "../scripts/step1/lib.mjs";
 
 const NL = String.fromCharCode(10);
@@ -814,4 +814,72 @@ test("portable-tests lists both tests that reach the package through a helper cy
 			);
 		}
 	}
+});
+
+// The type gate: a worktree prints node_modules files through the junction as
+// ../../../tka-platform/node_modules/..., and TypeScript may print a union, or the properties of an
+// object type in it, in either order.
+test("check-intersection ignores the junction prefix, union order and property order", () => {
+	const dir = fs.mkdtempSync(path.join(os.tmpdir(), "intersection-"));
+	roots.push(dir);
+	const baseline = path.join(dir, "baseline.txt");
+	const after = path.join(dir, "after.txt");
+	fs.writeFileSync(
+		baseline,
+		[
+			"node_modules/@types/three/index.d.ts:10:2",
+			`Error: Type '"b" | "a" | Foo<"x" | "y">' is not assignable to type 'C'. (ts2322)`,
+			"src/lib/a.ts:1:1",
+			`Error: Argument of type '() => void | number' is not assignable. (ts2345)`,
+			"src/lib/b.svelte:5:1",
+			`Error: Type '{ "0": { e: E; }; "*"?: undefined; } | { "0"?: undefined; "*": { e: "a" | "b"; }; }' is not assignable to type 'T'. (ts2322)`,
+			"Found 3 errors",
+		].join(NL),
+	);
+	fs.writeFileSync(
+		after,
+		[
+			"../../../tka-platform/node_modules/@types/three/index.d.ts:12:4",
+			`Error: Type 'Foo<"x" | "y"> | "a" | "b"' is not assignable to type 'C'. (ts2322)`,
+			"src/lib/a.ts:3:1",
+			`Error: Argument of type '() => void | number' is not assignable. (ts2345)`,
+			"src/lib/b.svelte:9:1",
+			`Error: Type '{ "*": { e: "a" | "b"; }; "0"?: undefined; } | { "*"?: undefined; "0": { e: E; }; }' is not assignable to type 'T'. (ts2322)`,
+			"Found 3 errors",
+		].join(NL),
+	);
+	const out = execFileSync(
+		process.execPath,
+		[stepScript("check-intersection.mjs"), baseline, after],
+		{
+			encoding: "utf8",
+		},
+	);
+	assert.match(out, /baseline 3, after 3, new 0/);
+});
+
+test("STEP_MOVES selects the move list", () => {
+	const dir = fs.mkdtempSync(path.join(os.tmpdir(), "moves-"));
+	roots.push(dir);
+	const list = path.join(dir, "moves.json");
+	fs.writeFileSync(
+		list,
+		JSON.stringify({
+			moves: [
+				{ task: 1, from: "$lib/x", to: "core/x.ts", entry: "@austencloud/video-editor/core" },
+			],
+			splits: [],
+		}),
+	);
+	const lib = pathToFileURL(stepScript("lib.mjs")).href;
+	const out = execFileSync(
+		process.execPath,
+		[
+			"--input-type=module",
+			"-e",
+			`const m = await import(${JSON.stringify(lib)}); console.log(m.table.moves.length, m.MOVES === process.env.STEP_MOVES);`,
+		],
+		{ encoding: "utf8", env: { ...process.env, STEP_MOVES: list } },
+	);
+	assert.equal(out.trim(), "1 true");
 });

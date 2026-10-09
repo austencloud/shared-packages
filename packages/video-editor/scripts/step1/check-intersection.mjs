@@ -3,7 +3,9 @@
 // Compares two logs of tka's `npm run check:fast`. svelte-fast-check prints each diagnostic as a
 // colored "path:line:col" line followed by an "Error: message (tsNNNN)" line; the two are joined
 // into one key of path, message and TS code, with line and column numbers stripped and pnpm store
-// folders reduced to name@version, and each key is counted.
+// folders reduced to name@version, and each key is counted. Paths are cut to their last
+// node_modules/, the members of every quoted union are sorted, and so are the top-level properties
+// of each object-type member, so a junction path or a reordered union is not a new error.
 //
 // Exit 1 when a key appears more often after than before (each NEW line shows both counts).
 // Exit 2 when the after log cannot be trusted: a log lacks the "Found N error(s)" summary, a
@@ -16,8 +18,52 @@ const BACKSLASH = String.fromCharCode(92);
 const ANSI = new RegExp(`${ESC}\\[[0-9;]*m`, "g");
 const PNPM_STORE = /node_modules[/][.]pnpm[/]((?:@[^/+]+[+])?[^/@]+)@([^/_]+)(?:_[^/]*)?/g;
 
+// Everything up to the last node_modules/ goes, so a worktree's junction path
+// (../../../tka-platform/node_modules/...) and the primary's (node_modules/...) key alike.
+const LAST_NODE_MODULES = /^.*node_modules[/]/;
+
+/** The pieces of text between a separator, split only where it sits outside <>, (), [] and {}. */
+function splitTop(text, separator) {
+	const parts = [];
+	let depth = 0;
+	let start = 0;
+	for (let i = 0; i < text.length; i++) {
+		const c = text[i];
+		if ("<([{".includes(c)) depth++;
+		else if (")]}".includes(c) || (c === ">" && text[i - 1] !== "=")) depth--;
+		else if (depth === 0 && text.startsWith(separator, i)) {
+			parts.push(text.slice(start, i));
+			start = i + separator.length;
+			i = start - 1;
+		}
+	}
+	parts.push(text.slice(start));
+	return parts;
+}
+
+/** An object type's properties sorted, so "{ b: 1; a: 2; }" and "{ a: 2; b: 1; }" key alike. */
+function sortProperties(member) {
+	if (!member.startsWith("{ ") || !member.endsWith(" }")) return member;
+	const inner = member.slice(2, -2);
+	const tail = inner.endsWith(";") ? ";" : "";
+	const props = splitTop(tail ? inner.slice(0, -1) : inner, "; ");
+	return `{ ${props.sort().join("; ")}${tail} }`;
+}
+
+/** A union's members sorted, and the properties of each object member sorted too. */
+function sortUnion(type) {
+	return splitTop(type, " | ").map(sortProperties).sort().join(" | ");
+}
+
 const keyOf = (location, message) =>
-	`${location.split(BACKSLASH).join("/").replace(PNPM_STORE, "$1@$2")} ${message}`
+	`${location
+		.split(BACKSLASH)
+		.join("/")
+		.replace(PNPM_STORE, "$1@$2")
+		.replace(
+			LAST_NODE_MODULES,
+			"node_modules/",
+		)} ${message.replace(/'([^']*)'/g, (_, type) => `'${sortUnion(type)}'`)}`
 		.replace(/:[0-9]+:[0-9]+/g, "")
 		.replace(/[(][0-9]+,[0-9]+[)]/g, "")
 		.replace(/[ ]+/g, " ")

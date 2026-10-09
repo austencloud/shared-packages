@@ -13,7 +13,12 @@ export const ENTRIES = {
 	"@austencloud/video-editor/render": `${PKG}/src/render/index.ts`,
 	"@austencloud/video-editor/encoder": `${PKG}/src/encoder/index.ts`,
 };
-export const table = JSON.parse(fs.readFileSync(new URL("./moves.json", import.meta.url), "utf8"));
+// STEP_MOVES picks the move list: a path relative to this folder (./moves.json is step 1,
+// ../step2/moves.json is step 2A) or an absolute path (the node tests use one).
+export const MOVES = process.env.STEP_MOVES ?? "./moves.json";
+export const table = JSON.parse(
+	fs.readFileSync(path.isAbsolute(MOVES) ? MOVES : new URL(MOVES, import.meta.url), "utf8"),
+);
 export const slash = (p) => p.split(path.sep).join("/");
 
 export function taskArg() {
