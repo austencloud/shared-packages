@@ -1,6 +1,6 @@
 import { POST_FRAME_RATE } from "../core/project/schema.js";
 import { musicSpan, trackSecondsAt, type MusicPlacement } from "../core/music/music-grid.js";
-import type { PreviewClockMedia, PreviewVideoState } from "./preview-clock.js";
+import type { PreviewClockMedia, PreviewMediaReading } from "./preview-clock.js";
 import type { PostAudioSegment } from "../core/music/audio-plan.js";
 
 /**
@@ -77,7 +77,7 @@ export function musicClockMedia(
 	music: MusicPlacement,
 	segment: PostAudioSegment | null,
 	postSeconds: number,
-	read: () => PreviewVideoState,
+	read: () => PreviewMediaReading,
 ): PreviewClockMedia | null {
 	if (!musicSoundsAt(segment, postSeconds)) return null;
 	return {

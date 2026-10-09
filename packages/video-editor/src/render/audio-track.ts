@@ -61,11 +61,10 @@ export interface BuildMixedAudioTrackInput {
  * Fetches and decodes whatever takes a caller's own segments need, mixes
  * them, and encodes the result as one WAV blob already laid out on the
  * segments' own clock from 0. That's what lets it slot straight into
- * `PostStudioExporter`'s existing single-track `originalAudioUrl` /
- * `originalAudioStartSeconds: 0` pair instead of needing the encoder to
- * accept several original-audio sources - see the finding in the
- * `core/music/audio-plan.ts` docblock and the task report for the
- * `UrlSource`/blob-URL check.
+ * `exportPostStudioVideo`'s (render/post-exporter.ts) existing single-track
+ * `originalAudioUrl` / `originalAudioStartSeconds: 0` pair instead of needing
+ * the encoder to accept several original-audio sources - see the finding in
+ * the `core/music/audio-plan.ts` docblock.
  *
  * This is the shared plumbing behind both `buildPostAudioTrack` (the v1 act
  * list, via `planPostAudio`) and the v2 timeline (via `planProjectAudio`),

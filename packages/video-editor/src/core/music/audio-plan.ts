@@ -6,7 +6,7 @@ import type { CompiledPostProject } from "../compile/compiler.js";
  * The post's own audio track, mixed once and exported alongside the picture
  * instead of asking the encoder to mux several original tracks at once (it
  * only ever accepts one `originalAudio` source - see
- * `post-audio-track.ts` for why that fits the encoder as-is).
+ * `render/audio-track.ts` for why that fits the encoder as-is).
  *
  * Rule: a full-speed act carries its own take's sound, placed at the act's
  * spot in the post and trimmed to the act's own source span. A slowed act's

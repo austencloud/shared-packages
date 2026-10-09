@@ -12,15 +12,17 @@ import {
 /**
  * Joins a base shape and an extension in one key order, so parsed objects keep the order a host
  * names. An extension adds keys and never replaces one: a key the base already has throws, so an
- * extension cannot drop the core's constraints on `tracks` or `id`.
+ * extension cannot drop the core's constraints on `tracks` or `id`. `extensionName` names the
+ * extension in that error, so a host can tell which one collided.
  */
 export function orderedShape(
 	base: z.ZodRawShape,
 	extension: z.ZodRawShape | undefined,
 	order: readonly string[] | undefined,
+	extensionName = "shape extension",
 ): z.ZodRawShape {
 	for (const key of Object.keys(extension ?? {})) {
-		if (Object.hasOwn(base, key)) throw new Error(`shape extension overrides core key "${key}"`);
+		if (Object.hasOwn(base, key)) throw new Error(`${extensionName} overrides core key "${key}"`);
 	}
 	const merged: z.ZodRawShape = { ...base, ...extension };
 	if (!order) return merged;
@@ -40,7 +42,14 @@ export function createProjectSchema(plugin?: VideoEditorPlugin): z.ZodType<PostP
 		(kind) => {
 			const extension = plugin?.kindExtensions?.[kind];
 			const schema = z
-				.object(orderedShape(CORE_ITEM_SHAPES[kind], extension?.shape, extension?.order))
+				.object(
+					orderedShape(
+						CORE_ITEM_SHAPES[kind],
+						extension?.shape,
+						extension?.order,
+						`kind extension "${kind}"`,
+					),
+				)
 				.strict();
 			// Today's PostVideoItemSchema is .strict().refine(...); keep the refine on the video kind.
 			if (kind !== "video") return schema;
@@ -56,7 +65,9 @@ export function createProjectSchema(plugin?: VideoEditorPlugin): z.ZodType<PostP
 		error: (issue) => {
 			// Something that is not an object has no kind to name; zod's own message applies.
 			if (typeof issue.input !== "object" || issue.input === null) return undefined;
-			return `Unknown post item kind "${String((issue.input as { kind?: unknown }).kind)}"`;
+			const kind = (issue.input as { kind?: unknown }).kind;
+			if (typeof kind !== "string") return "Post item has no kind";
+			return `Unknown post item kind "${kind}"`;
 		},
 	});
 	// PostTrackSchema and PostProjectSchema are both .strict() today, and a project has a track.
@@ -71,6 +82,7 @@ export function createProjectSchema(plugin?: VideoEditorPlugin): z.ZodType<PostP
 				},
 				plugin?.projectExtension?.shape,
 				plugin?.projectExtension?.order,
+				"project extension",
 			),
 		)
 		.strict()

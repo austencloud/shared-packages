@@ -33,12 +33,12 @@ class PreviewDatabase extends Dexie {
 	}
 }
 
-/** Byte limits for the device cache. A test lowers them; the app keeps the defaults. */
-export interface PreviewVideoLocalStoreLimits {
+/** Options for the device cache. A test lowers the byte limits; the app keeps the defaults. */
+export interface PreviewVideoLocalStoreOptions {
 	/** Bytes the whole device cache may hold. Defaults to `MAX_PREVIEW_CACHE_BYTES`. */
-	maxCacheBytes?: number;
+	maxCacheBytes?: number | undefined;
 	/** Bytes one copy may take. Defaults to `MAX_PREVIEW_VIDEO_BYTES`. */
-	maxVideoBytes?: number;
+	maxVideoBytes?: number | undefined;
 }
 
 export class PreviewVideoLocalStore implements PreviewVideoStore {
@@ -46,9 +46,9 @@ export class PreviewVideoLocalStore implements PreviewVideoStore {
 	private readonly maxCacheBytes: number;
 	private readonly maxVideoBytes: number;
 
-	constructor(limits: PreviewVideoLocalStoreLimits = {}) {
-		this.maxCacheBytes = limits.maxCacheBytes ?? MAX_PREVIEW_CACHE_BYTES;
-		this.maxVideoBytes = limits.maxVideoBytes ?? MAX_PREVIEW_VIDEO_BYTES;
+	constructor(options: PreviewVideoLocalStoreOptions = {}) {
+		this.maxCacheBytes = options.maxCacheBytes ?? MAX_PREVIEW_CACHE_BYTES;
+		this.maxVideoBytes = options.maxVideoBytes ?? MAX_PREVIEW_VIDEO_BYTES;
 	}
 
 	private db() {

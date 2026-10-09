@@ -1,11 +1,11 @@
-export interface PreviewVideoState {
+export interface PreviewMediaReading {
 	currentTime: number;
 	ready: boolean;
 	ended: boolean;
 }
 
 export interface PreviewVideoController {
-	read: () => PreviewVideoState;
+	read: () => PreviewMediaReading;
 	align: () => void;
 	hold: (held: boolean) => void;
 	/**
@@ -16,7 +16,7 @@ export interface PreviewVideoController {
 	follow?: (leadSeconds: number | null) => void;
 }
 
-export interface PreviewClockMedia extends PreviewVideoState {
+export interface PreviewClockMedia extends PreviewMediaReading {
 	targetTime: number;
 	playbackRate: number;
 }

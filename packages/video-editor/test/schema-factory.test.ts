@@ -4,6 +4,7 @@ import {
 	createEmptyPostProject,
 	createProjectSchema,
 	orderedShape,
+	type VideoEditorPlugin,
 } from "../src/core/index.js";
 
 const base = { a: z.string(), b: z.number() };
@@ -73,9 +74,40 @@ describe("createProjectSchema without a plugin", () => {
 		expect(messages(withItem({ kind: "animation" }))).toContain('Unknown post item kind "animation"');
 	});
 
+	it("says an item has no kind when the kind is missing or not a string", () => {
+		for (const item of [{}, { kind: 3 }]) {
+			const text = messages(withItem(item));
+			expect(text).toContain("Post item has no kind");
+			expect(text).not.toContain("undefined");
+		}
+	});
+
 	it("leaves zod's own message for an item that is not an object", () => {
 		const text = messages(withItem(42));
 		expect(text).not.toContain("Unknown post item kind");
-		expect(text.length).toBeGreaterThan(0);
+		expect(text).not.toContain("Post item has no kind");
+		expect(text).toContain("expected object");
+	});
+});
+
+describe("createProjectSchema extension collisions", () => {
+	const plugin = (fields: Partial<VideoEditorPlugin>): VideoEditorPlugin => ({
+		id: "collide",
+		itemKinds: [],
+		...fields,
+	});
+
+	it("names the kind extension that overrides a core item key", () => {
+		const collide = plugin({ kindExtensions: { video: { shape: { id: z.string() } } } });
+		expect(() => createProjectSchema(collide)).toThrow(
+			'kind extension "video" overrides core key "id"',
+		);
+	});
+
+	it("names the project extension that overrides a core project key", () => {
+		const collide = plugin({ projectExtension: { shape: { tracks: z.array(z.string()) } } });
+		expect(() => createProjectSchema(collide)).toThrow(
+			'project extension overrides core key "tracks"',
+		);
 	});
 });
