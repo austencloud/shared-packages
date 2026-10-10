@@ -213,6 +213,46 @@ describe("transitionCommand undo with failed writes", () => {
     expect(store.get("d")).toEqual(["elsewhere"]);
   });
 
+  it("redoes every id that was actually undone across a retried undo, and leaves stale ids alone", async () => {
+    const store = memoryTransitionStore<string[]>([["id1", []], ["id2", []], ["id3", []]], sameList);
+    const history = createHistory();
+    const command = tagCommand(
+      store,
+      ["id1", "id2", "id3"].map((id) => ({ id, before: [], after: ["fire"] }))
+    );
+    await history.run(command);
+    store.set("id3", ["elsewhere"]);
+    store.failNext("id2");
+    expect((await history.undo()).status).toBe("failed");
+    expect(command.transitions.map((t) => t.id)).toEqual(["id2"]);
+    // The retry undoes id2 and finishes cleanly; the entry moves to redo.
+    expect(await history.undo()).toEqual({ status: "done", label: "Add Fire" });
+    expect(history.state.canRedo).toBe(true);
+    expect(command.transitions.map((t) => t.id)).toEqual(["id1", "id2"]);
+    expect(await history.redo()).toEqual({ status: "done", label: "Add Fire" });
+    expect(store.get("id1")).toEqual(["fire"]);
+    expect(store.get("id2")).toEqual(["fire"]);
+    expect(store.get("id3")).toEqual(["elsewhere"]);
+  });
+
+  it("moves to redo as partial when a retry finds only stale ids but earlier attempts undid some", async () => {
+    const store = memoryTransitionStore<string[]>([["a", []], ["b", []]], sameList);
+    const history = createHistory();
+    const command = tagCommand(store, [
+      { id: "a", before: [], after: ["fire"] },
+      { id: "b", before: [], after: ["fire"] },
+    ]);
+    await history.run(command);
+    store.failNext("b");
+    await history.undo();
+    store.set("b", ["elsewhere"]);
+    const result = await history.undo();
+    expect(result.status).toBe("partial");
+    expect(history.state.canUndo).toBe(false);
+    expect(history.state.canRedo).toBe(true);
+    expect(command.transitions.map((t) => t.id)).toEqual(["a"]);
+  });
+
   it("keeps the execute rules: trim to applied on partial, skipped when only stale and failed", async () => {
     const store = memoryTransitionStore<string[]>([["a", []], ["b", []], ["c", ["elsewhere"]]], sameList);
     store.failNext("b");

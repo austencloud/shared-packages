@@ -56,14 +56,15 @@ export function isEditableTarget(target: EventTarget | null): boolean {
 
 /**
  * Which action a keydown asks for, or null. Ignores keys pressed while an input
- * method is composing. A key that is not an ASCII letter (a Cyrillic or Greek
- * layout) falls back to the physical key, so Ctrl+Z stays Ctrl+Z.
+ * method is composing. A single non-ASCII character (a Cyrillic or Greek
+ * layout) falls back to the physical key, so Ctrl+Z stays Ctrl+Z. An ASCII
+ * key is taken as typed: on Dvorak the physical Z key types ";" and is not undo.
  */
 export function chord(event: KeyboardEvent): "undo" | "redo" | null {
   if (!(event.ctrlKey || event.metaKey) || event.altKey) return null;
   if (event.isComposing || event.keyCode === 229) return null;
   let key = (event.key ?? "").toLowerCase();
-  if (!/^[a-z]$/.test(key)) {
+  if (key.length === 1 && key.charCodeAt(0) > 127) {
     if (event.code === "KeyZ") key = "z";
     else if (event.code === "KeyY") key = "y";
   }

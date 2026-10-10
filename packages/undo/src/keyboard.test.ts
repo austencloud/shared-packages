@@ -74,7 +74,8 @@ describe("chord with input methods and other layouts", () => {
   });
 
   it("trusts a Latin key over the physical key", () => {
-    // Dvorak puts the Z letter on another physical key.
+    // Dvorak: the physical Z key types ";", which is not undo.
+    expect(chord(keydown({ key: ";", code: "KeyZ", ctrlKey: true }))).toBeNull();
     expect(chord(keydown({ key: "z", code: "Semicolon", ctrlKey: true }))).toBe("undo");
     expect(chord(keydown({ key: "q", code: "KeyZ", ctrlKey: true }))).toBeNull();
   });

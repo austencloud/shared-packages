@@ -75,6 +75,10 @@ export function isTransitionCommand<V = unknown>(command: Command): command is T
 export function transitionCommand<V>(options: TransitionCommandOptions<V>): TransitionCommandHandle<V> {
   const equals = options.equals ?? Object.is;
   let transitions = collapseDuplicates(options.transitions, equals);
+  // Transitions an earlier undo attempt took back before another id failed. A
+  // retried undo that finally finishes restores them to `transitions`, so redo
+  // re-applies everything that was actually undone.
+  let undoneSoFar: Transition<V>[] = [];
 
   async function apply(direction: "execute" | "undo"): Promise<Outcome> {
     const changes: TransitionChange<V>[] = transitions.map((t) =>
@@ -106,8 +110,17 @@ export function transitionCommand<V>(options: TransitionCommandOptions<V>): Tran
       // The entry stays on the undo stack and covers only the ids that did not
       // write, so one more undo retries exactly those. Stale ids are never rewritten.
       const retry = new Set(results.filter((r) => r.status === "failed").map((r) => r.id));
+      const done = new Set(applied.map((r) => r.id));
+      undoneSoFar = [...undoneSoFar, ...transitions.filter((t) => done.has(t.id))];
       transitions = transitions.filter((t) => retry.has(t.id));
       throw new Error(options.describe(report));
+    }
+    if (direction === "undo" && undoneSoFar.length > 0) {
+      // A retry that ends without a failure: the entry now covers every id any attempt undid.
+      const done = new Set(applied.map((r) => r.id));
+      transitions = [...undoneSoFar, ...transitions.filter((t) => done.has(t.id))];
+      undoneSoFar = [];
+      return applied.length === changes.length ? undefined : { kind: "partial", message: options.describe(report) };
     }
     if (applied.length === changes.length) return undefined;
     if (applied.length > 0) {
