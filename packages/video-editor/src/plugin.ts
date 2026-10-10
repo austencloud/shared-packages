@@ -144,6 +144,8 @@ export interface ToolPanelProps {
 	/** The active tool id. */
 	tool: string;
 	locked: boolean;
+	/** Whether an appearance panel fills its parent; the side placement passes true. */
+	appearanceFill?: boolean;
 }
 
 /** A part of an item that the timeline draws as its own block and the canvas selects on its own (tka: an animation's opening tunnel). */
