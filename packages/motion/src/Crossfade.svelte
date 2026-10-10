@@ -242,6 +242,12 @@
 	let box: HTMLElement | null = null;
 	let liveLayer: HTMLElement | null = null;
 	let heightAnimation: Animation | null = null;
+	/** The box clips only while its height eases or a layer is leaving. At rest
+	 *  it sits at its content's height and clips nothing, so a popover or a
+	 *  suggestion list that hangs below the content is never cut off (Safari
+	 *  has no overflow-clip-margin to lean on). */
+	let easing = $state(false);
+	let leaving = $state(0);
 	let observer: ResizeObserver | null = null;
 	let measureFrame: number | null = null;
 	/** Set for exactly one rendered measurement after a key change: the swap
@@ -291,9 +297,10 @@
 		box.style.height = `${target}px`;
 		heightAnimation?.cancel();
 		heightAnimation = null;
+		easing = false;
 		if (!timing || Math.abs(from - target) < 0.5) return;
 
-		heightAnimation = box.animate(
+		const animation = box.animate(
 			[{ height: `${from}px` }, { height: `${target}px` }],
 			{
 				...timing,
@@ -303,6 +310,13 @@
 				easing: HEIGHT_EASING,
 			}
 		);
+		heightAnimation = animation;
+		easing = true;
+		const settle = () => {
+			if (heightAnimation === animation) easing = false;
+		};
+		animation.addEventListener('finish', settle);
+		animation.addEventListener('cancel', settle);
 	}
 
 	function measure(): void {
@@ -416,6 +430,7 @@
 			// stays frozen at whatever pixel height the last measurement wrote.
 			heightAnimation?.cancel();
 			heightAnimation = null;
+			easing = false;
 			cancelScheduledMeasure();
 			observer?.disconnect();
 			observer = null;
@@ -426,6 +441,7 @@
 		return () => {
 			heightAnimation?.cancel();
 			heightAnimation = null;
+			easing = false;
 			cancelScheduledMeasure();
 			observer?.disconnect();
 			observer = null;
@@ -438,6 +454,7 @@
 	class="crossfade"
 	class:fill
 	class:animate-height={heightEnabled}
+	class:clipping={heightEnabled && (easing || leaving > 0)}
 >
 	{#key key}
 		<div
@@ -448,7 +465,11 @@
 			in:enterLayer
 			out:leaveLayer
 			onintrostart={(event) => setLayerInteractive(event, true)}
-			onoutrostart={(event) => setLayerInteractive(event, false)}
+			onoutrostart={(event) => {
+				leaving += 1;
+				setLayerInteractive(event, false);
+			}}
+			onoutroend={() => (leaving = Math.max(0, leaving - 1))}
 		>
 			{@render children()}
 		</div>
@@ -485,10 +506,11 @@
 	}
 
 	/* The box height is written from script; clipping keeps a taller outgoing
-		 layer inside it while the box eases down. `clip` over `hidden` so the
-		 margin below can let shadows and focus rings bleed, since a hard clip would
-		 shave the glow off a tile sitting on the boundary. */
-	.crossfade.animate-height {
+		 layer inside it while the box eases down. Only while that happens: at rest
+		 nothing overflows the box, and content that hangs below it on purpose (a
+		 suggestion list) must stay whole. `clip` over `hidden` so the margin below
+		 can let shadows and focus rings bleed where it is supported. */
+	.crossfade.clipping {
 		overflow: clip;
 		overflow-clip-margin: 1rem;
 	}

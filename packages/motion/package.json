@@ -1,6 +1,6 @@
 {
   "name": "@austencloud/motion",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "One motion clock for AustenCloud apps: duration tokens, reduced-motion-aware Svelte transitions, Crossfade, followHeight, view-transition page changes with record morphs, and a coverage scanner that keeps raw motion out.",
   "type": "module",
   "svelte": "./dist/index.js",
