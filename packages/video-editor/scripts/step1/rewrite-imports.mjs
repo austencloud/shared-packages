@@ -12,6 +12,10 @@
 // rewrite, every walked file has its imports of one package or route specifier merged and its
 // all-type declarations written as `import type` (see tidyImports in lib.mjs), whether or not the
 // rewrite touched it.
+//
+// A default import of a moved component (`import Row from "<moved>.svelte"`, a move whose `from`
+// ends in .svelte) is first rewritten as a named import from the move's entry, line by line in each
+// script block (see rewriteDefaultComponentImport in lib.mjs), before the specifier rewrite runs.
 import fs from "node:fs";
 import ts from "typescript";
 import {
@@ -21,6 +25,7 @@ import {
 	fileOf,
 	moduleIdOf,
 	parse,
+	rewriteDefaultComponentImport,
 	scriptBlocks,
 	table,
 	taskArg,
@@ -49,6 +54,23 @@ const moving = new Set(
 		.map((entry) => fileOf(entry.from))
 		.filter(Boolean),
 );
+const components = table.moves.filter((m) => m.task <= task && m.from.endsWith(".svelte"));
+// Maps the lines of a script body through rewriteDefaultComponentImport; each line ending (LF or
+// CRLF) is kept as it is.
+const rewriteDefaultImports = (body) =>
+	components.length === 0
+		? body
+		: body
+				.split(/(\r?\n)/)
+				.map((part, i) =>
+					i % 2 === 1
+						? part
+						: components.reduce(
+								(line, m) => rewriteDefaultComponentImport(line, m.from, m.entry),
+								part,
+							),
+				)
+				.join("");
 const exportCache = new Map();
 const namesOf = (dest) => {
 	if (!exportCache.has(dest)) exportCache.set(dest, exportsOf(dest));
@@ -182,8 +204,12 @@ for (const file of files) {
 	const blocks = file.endsWith(".svelte") ? scriptBlocks(text) : [[0, text.length]];
 	for (const [start, end] of blocks.reverse()) {
 		const body = text.slice(start, end);
-		let next = body;
-		const edits = rewriteScript(file, body, start, original).sort((x, y) => y[0] - x[0]);
+		// The default-import rewrite keeps every line break, so the line numbers of later ERROR lines
+		// hold; the text before this block is still the original's.
+		let next = rewriteDefaultImports(body);
+		const edits = rewriteScript(file, next, start, text.slice(0, start) + next).sort(
+			(x, y) => y[0] - x[0],
+		);
 		for (const [a, b, value] of edits) next = next.slice(0, a) + value + next.slice(b);
 		if (next !== body) rewrote = true;
 		next = tidyImports(next);

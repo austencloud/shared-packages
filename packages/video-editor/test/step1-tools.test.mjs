@@ -5,7 +5,13 @@ import os from "node:os";
 import path from "node:path";
 import { execFileSync, spawnSync } from "node:child_process";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { barrelImports, definersIn, placeText } from "../scripts/step1/lib.mjs";
+import {
+	ENTRIES,
+	barrelImports,
+	definersIn,
+	placeText,
+	rewriteDefaultComponentImport,
+} from "../scripts/step1/lib.mjs";
 
 const NL = String.fromCharCode(10);
 const lines = (...rows) => rows.join(NL) + NL;
@@ -155,6 +161,55 @@ test("imports of placed tka modules become relative .js paths", () => {
 		lines('import { a } from "../core/moved.js";', 'import { b } from "./stays";'),
 	);
 	assert.deepEqual(result.unresolved, ["render/source.ts: ./stays"]);
+});
+
+test("placeText rewrites only the script blocks of a component and keeps .svelte", () => {
+	const text = [
+		'<script lang="ts">',
+		'  import Child from "$lib/shared/share/components/post-studio/editor/PostToolRow.svelte";',
+		'  import { clamp } from "$lib/shared/share/components/post-studio/editor/post-box-drag";',
+		"</script>",
+		'<p class="a">import x from "$lib/not/a/script";</p>',
+	].join("\n");
+	const placed = new Map([
+		[
+			"$lib/shared/share/components/post-studio/editor/PostToolRow.svelte",
+			"ui/editor/PostToolRow.svelte",
+		],
+		["$lib/shared/share/components/post-studio/editor/post-box-drag", "ui/editor/post-box-drag.ts"],
+	]);
+	const result = placeText({ text, source: "X.svelte", to: "ui/editor/X.svelte", placed });
+	assert.match(result.text, /from "[.][/]PostToolRow[.]svelte"/);
+	assert.match(result.text, /from "[.][/]post-box-drag[.]js"/);
+	assert.match(result.text, /<p class="a">import x from "[$]lib[/]not[/]a[/]script";<[/]p>/);
+});
+
+test("ENTRIES names the ui, strings and icons subpaths", () => {
+	for (const sub of ["ui", "strings", "icons"]) {
+		assert.ok(ENTRIES[`@austencloud/video-editor/${sub}`].endsWith(`/src/${sub}/index.ts`));
+	}
+});
+
+test("rewriteDefaultComponentImport turns a default import of a moved component into a named one", () => {
+	const line =
+		'import PostToolRow from "$lib/shared/share/components/post-studio/editor/PostToolRow.svelte";';
+	assert.equal(
+		rewriteDefaultComponentImport(
+			line,
+			"$lib/shared/share/components/post-studio/editor/PostToolRow.svelte",
+			"@austencloud/video-editor/ui",
+		),
+		'import { PostToolRow } from "@austencloud/video-editor/ui";',
+	);
+	const renamed = 'import Row from "$lib/x/PostToolRow.svelte";';
+	assert.equal(
+		rewriteDefaultComponentImport(
+			renamed,
+			"$lib/x/PostToolRow.svelte",
+			"@austencloud/video-editor/ui",
+		),
+		'import { PostToolRow as Row } from "@austencloud/video-editor/ui";',
+	);
 });
 
 test("barrelImports flags a file importing a barrel of its own folder or the package by name", () => {
@@ -725,12 +780,16 @@ test("a normalization alone in a script is listed as a change and raises no ERRO
 	assert.deepEqual(run.out, [`would change ${run.root}/scripts/tool.ts`, "would change 1 files"]);
 });
 
-function asciiFile(text) {
-	const root = tree({ "x.ts": text });
-	const run = spawnSync(process.execPath, [stepScript("ascii.mjs"), `${root}/x.ts`], {
+function asciiFile(text, name = "x.ts") {
+	const root = tree({ [name]: text });
+	const run = spawnSync(process.execPath, [stepScript("ascii.mjs"), `${root}/${name}`], {
 		encoding: "utf8",
 	});
-	return { status: run.status, stderr: run.stderr, text: fs.readFileSync(`${root}/x.ts`, "utf8") };
+	return {
+		status: run.status,
+		stderr: run.stderr,
+		text: fs.readFileSync(`${root}/${name}`, "utf8"),
+	};
 }
 
 test("ascii.mjs keeps one space either side of an em dash and spaces a bare one", () => {
@@ -767,6 +826,35 @@ test("ascii.mjs leaves a file with no non-ASCII text unchanged", () => {
 	const result = asciiFile(plain);
 	assert.equal(result.status, 0, result.stderr);
 	assert.equal(result.text, plain);
+});
+
+test("ascii.mjs rewrites the script blocks of a component and leaves its markup and styles", () => {
+	const EM = String.fromCharCode(0x2014);
+	const TIMES = String.fromCharCode(0xd7);
+	const BACKSLASH = String.fromCharCode(92);
+	const component = (script, markup, style) =>
+		lines(
+			'<script lang="ts">',
+			...script,
+			"</script>",
+			`<p>${markup}</p>`,
+			"<style>",
+			`\t.a::after { content: "${style}"; }`,
+			"</style>",
+		);
+	const result = asciiFile(
+		component([`\t// a ${EM} b`, `\tconst label = "2${TIMES}";`], `2${TIMES} ${EM} zoom`, TIMES),
+		"x.svelte",
+	);
+	assert.equal(result.status, 0, result.stderr);
+	assert.equal(
+		result.text,
+		component(
+			["\t// a - b", `\tconst label = "2${BACKSLASH}u00d7";`],
+			`2${TIMES} ${EM} zoom`,
+			TIMES,
+		),
+	);
 });
 
 // Runs portable-tests.mjs over a fixture tka tree (STEP1_TKA), never over the real one.

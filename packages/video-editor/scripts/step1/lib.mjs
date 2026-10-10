@@ -12,6 +12,9 @@ export const ENTRIES = {
 	"@austencloud/video-editor/core": `${PKG}/src/core/index.ts`,
 	"@austencloud/video-editor/render": `${PKG}/src/render/index.ts`,
 	"@austencloud/video-editor/encoder": `${PKG}/src/encoder/index.ts`,
+	"@austencloud/video-editor/ui": `${PKG}/src/ui/index.ts`,
+	"@austencloud/video-editor/strings": `${PKG}/src/strings/index.ts`,
+	"@austencloud/video-editor/icons": `${PKG}/src/icons/index.ts`,
 };
 // STEP_MOVES picks the move list: a path relative to this folder (./moves.json is step 1,
 // ../step2/moves.json is step 2A) or an absolute path (the node tests use one).
@@ -362,7 +365,7 @@ export function specifiersOf(file, text = fs.readFileSync(file, "utf8")) {
  *
  * Returns the new text, the rewritten specifiers and the UNRESOLVED lines.
  */
-export function placeText({
+export function placeScript({
 	text,
 	source,
 	to,
@@ -492,6 +495,33 @@ export function placeText({
 		unresolved.push(`${to}: uses import.meta.url (check the worker URL by hand)`);
 	}
 	return { text: out, rewrites, unresolved };
+}
+
+/** A component is placed one script block at a time; its markup and styles are copied as they are. */
+export function placeText(args) {
+	if (!args.source.endsWith(".svelte")) return placeScript(args);
+	let text = args.text;
+	const rewrites = [];
+	const unresolved = [];
+	for (const [start, end] of [...scriptBlocks(text)].reverse()) {
+		const result = placeScript({ ...args, text: text.slice(start, end) });
+		text = text.slice(0, start) + result.text + text.slice(end);
+		rewrites.push(...result.rewrites);
+		unresolved.push(...result.unresolved);
+	}
+	return { text, rewrites, unresolved };
+}
+
+/** `import X from "<moved>.svelte"` names the component through the entry instead. */
+export function rewriteDefaultComponentImport(line, from, entry) {
+	const match = line.match(
+		/^(\s*)import\s+([A-Za-z_][A-Za-z0-9_]*)\s+from\s+["']([^"']+)["'];?\s*$/,
+	);
+	if (!match || match[3] !== from || !from.endsWith(".svelte")) return line;
+	const exported = from.slice(from.lastIndexOf("/") + 1, -".svelte".length);
+	const local = match[2];
+	const name = local === exported ? exported : `${exported} as ${local}`;
+	return `${match[1]}import { ${name} } from "${entry}";`;
 }
 
 /**

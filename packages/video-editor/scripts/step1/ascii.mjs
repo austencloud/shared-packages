@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import ts from "typescript";
-import { parse } from "./lib.mjs";
+import { NL, parse, scriptBlocks } from "./lib.mjs";
 
 const BACKSLASH = String.fromCharCode(92);
 const EM_DASH = 0x2014;
@@ -40,10 +40,13 @@ const LITERALS = new Set([
 	ts.SyntaxKind.TemplateTail,
 	ts.SyntaxKind.RegularExpressionLiteral,
 ]);
-let failed = false;
-for (const file of process.argv.slice(2)) {
-	let fileFailed = false;
-	const text = fs.readFileSync(file, "utf8");
+
+/**
+ * The ASCII form of one piece of TypeScript: a whole .ts file, or the body of a script block.
+ * `base` is where the piece starts inside `whole`, the full text of the file, so a line number
+ * names the line in the file. Each character with no rule is added to `problems`.
+ */
+function asciiScript(file, text, base, whole, problems) {
 	const ranges = [];
 	const visit = (node) => {
 		if (LITERALS.has(node.kind)) ranges.push([node.getStart(), node.end]);
@@ -64,16 +67,34 @@ for (const file of process.argv.slice(2)) {
 		}
 		const swap = code === EM_DASH ? spacedHyphen(text, i) : COMMENT.get(code);
 		if (swap === undefined) {
-			const line = text.slice(0, i).split(String.fromCharCode(10)).length;
-			console.error(
+			const line = whole.slice(0, base + i).split(NL).length;
+			problems.push(
 				`${file}:${line}: no ASCII rule for U+${code.toString(16).padStart(4, "0")} outside a literal`,
 			);
-			failed = true;
-			fileFailed = true;
 			out += "?";
 		} else out += swap;
 	}
-	if (fileFailed) console.error(`${file}: left unchanged`);
-	else fs.writeFileSync(file, out);
+	return out;
+}
+
+let failed = false;
+for (const file of process.argv.slice(2)) {
+	const text = fs.readFileSync(file, "utf8");
+	// A component is rewritten one script block at a time; its markup and styles stay as they are.
+	const blocks = file.endsWith(".svelte") ? scriptBlocks(text) : [[0, text.length]];
+	const problems = [];
+	let out = "";
+	let from = 0;
+	for (const [start, end] of blocks) {
+		out +=
+			text.slice(from, start) + asciiScript(file, text.slice(start, end), start, text, problems);
+		from = end;
+	}
+	out += text.slice(from);
+	for (const problem of problems) console.error(problem);
+	if (problems.length > 0) {
+		failed = true;
+		console.error(`${file}: left unchanged`);
+	} else fs.writeFileSync(file, out);
 }
 process.exit(failed ? 1 : 0);
