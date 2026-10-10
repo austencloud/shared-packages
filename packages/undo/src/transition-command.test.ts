@@ -940,6 +940,37 @@ describe("a failed step cancels later presses of the same entry", () => {
     expect([inner.get("x"), screen.get("x")]).toEqual([2, 2]);
   });
 
+  it("clear never lets a dropped press show the old session's values later", async () => {
+    const inner = memoryTransitionStore<number>([["x", 0]]);
+    const shows: string[] = [];
+    let release: (() => void) | null = null;
+    const store = {
+      get: (id: string) => inner.get(id),
+      commit: async (...args: Parameters<typeof inner.commit>) => {
+        await new Promise<void>((resolve) => (release = resolve));
+        return inner.commit(...args);
+      },
+      show: (changes: { id: string; next: number }[]) => {
+        shows.push(changes.map((c) => `${c.id}=${c.next}`).join());
+      },
+    };
+    const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+    const history = createHistory();
+    const A = transitionCommand<number>({ label: "A", store, describe: () => "m", transitions: [{ id: "x", before: 0, after: 1 }] });
+    const running = history.run(A);
+    await settle();
+    release!();
+    await running;
+    const undoing = history.undo();
+    const redoing = history.redo();
+    await settle();
+    history.clear();
+    const atClear = shows.length;
+    release!();
+    await Promise.all([undoing, redoing]);
+    expect(shows.slice(atClear)).toEqual([]);
+  });
+
   it("a correction also unmarks a caller-shown first execute of another command", async () => {
     const { store, inner, screen } = appStore([["x", 0]]);
     const history = createHistory();

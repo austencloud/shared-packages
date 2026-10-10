@@ -246,18 +246,20 @@ describe("createHistory", () => {
   });
 
   describe("clear and record while work is in flight", () => {
-    it("asks a command to reconcile when clear drops its queued press", async () => {
+    it("has a command discard its queued previews at clear, and never reconciles it", async () => {
       const log: string[] = [];
       const gate = deferred();
       const history = createHistory();
       const running = history.run(command("A", log, { execute: () => gate.promise }));
       const reconcile = vi.fn();
-      const dropped = history.run(command("B", log, { reconcile }));
+      const discardPreviews = vi.fn();
+      const dropped = history.run(command("B", log, { reconcile, discardPreviews }));
       history.clear();
+      expect(discardPreviews).toHaveBeenCalledTimes(1);
       gate.resolve();
       await Promise.all([running, dropped]);
       expect(log).not.toContain("do B");
-      expect(reconcile).toHaveBeenCalledTimes(1);
+      expect(reconcile).not.toHaveBeenCalled();
     });
 
     it("clear during a pending run leaves both stacks empty after it settles", async () => {

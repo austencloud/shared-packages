@@ -86,9 +86,13 @@ results of work still in flight and stops queued runs, undos and redos from
 executing at all.
 
 A command can implement `preview(direction)` (`"execute"` or `"undo"`) to put
-the coming change on screen at the press, and `reconcile()` to put the screen
-right after its later presses were cancelled. The history calls both inside a
-try/catch and rethrows a failure asynchronously. Without `preview`, nothing
+the coming change on screen at the press, `reconcile()` to put the screen
+right after its later presses were cancelled, and `discardPreviews()` to drop
+the previews of presses that `clear()` stopped. `clear()` calls
+`discardPreviews()` synchronously and never `reconcile()`, so nothing from
+before the clear (a signed-out account, a closed document) reaches the screen
+later. The history calls all three inside a try/catch and rethrows a failure
+asynchronously. Without `preview`, nothing
 changes on screen until the work runs.
 
 ## Guarded transitions

@@ -114,6 +114,8 @@ export interface TransitionCommandHandle<V> extends Command {
    * its `expected`, stale ids the `current` the store reported.
    */
   reconcile(): void;
+  /** Drop every preview still waiting for a commit, without showing anything. */
+  discardPreviews(): void;
 }
 
 type Direction = "execute" | "undo";
@@ -240,11 +242,15 @@ function build<V>(
     return { shownByCaller: false, ids: press && press.direction === direction ? press.ids : null };
   }
 
-  function reconcile() {
+  function discardPreviews() {
     previews.length = 0;
     pendingShown = false;
     shownPressed = false;
     syncWaiting();
+  }
+
+  function reconcile() {
+    discardPreviews();
     // What it re-shows below may overwrite other commands' waiting previews.
     invalidateEveryWaitingPreview();
     if (!lastStep || !options.store.show) return;
@@ -385,6 +391,7 @@ function build<V>(
     undo: () => apply("undo"),
     preview,
     reconcile,
+    discardPreviews,
     merge,
     get transitions() {
       return current();
@@ -462,6 +469,17 @@ function compositeCommand(first: Command, second: Command): Command {
       for (const part of [second, first]) {
         try {
           part.reconcile?.();
+        } catch (error) {
+          failure ??= { error };
+        }
+      }
+      if (failure) throw failure.error;
+    },
+    discardPreviews() {
+      let failure: { error: unknown } | null = null;
+      for (const part of [second, first]) {
+        try {
+          part.discardPreviews?.();
         } catch (error) {
           failure ??= { error };
         }

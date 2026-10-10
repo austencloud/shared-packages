@@ -246,12 +246,7 @@ export function createHistory(options: HistoryOptions = {}): History {
     publish();
     const result = queue
       .then(async (): Promise<RunResult> => {
-        if (queuedGeneration !== generation) {
-          // Dropped by a clear: its press-time preview will never commit, so
-          // the command drops it and re-shows the truth.
-          reconcile(step.command);
-          return EMPTY;
-        }
+        if (queuedGeneration !== generation) return EMPTY;
         // The failure that cancelled it is the news; lastAction stays as that failure left it.
         if (step.cancelled) return { status: "skipped", label: step.command.label };
         return work(queuedGeneration);
@@ -411,6 +406,18 @@ export function createHistory(options: HistoryOptions = {}): History {
     },
 
     clear() {
+      // Queued presses will never commit. Their commands drop those previews
+      // now, so nothing of the old session reaches the screen later.
+      const commands = new Set<Command>();
+      for (const step of queued) commands.add(step.command);
+      for (const command of commands) {
+        if (!command.discardPreviews) continue;
+        try {
+          command.discardPreviews();
+        } catch (error) {
+          surfaceLater(error);
+        }
+      }
       generation += 1;
       lastWasRun = false;
       undoStack = [];
