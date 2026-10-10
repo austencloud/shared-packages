@@ -22,4 +22,6 @@ export interface CompositionSourceBinding {
 	hasAudio?: boolean;
 	status: CompositionSourceStatus;
 	missingMessage?: string;
+	/** The canvas draws this source without its crop chrome while the crop screen is open (tka: staff roles). */
+	readonly bareWhileCropping?: boolean;
 }
