@@ -105,6 +105,13 @@ describe("isEditableTarget", () => {
     expect(isEditableTarget(withRole("button"))).toBe(false);
   });
 
+  it("counts a node inside an element with a text-entry role", () => {
+    const inner = (match: boolean) =>
+      ({ tagName: "SPAN", closest: (selector: string) => (match && selector.includes("[role=textbox]") ? {} : null) }) as unknown as EventTarget;
+    expect(isEditableTarget(inner(true))).toBe(true);
+    expect(isEditableTarget(inner(false))).toBe(false);
+  });
+
   it("is true for inputs, textareas, selects and contenteditable", () => {
     expect(isEditableTarget({ tagName: "INPUT" } as unknown as EventTarget)).toBe(true);
     expect(isEditableTarget({ tagName: "TEXTAREA" } as unknown as EventTarget)).toBe(true);

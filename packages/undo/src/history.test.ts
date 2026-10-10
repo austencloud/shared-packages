@@ -309,7 +309,21 @@ describe("createHistory", () => {
       expect(history.state.undoLabel).toBe("Z");
     });
 
-    it("record during a pending undo keeps the new entry and moves the undone one to redo once", async () => {
+    it("a run queued behind pending work never executes once clear() has run", async () => {
+      const log: string[] = [];
+      const gate = deferred();
+      const history = createHistory();
+      const first = history.run(command("A", log, { execute: () => gate.promise }));
+      const second = history.run(command("B", log));
+      history.clear();
+      gate.resolve();
+      await first;
+      expect(await second).toEqual({ status: "empty", label: null });
+      expect(log).toEqual([]);
+      expect(history.state.canUndo).toBe(false);
+    });
+
+    it("record during a pending undo keeps the new entry and does not offer the undone one for redo", async () => {
       const log: string[] = [];
       const gate = deferred();
       const history = createHistory();
@@ -319,13 +333,13 @@ describe("createHistory", () => {
       history.record(command("X", log));
       gate.resolve();
       await undoing;
-      expect(history.state).toMatchObject({ undoLabel: "X", canRedo: true, redoLabel: "A" });
+      // A new action happened after the undo started, so there is no redo: the undone entry is gone.
+      expect(history.state).toMatchObject({ undoLabel: "X", canRedo: false, redoLabel: null });
       await history.undo();
       expect(history.state.canUndo).toBe(false);
       expect(history.state.redoLabel).toBe("X");
       await history.redo();
-      await history.redo();
-      expect(history.state).toMatchObject({ canRedo: false, undoLabel: "A" });
+      expect(history.state).toMatchObject({ canRedo: false, undoLabel: "X" });
     });
   });
 
@@ -389,6 +403,7 @@ describe("createHistory", () => {
       expect(() => createHistory({ limit: Number.NaN })).toThrow(RangeError);
       expect(() => createHistory({ limit: Number.POSITIVE_INFINITY })).toThrow(RangeError);
       expect(() => createHistory({ limit: -1 })).toThrow(RangeError);
+      expect(() => createHistory({ limit: 2.5 })).toThrow(RangeError);
       expect(() => createHistory({ limit: 5 })).not.toThrow();
     });
   });

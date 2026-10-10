@@ -29,11 +29,12 @@ const NON_TEXT_INPUT_TYPES = new Set([
   "hidden",
 ]);
 const TEXT_ENTRY_ROLES = new Set(["textbox", "searchbox", "combobox"]);
+const TEXT_ENTRY_ROLE_SELECTOR = "[role=textbox],[role=searchbox],[role=combobox]";
 
 /**
  * True for text-entry inputs (a missing or unknown type counts as text),
- * textareas, selects, contenteditable elements and elements whose role is
- * textbox, searchbox or combobox. Range sliders, checkboxes and buttons are not.
+ * textareas, selects, contenteditable elements and elements with, or inside
+ * an element with, the role textbox, searchbox or combobox. Range sliders, checkboxes and buttons are not.
  */
 export function isEditableTarget(target: EventTarget | null): boolean {
   if (!target || typeof target !== "object") return false;
@@ -43,6 +44,7 @@ export function isEditableTarget(target: EventTarget | null): boolean {
     type?: unknown;
     role?: unknown;
     getAttribute?: (name: string) => string | null;
+    closest?: (selector: string) => unknown;
   };
   const tag = element.tagName;
   if (tag === "INPUT") {
@@ -51,7 +53,9 @@ export function isEditableTarget(target: EventTarget | null): boolean {
   }
   if (tag === "TEXTAREA" || tag === "SELECT" || element.isContentEditable === true) return true;
   const role = element.getAttribute?.("role") ?? element.role;
-  return typeof role === "string" && TEXT_ENTRY_ROLES.has(role.toLowerCase());
+  if (typeof role === "string" && TEXT_ENTRY_ROLES.has(role.toLowerCase())) return true;
+  // An inner node of a custom textbox (a span in a rich editor) counts too.
+  return typeof element.closest === "function" && element.closest(TEXT_ENTRY_ROLE_SELECTOR) != null;
 }
 
 /**

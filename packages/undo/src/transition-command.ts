@@ -51,7 +51,13 @@ export interface TransitionCommandOptions<V> {
   store: TransitionStore<V>;
   /** Words for a partial, skipped or failed outcome, in the app's own voice. */
   describe: (report: TransitionReport<V>) => string;
-  /** Commands with the same key that arrive back to back fold into one entry. */
+  /**
+   * Commands with the same key that arrive back to back fold into one entry.
+   * Commands that share a key must write through equivalent stores: a fold keeps
+   * the store of the first command and writes the whole entry through it.
+   * Different store objects with the same key are fine (an app may build one
+   * per command); stores that reach different data must use different keys.
+   */
   coalesceKey?: string;
   /** The label of a merged entry. Without it the newer command's label wins. */
   relabel?: (merged: readonly Transition<V>[]) => string;
@@ -64,9 +70,7 @@ export interface TransitionCommandHandle<V> extends Command {
   readonly transitions: readonly Transition<V>[];
 }
 
-// Every handle, with the store it writes through. merge uses the store to
-// decide whether two commands may be folded into one.
-const handles = new WeakMap<Command, TransitionStore<never>>();
+const handles = new WeakSet<Command>();
 
 export function isTransitionCommand<V = unknown>(command: Command): command is TransitionCommandHandle<V> {
   return handles.has(command);
@@ -128,14 +132,14 @@ export function transitionCommand<V>(options: TransitionCommandOptions<V>): Tran
       transitions = transitions.filter((t) => keep.has(t.id));
       return { kind: "partial", message: options.describe(report) };
     }
-    if (stale > 0) return { kind: "skipped", message: options.describe(report) };
+    // Nothing applied. A failed write throws (even beside stale ids) so the entry stays put for a retry.
+    if (failed === 0 && stale > 0) return { kind: "skipped", message: options.describe(report) };
     throw new Error(options.describe(report));
   }
 
   function merge(next: Command): Command | null {
-    if (!isTransitionCommand<V>(next) || handles.get(next) !== (options.store as TransitionStore<never>)) {
-      return compositeCommand(handle, next);
-    }
+    if (!isTransitionCommand<V>(next)) return compositeCommand(handle, next);
+    // undoneSoFar is not carried over: history never merges into an entry after an undo.
     const byId = new Map<string, Transition<V>>();
     for (const t of transitions) byId.set(t.id, t);
     for (const t of next.transitions) {
@@ -161,7 +165,7 @@ export function transitionCommand<V>(options: TransitionCommandOptions<V>): Tran
       return transitions;
     },
   };
-  handles.set(handle, options.store as TransitionStore<never>);
+  handles.add(handle);
   return handle;
 }
 

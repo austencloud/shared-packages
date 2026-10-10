@@ -32,7 +32,7 @@ const detach = attachUndoKeyboard(history, { target: window });
 const view = createHistoryState(history); // view.canUndo, view.undoLabel, view.lastMessage ...
 ```
 
-`limit` must be a finite number of 0 or more; anything else throws a
+`limit` must be a whole number of 0 or more; anything else throws a
 `RangeError` from `createHistory`.
 
 ## Outcomes
@@ -53,9 +53,11 @@ undo retries exactly them; once it finishes, redo re-applies everything that
 was undone. A store must resolve, not reject, once any write has landed.
 
 `coalesceKey` folds back-to-back commands into one entry (every item painted in
-one drag). Only transition commands that share a store are folded together;
-anything else becomes a composite entry. `clear()` forgets everything and
-discards the results of work still in flight. `memoryTransitionStore` is an
+one drag). Transition commands that share a key are folded together even when
+each has its own store object, so a key must only be shared by commands that
+write through equivalent stores; anything else becomes a composite entry.
+`clear()` forgets everything, discards the results of work still in flight and
+stops queued runs, undos and redos from executing at all. `memoryTransitionStore` is an
 in-memory store for tests.
 
 ## Keyboard

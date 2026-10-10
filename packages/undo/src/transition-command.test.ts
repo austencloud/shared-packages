@@ -267,11 +267,37 @@ describe("transitionCommand undo with failed writes", () => {
 
     const stuck = memoryTransitionStore<string[]>([["a", ["elsewhere"]], ["b", []]], sameList);
     stuck.failNext("b");
-    const skipped = await tagCommand(stuck, [
+    const stuckCommand = tagCommand(stuck, [
       { id: "a", before: [], after: ["fire"] },
       { id: "b", before: [], after: ["fire"] },
-    ]).execute();
+    ]);
+    // Nothing applied and one write failed: that throws, even with a stale id alongside.
+    await expect(stuckCommand.execute()).rejects.toThrow("execute:0/2 stale 1 failed 1");
+
+    const onlyStale = memoryTransitionStore<string[]>([["a", ["elsewhere"]]], sameList);
+    const skipped = await tagCommand(onlyStale, [{ id: "a", before: [], after: ["fire"] }]).execute();
     expect(skipped?.kind).toBe("skipped");
+  });
+
+  it("keeps a redo on the redo stack when it hit only stale and failed ids, so it can be retried", async () => {
+    const store = memoryTransitionStore<string[]>([["a", []], ["b", []]], sameList);
+    const history = createHistory();
+    await history.run(
+      tagCommand(store, [
+        { id: "a", before: [], after: ["fire"] },
+        { id: "b", before: [], after: ["fire"] },
+      ])
+    );
+    await history.undo();
+    store.set("a", ["elsewhere"]);
+    store.failNext("b");
+    const first = await history.redo();
+    expect(first.status).toBe("failed");
+    expect(history.state.canRedo).toBe(true);
+    expect(history.state.canUndo).toBe(false);
+    expect(await history.redo()).toEqual({ status: "partial", label: "Add Fire", message: "execute:1/2 stale 1 failed 0" });
+    expect(store.get("b")).toEqual(["fire"]);
+    expect(store.get("a")).toEqual(["elsewhere"]);
   });
 });
 
@@ -369,58 +395,78 @@ describe("transitionCommand result matching", () => {
   });
 });
 
-describe("transitionCommand across stores", () => {
+describe("transitionCommand coalescing", () => {
   const plain = (r: TransitionReport<string>) => `${r.direction}:${r.applied}/${r.total}`;
 
-  it("does not fold a command that writes through another store", async () => {
-    const s1 = memoryTransitionStore<string>([["a", "0"]]);
-    const s2 = memoryTransitionStore<string>([["a", "0"]]);
-    const history = createHistory();
-    const make = (store: typeof s1) =>
+  it("folds back-to-back commands with one coalesceKey even when each has its own store object", async () => {
+    const db = new Map<string, string>([["a", ""], ["b", ""], ["c", ""]]);
+    // A new store object per command, as an app that builds its store per call does.
+    const freshStore = (): TransitionCommandOptions<string>["store"] => ({
+      async commit(changes) {
+        return changes.map((c) => {
+          if (db.get(c.id) !== c.expected) return { id: c.id, status: "stale" as const, current: db.get(c.id) };
+          db.set(c.id, c.next);
+          return { id: c.id, status: "applied" as const };
+        });
+      },
+    });
+    const segment = (id: string) =>
       transitionCommand<string>({
-        label: "x",
+        label: "one",
         describe: plain,
-        store,
-        coalesceKey: "k",
-        transitions: [{ id: "a", before: "0", after: "1" }],
+        store: freshStore(),
+        coalesceKey: "stroke:1",
+        relabel: (merged) => `Paint ${merged.length}`,
+        transitions: [{ id, before: "", after: "fire" }],
       });
-    await history.run(make(s1));
-    await history.run(make(s2));
-    expect(s1.get("a")).toBe("1");
-    expect(s2.get("a")).toBe("1");
+    const history = createHistory();
+    await history.run(segment("a"));
+    expect(history.state.undoLabel).toBe("one");
+    await history.run(segment("b"));
+    expect(history.state.undoLabel).toBe("Paint 2");
+    await history.run(segment("c"));
+    expect(history.state.undoLabel).toBe("Paint 3");
     await history.undo();
-    expect(s1.get("a")).toBe("0");
-    expect(s2.get("a")).toBe("0");
     expect(history.state.canUndo).toBe(false);
+    expect([db.get("a"), db.get("b"), db.get("c")]).toEqual(["", "", ""]);
+    await history.redo();
+    expect([db.get("a"), db.get("b"), db.get("c")]).toEqual(["fire", "fire", "fire"]);
   });
 
-  it("undoes a composite's second command before its first", async () => {
+  it("undoes a composite entry's second command before its first", async () => {
     const log: string[] = [];
-    const logging = (name: string) => {
-      const inner = memoryTransitionStore<string>([["a", "0"]]);
-      return {
-        ...inner,
-        commit: async (changes: Parameters<typeof inner.commit>[0]) => {
-          log.push(`${name}:${changes[0].next}`);
-          return inner.commit(changes);
-        },
-      };
+    const inner = memoryTransitionStore<string>([["a", "0"]]);
+    const store = {
+      ...inner,
+      commit: async (changes: Parameters<typeof inner.commit>[0]) => {
+        log.push(`first:${changes[0].next}`);
+        return inner.commit(changes);
+      },
     };
     const history = createHistory();
-    const make = (store: ReturnType<typeof logging>) =>
+    await history.run(
       transitionCommand<string>({
         label: "x",
         describe: plain,
         store,
         coalesceKey: "k",
         transitions: [{ id: "a", before: "0", after: "1" }],
-      });
-    await history.run(make(logging("first")));
-    await history.run(make(logging("second")));
+      })
+    );
+    await history.run({
+      label: "plain",
+      coalesceKey: "k",
+      execute: () => {
+        log.push("second:do");
+      },
+      undo: () => {
+        log.push("second:undo");
+      },
+    });
     log.length = 0;
     await history.undo();
-    expect(log).toEqual(["second:0", "first:0"]);
+    expect(log).toEqual(["second:undo", "first:0"]);
     await history.redo();
-    expect(log).toEqual(["second:0", "first:0", "first:1", "second:1"]);
+    expect(log).toEqual(["second:undo", "first:0", "first:1", "second:do"]);
   });
 });

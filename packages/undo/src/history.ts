@@ -16,8 +16,8 @@ const EMPTY: RunResult = { status: "empty", label: null };
 
 export function createHistory(options: HistoryOptions = {}): History {
   const limit = options.limit ?? 100;
-  if (!Number.isFinite(limit) || limit < 0) {
-    throw new RangeError("createHistory: limit must be a finite number of 0 or more, got " + String(limit));
+  if (!Number.isInteger(limit) || limit < 0) {
+    throw new RangeError("createHistory: limit must be a whole number of 0 or more, got " + String(limit));
   }
   let undoStack: Command[] = [];
   let redoStack: Command[] = [];
@@ -30,6 +30,9 @@ export function createHistory(options: HistoryOptions = {}): History {
   // True only while the newest undo entry came from a run with nothing since
   // that moved the stacks (an undo, a redo or a clear). Gates coalescing.
   let lastWasRun = false;
+  // Bumped whenever a new entry clears the redo stack (run, record). An undo
+  // that was in flight at the time must not offer its entry for redo afterwards.
+  let redoEpoch = 0;
   const listeners = new Set<(state: HistoryState) => void>();
 
   function snapshot(): HistoryState {
@@ -87,12 +90,14 @@ export function createHistory(options: HistoryOptions = {}): History {
         if (merged) undoStack[undoStack.length - 1] = merged;
         else undoStack.pop();
         redoStack = [];
+        redoEpoch += 1;
         return;
       }
     }
     undoStack.push(command);
     if (undoStack.length > limit) undoStack.splice(0, undoStack.length - limit);
     redoStack = [];
+    redoEpoch += 1;
   }
 
   /**
@@ -171,8 +176,11 @@ export function createHistory(options: HistoryOptions = {}): History {
     },
 
     run(command) {
-      return enqueue((queuedGeneration) =>
-        perform(
+      return enqueue(async (queuedGeneration) => {
+        // Queued before a clear (a sign-out, say): do not execute at all, so nothing
+        // the previous session queued can write. Same result as a cleared undo or redo.
+        if (queuedGeneration !== generation) return EMPTY;
+        return perform(
           "run",
           command,
           queuedGeneration,
@@ -182,8 +190,8 @@ export function createHistory(options: HistoryOptions = {}): History {
             lastWasRun = true;
           },
           () => {}
-        )
-      );
+        );
+      });
     },
 
     record(command) {
@@ -197,6 +205,7 @@ export function createHistory(options: HistoryOptions = {}): History {
         const command = undoStack.at(-1);
         if (!command) return EMPTY;
         lastWasRun = false;
+        const epoch = redoEpoch;
         return perform(
           "undo",
           command,
@@ -204,7 +213,8 @@ export function createHistory(options: HistoryOptions = {}): History {
           () => command.undo(),
           () => {
             // Removed by identity: a record made while the undo ran may sit on top now.
-            if (remove(undoStack, command)) redoStack.push(command);
+            // If something was run or recorded since the undo started, redo was cleared; do not revive it.
+            if (remove(undoStack, command) && epoch === redoEpoch) redoStack.push(command);
           },
           () => {
             // Nothing of it is left to take back; it would only undo to nothing again.
