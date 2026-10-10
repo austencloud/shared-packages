@@ -595,11 +595,51 @@ may still be pending when this record is read; it is not claimed as passed.
 
 ##### Feature route (`/post?feature=generate-vertical`)
 
-PENDING: controller fills in after the hand-back
+The proof ran twice with the same script, `task15-proof-feature.mjs` in the
+gate folder (private headless Chrome through `scripts/spike/cdp.mjs`, a fresh
+debugging port each run, a guest session, no sign-in): first against tka main
+`6de9ce8fc6` on the primary checkout's dev server (port 5173) as the console
+baseline, then against the branch at `32f1ee5675` with the package rebuilt from
+`dfc3b8f` on port 5221, after the sync merge, the full suite and the production
+build. Main stood in for the step 1 tip because its server was already running
+and main is the tree the branch merged, so its console is the right comparison
+for "nothing new after 2A plus the merge".
+
+Steps, each with a screenshot: open the route and confirm the editor mounts with
+undo disabled; add a text item from the Add tool; type "Step 2A proof <run>"
+into the text field; undo (the field shows "Your text" again); redo; wait for
+the save to disk (`project.json` revision advanced and the typed text present in
+`tracks[].items`); reload; the text is still there and undo is enabled, so the
+edit history survived the reload; undo after the reload reverts the typed text
+on disk; one more undo removes the item and the disk project is back to its 23
+items. Result: PASS on all 11 checks on both servers. Screenshots and the step
+logs are in `task15-proof-baseline/` and `task15-proof-branch/` in the gate
+folder.
+
+Console: the baseline logged three entries (two guest `CollaborativeVideoManager`
+"User must be authenticated to access videos" errors and one Chrome
+`beforeunload` intervention notice on the reload); the branch logged two (the
+same two auth errors; the intervention notice did not fire). Nothing new on the
+branch.
+
+Side effects: `E:/tka-platform-media/feature-videos/generate-vertical/project.json`
+went from revision 3 to 13 over the proof runs; its content equals the backup
+taken before them (`task15-proof-backup/`) ignoring `revision`, `savedAt` and
+`updatedAt`. `history/r000003.json` to `r000012.json` are the proof's save
+archives and can be deleted. The dev server on 5221 kept working through the
+production build without a restart.
 
 ##### Real sequence (`/post`)
 
-PENDING: controller fills in after the hand-back
+PENDING. `/post` without `?feature=` is behind `canAccessPostStudio()`, which
+needs the admin role or the `capability:viewer:post-studio` flag (declared
+`enabled: false`); a local flag override is overwritten by the Firestore
+global-overrides document, and there is no anonymous sign-in, so a guest sees
+"Post is in early access." The controller could not pass the gate without
+Austen's account. This half needs Austen signed in in his own browser and his
+go-ahead for the one clip move and undo on a post of his choosing, because the
+save would go to his account. It is to be run and recorded here before step 4
+at the latest. Not claimed as passed.
 
 #### Plan wording slips found during execution
 
