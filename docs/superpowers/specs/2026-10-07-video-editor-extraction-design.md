@@ -462,6 +462,291 @@ Each step gets its own plan under `docs/superpowers/plans/` in this repo and
 runs subagent-driven (sonnet implementers, opus review between tasks, haiku
 for mechanical moves and censuses).
 
+### Step 2A as built (2026-10-09)
+
+Step 2 split in two. 2A moved the editor state, the edit engine and device
+persistence behind a host contract and left tka's UI on a thin wrapper; 2B moves
+the UI. The plan is `docs/superpowers/plans/2026-10-09-video-editor-step-2a-state.md`.
+Each open item that 2A closed is marked "closed in 2A Task N" in
+`2026-10-09-video-editor-open-items-after-step-1.md`.
+
+What shipped:
+
+- **The host contract shipped narrowed.** `VideoEditorHost` has `ownerId`,
+  `store`, `mediaLibrary`, `translate`, `now`, `dev` and `previewCache`. `notify`
+  and `shortcuts` come with 2B's UI. `mediaLibrary` is declared async, but the
+  state reads the synchronous `options.libraryTake(id)`, because today's catalog
+  lookup is synchronous and opening a project cannot await without changing
+  behaviour (plan risk R5). 2B decides whether the picker drives the async
+  library.
+- **Timing load and save are out of `VideoEditorStore`** (plan risk R4). The port
+  carries `openProject`, `saveProject`, `backupBeforeImport`, `loadHistory` and
+  `saveHistory`, each with a `StoreScope { ownerId, subjectId }`, all synchronous.
+  Plugin state rides on `StateExtension`, built once per editor instance by
+  `options.extension`. tka's take timing lives in `post-timing-state.svelte.ts`
+  beside the package state, so Ringmaster never sees a timing type. The "Host
+  contract" section above says the same.
+- **Plugin members.** `VideoEditorPlugin` gained `subjectKey` and `editHooks`,
+  `ItemKindDefinition` gained `create`, and `alignment` was dropped (option b of
+  the open item): tka builds its alignment in a `$derived` inside its timing
+  state and hands it to the evaluator. `painters` and `surfaces` stay typed
+  static members until 2B.
+- **Entries.** The root entry `.` exports `createVideoEditorState`,
+  `createVideoPreviews`, `createTabSync`, `createDeviceStore`,
+  `createHistoryStorage`, the host, store and string types and
+  `CompositionSourceBinding`. `./core` gained the edit engine (`project-edits`,
+  `music-edits`, `mirror`, `EditContext`) and `./render` the edit-copy lookup.
+  tka's `createPostEditorState(deps)` is a wrapper over `createVideoEditorState`
+  (1699 lines down to 439) and returns the surface the UI reads today. tka's
+  device keys, history envelope and message texts are reproduced byte for byte
+  (plan risk R12; `post-device-keys.test.ts` pins the keys).
+- **Dead code out.** `media-composition-state.svelte.ts`, its context,
+  `post-studio-slots.ts` and `post-studio-breakdown.ts` are deleted (Task 4).
+  The worker's stray rejection on a failed source and zod in the preview worker
+  are fixed (Task 5); the compositor throws for a painted layer with no painter
+  and the exporter always cleans up (Task 14).
+
+Commit ranges (nothing is merged to `main` or pushed):
+
+- Package, branch `video-editor`: `6c78f58` (exclusive) to this record. Plan
+  `1f7f648`; Task 1 `b53eee8`; Task 3 `89e06d8`; Task 4 `f2699a6`; Task 5
+  `d91b6d8`; Task 6 `4715df2`; Task 7 `5d3a9a3`; Task 8 `fa4dea2`; Task 9
+  `8776bca`; Task 10 `2363ec0`; Task 11 `5c609b2`; Task 12 `f0d959a`; Task 13
+  `1d04edc`; Task 14 `dfc3b8f`; Task 15 this record. Task 2 changed tka only.
+- tka-platform, branch `codex/video-editor`: `10ca855e29` (exclusive) to
+  `32f1ee5675`. Task 2 `e073fbae7a`; Task 3 `02e97b1e22`; Task 4 `f00a174c8a`;
+  Task 5 `ce91a41e46`; Task 6 `0a242bc1fd`; Task 7 `1a6fa7c51d`; Task 8
+  `d222fa5d37`; Task 9 `69a0c53689`; Task 11 `5426dd3728`; Task 12
+  `bca6c8474b`; Task 13 `1d6c95fcd9`; Task 15 `32f1ee5675`, the merge of local
+  `main` (`6de9ce8fc6`, 7 commits past the branch's old merge base `533b9d1355`)
+  with no conflicts. Tasks 1, 10 and 14 made no tka commit.
+
+#### Exit criteria on the final commits
+
+Run on 2026-10-09 with tka at `32f1ee5675` (after the sync merge) and the package
+at `dfc3b8f`, the package rebuilt first. Output files are `task15-*.txt` in the
+gate folder `C:/Users/Austen/AppData/Local/Temp/claude/video-editor-step2a/`;
+the numbers are repeated here because that folder is a Temp folder.
+
+| Criterion | Result | Output |
+| --- | --- | --- |
+| Parity green at every task | `Tests 4 passed \| 1 skipped (5)` at Tasks 2 to 9 and 11 to 15 (one `task<N>-parity.txt` each; Tasks 1 and 10 changed nothing the gate reads); `PARITY_WRITE` never set | `task15-parity.txt` |
+| tka's UI unchanged | Held in substance, wider than the criterion's file list: 12 files, see note 1 | `task15-ui-unchanged.txt` |
+| Browser proof | Not run yet: the controller fills in the two sections below | none yet |
+| Moved tests pass in the package | build exit 0; `svelte-check found 0 errors and 0 warnings` for `tsconfig.json` and `tsconfig.test.json`; node tests 38 pass, 0 fail; vitest 37 files, 268 tests passed (projects `unit`, `canvas`, `state`) | `task15-package-build.txt`, `task15-package-check.txt`, `task15-package-test.txt` |
+| tka type gate empty | `baseline 625, after 625, new 0` (`check:fast` itself exits 1 on the 625 baseline errors) | `task15-check-after.txt`, `task15-intersection.txt` |
+| `test:ci` | Green on the second full run, one flaky file on the first, see note 2 | `task15-test-ci.txt`, `task15-test-ci-run2.txt` |
+| Production build | exit 0; vite `built in 3m 40s`; 76 vite-plugin-svelte warnings, all in tka components | `task15-build.txt` |
+| Ringmaster readiness | `--project state test/video-editor-state.svelte.test.ts` 5 passed; `--project unit test/device-store.test.ts` 8 passed | `task15-ringmaster-readiness.txt` |
+| Trace gate | prints `No saved post for .` (exit 1, because that message is a thrown error) | `task15-trace.txt` |
+| Package hygiene | `forbidden imports: 0`, `unexported package subpaths: 0`, `barrel imports: 0` for both move lists; ASCII clean, see note 3 | `task15-hygiene.txt`, `task15-ascii.txt` |
+| Saved posts and history still open | `post-device-keys.test.ts` and the 11 `post-editor-*.test.ts` files: 12 files, 75 tests passed | `task15-saved-posts.txt` |
+
+Also run: export smoke (`offline-3d-exporter-cancellation`,
+`export-coordinator-scene-take-lifecycle`, `video-export-orchestrator-init`)
+3 files and 5 tests passed (`task15-export-smoke.txt`); the tka subset
+`tests/unit/media-composition` plus `post-studio-media-csp.test.ts` passed 123
+files and 1600 tests with 2 skipped (`task15-tka-subset.txt`).
+
+Notes on the table:
+
+1. **UI unchanged.** The criterion named three files (`PostEditorWorkspace`,
+   `PostEditorCanvas`, `PostStudioMediaLayer`, from Tasks 4 and 12). Measured at
+   tka `1d6c95fcd9`, before the sync merge (main's own theme-shadow edit
+   `f1e68e07f7` arrives with the merge and is not a 2A change), the diff from
+   `10ca855e29` lists 12 files, 51 insertions and 60 deletions. The other nine are
+   import rewrites that the move tasks made for the files they moved:
+   `PostKeyframeControls` (Tasks 5 and 6), `PostAddPanel`,
+   `PostAnimationAppearanceTool`, `PostItemTool`, `PostTransitionTool`,
+   `post-crop-session.svelte.ts` and `post-editor-add.ts` (Task 6) and
+   `PostMusicTool` and `PostTimelineMusicLane` (Task 7). Every hunk in them is an
+   import specifier or the same names moved into an import list. The only
+   non-import edits are in the three expected files: Task 4 removed the read of
+   the composition context that nothing sets (`bpm={60}` replaces
+   `composition?.tempoBpm ?? 60`, the same value), and Task 12 changed the
+   `createVideoPreviews(..., getPreviewVideoCache())` and `createTabSync` call
+   sites. No markup or style changed. `grep -n createVideoEditorState` finds the
+   wrapper's call at `post-editor-state.svelte.ts:83`. The criterion's file list
+   was too narrow, not the work too wide.
+2. **`test:ci`.** The first full run exited 1: 2596 files passed and 1 failed,
+   22859 tests passed and 2 failed, both in
+   `src/lib/shared/landing/data/__tests__/hero-act.test.ts` ("shape-matrix
+   source": `drawMatrixRealization` not yet called when the test's 50-tick
+   timer flush ended, most likely that wait running short under load). Neither side of the merge touches `src/lib/shared/landing`, and the file
+   passed alone twice (21 tests each). The second full run exited 0: Test Files
+   2597 passed, 3 skipped (2600); Tests 22861 passed, 10 skipped, 1 todo (22872).
+   Neither failure the plan allows (`relaxed-contact-grip` "baseline loop",
+   `scene-effects-batching-contract`) occurred in either run. `hero-act.test.ts`
+   joins the files that time out under load and pass alone (see the "Gates to
+   rerun" bullet in the open-items file).
+3. **ASCII.** `ascii.mjs` rewrites the files it is given, so it ran on scratch
+   copies of all 129 tracked `.ts` files in `src` and `test`: exit 0, no file
+   changed. A `grep` for any non-ASCII byte over every tracked file in `src` and
+   `test` (the `.svelte` files too) finds none.
+
+#### Browser proof (Task 15 Step 2, run by the controller)
+
+The dev server is the tka worktree's `tka-video-editor-worktree` entry on port
+5221. The controller's read-only reconnaissance before this commit found that the
+feature route mounts for a guest in about 7 seconds with the animation loop
+running (53 frames a second). That is not the proof. The real-sequence route shows
+"Post is in early access." for a guest, so it needs Austen's signed-in session and
+may still be pending when this record is read; it is not claimed as passed.
+
+##### Feature route (`/post?feature=generate-vertical`)
+
+PENDING: controller fills in after the hand-back
+
+##### Real sequence (`/post`)
+
+PENDING: controller fills in after the hand-back
+
+#### Plan wording slips found during execution
+
+- Task 1 Step 7 names `video-editor-step1/check-baseline.txt` as the step 1
+  951-error baseline; that file is an older 622-error run. The 951-error run is
+  `fix1-check-baseline.txt`. The implementer used the right file.
+- Task 1 Step 8 expected no `UNRESOLVED` from the move-list dry run. One is
+  expected: `render/edit-copy-lookup.ts: ../domain/feature-video`, which Task 5
+  Step 3 removes by hand.
+- The `Viewer3DScene.svelte:961` type-gate noise was object property order, not
+  union order; the normalizer sorts both (Task 1, reviewed and approved).
+- Task 3 Step 5 lists 8 known test type errors; the ES2023 lib cleared one
+  already and the count was 6 before any fix.
+- Ground rules say "zod stays one instance at 4.3.6". The package lockfile holds
+  one zod at 4.6.5 (pre-existing, not touched in 2A); tka installs 4.3.6. The
+  operative rule is the API ceiling: use no zod API newer than 4.3.6.
+- Task 3 Step 4 expects `$state is not defined` without the svelte plugin;
+  svelte 5.49.1 reports `rune_outside_svelte` for the same cause.
+- Task 2's `BOUND_ONLY` comment says `bound.ts` exports a per-kind schema taken
+  from the bound union; that is advice for a future need, none exists yet.
+- Task 5 Step 6 says the committed worker proof renders a good source; it already
+  requests `/missing.mp4`, so it reproduces the stray rejection as is. The strict
+  companion `scripts/spike/worker-proof-404.mjs` was added instead of swapping a
+  URL. Its mediabunny branch prescribed a URL `Set` plus an `Error fetching`
+  string match. The stray also happens for an unreadable file (no `Error fetching`
+  text) and carries the identical Error object, so the worker keeps a `WeakSet`
+  of replied errors (review approved it against mediabunny 1.44.2). The plan's
+  per-URL cleanup would never run, because each request gets its own worker. The
+  "temporary logging" ran on a scratch esbuild bundle, never in the worktree.
+- Plan risk R8 says the parity gate catches an edit output change. It does not:
+  the parity test loads, normalizes, compiles and renders two fixtures and calls
+  no edit function. The evidence for Task 6 was the reviewer's verbatim diff of
+  the moved engine against its source plus tka's edit tests (which compare with
+  `toEqual`, ignoring key order). R8 as corrected by the Task 6 review:
+
+  > R8. Patch key order. `editHooks.patchItem` runs after the core fields, so
+  > one patch that newly adds `staffEffect` together with `autoAdjust`,
+  > `colorGrade` or `sourceGeometry` builds the video item with `staffEffect`
+  > last instead of before them. `finish` does not reorder keys (normalize does
+  > no schema parse), and the parity gate runs no edits, so neither would catch
+  > it. It cannot reach a saved post today: the editor patches `staffEffect`
+  > alone; the ops, dev-bridge and account writes go through
+  > `PostProjectSchema` (zod 4 emits shape order); every load re-parses. Revisit
+  > if a UI control ever patches `staffEffect` with another video field, or if a
+  > store starts writing unparsed projects that another reader compares byte for
+  > byte.
+
+  The plan file itself keeps its old R8 sentence; this record is the correction.
+- The test gate in Task 7 Step 4 names `tests/unit/post-studio`; it does not
+  exist. Tasks 4, 5 and 7 ran `tests/unit/media-composition` plus
+  `tests/unit/post-studio-media-csp.test.ts` instead, and so did Task 15.
+- Task 7: `mirror.ts` was verbatim apart from a local `SchemaKeyframe` alias
+  (removed in Task 13 once `PostKeyframe.auto` took `| undefined`). `move.mjs`
+  does not delete the tka originals; each move task removes them with `git rm`
+  in the tka commit.
+- Task 8: the six tka strings sit one line below the plan's numbers. Seam B
+  writes `PostProject` as imported from `schema.js`; the package's `schema.ts`
+  does not export it, so `store/types.ts` (like `subject.ts`) and Tasks 9 and 10
+  take it from `core/project/item-kinds.js`. Seam A's inline `translate` type
+  became the named `Translate` type.
+- Task 11: both Task 11 commits (package `5c609b2`, tka `5426dd3728`) carry
+  `Co-Authored-By: Claude Opus 5.5`, not the branch's Fable 5.1 line, because a
+  harness attribution reminder reached the implementer mid-task. The no-amend
+  rule keeps them as they are; every other 2A commit carries Fable 5.1. The
+  timing state has two members seam D did not list (`timings`, read by the
+  wrapper's `addTunnelHook` clock, and `selectKeepingPart(itemId)`); `removeTake`
+  is forwarded unwrapped and the `selectedTakeId` reset moved into the
+  `takeRemoved` hook; `takeReady` clears the timing state's `merging` reference.
+- Task 12: `PostEditorWorkspace.svelte` lines drifted from the plan (123, 170,
+  348, 403 are 125, 166, 344, 399); it was edited by content.
+  `SelectedPreview.sourceWidth` and `sourceHeight` widened to `?: number | undefined`
+  (type only). `rewrite-imports.mjs --task 12` changed nothing. Neither the old nor
+  the new tab-sync module has a direct test of its own before Task 13.
+- Task 13 ran on sonnet, not the plan's haiku, because the carried-over list grew
+  to about twenty items across both repos (a schema type change with a dependent
+  alias removal, a try/catch in a tka store, a new package test and two living
+  docs). `portable-tests.mjs` reported `movers: 0`: the two tests the plan
+  expected to move (`post-music-edits.test.ts`, `post-timeline-music-lane.test.ts`)
+  import tka's plugin and a Svelte harness, so they stay in tka. tka has no
+  `check:docs` script, so the docs item covered the two living docs only.
+- Task 14: the new compositor and exporter tests run under the `unit` project with
+  per-test recording canvases, not under the `canvas` project (the shared stand-in
+  has no `save`, `restore`, `fillText` or `clip`, and that project is a fixed list
+  of two files). The exporter test mocks the encoder, the frame capturer and
+  `renderPostStudioFrame`. A painted layer now fails the export with
+  `No painter for the <label> layer (painted mode).` instead of drawing nothing, by
+  design; no tka path hits it.
+- Task 15: the plan's Task 1 Step 1 procedure merges the local `main` ref with
+  `--no-ff`; at dispatch local `main` was 3 commits ahead of `origin/main`
+  (`f9d582775f`). The "tka's UI unchanged" criterion is measured at the 2A base
+  `10ca855e29` before the merge for the reason in note 1. The plan's Task 15 Step 1
+  names `test:ci` failures that did not occur, and one that did (note 2).
+
+#### Known limitations
+
+- **The surface test pins member names, not signatures** (plan risk R13). A
+  signature change in a member a component uses shows up in the type gate through
+  its `src` callers; a member no `src` file uses has no type check at all.
+- **tka's type gate does not cover tests.** tka's tsconfig includes `src/**`
+  only, so the `expectTypeOf` half of `post-editor-surface.test.ts` and every
+  `tests/` file are checked at run time, not by `check:fast`. No task claims the
+  gate proves something about a test.
+- **No package test of `core/edit/music-edits.ts`.** Its only coverage is tka's
+  19-case `post-music-edits.test.ts`, which goes through tka's plugin and fixtures.
+  2B should add a plugin-free case.
+- **The parity gate does not run edits** (plan risk R8, corrected above).
+
+#### What stayed in tka by decision, and what waits for 2B
+
+Stayed in tka (plan risk R1): `post-project-ops.ts` (the CLI and dev-bridge op
+language: hooks, titles, animations, feature-video URLs), `post-project-looks.ts`
+(the Tutorial preset), `post-project-bridge-guard.ts` (names `timings` and
+feature-video URLs) and `post-project-backup.ts` (a timing-centric draft format).
+Each imports the moved edits from the package. Moving them needs more plugin
+hooks than 2A could prove; 2B revisits the ops with the UI that calls them. The
+rest of the "Stays in tka" list in the plan (take timing, staff-tip tracking,
+feature-video files, InShot recovery, `post-draft-storage.ts`, the migrations)
+is unchanged.
+
+Waits for 2B:
+
+- Plan risk R5: `notify` and `shortcuts` on the host, and whether the picker
+  drives the async `mediaLibrary` instead of `options.libraryTake`.
+- Plan risk R11: the `surfaces` factory (`createSurfaces()` in place of the
+  static array) and the memoizing text painter factory with its positive-path
+  `plugin.test.ts` cases, because their consumers are UI components. Also the
+  render-side items the UI move touches: the per-update `muted` assignment, the
+  frame recovery type exports and stale request, the weight of the render entry in
+  `PostShareSheet`, and keeping one module instance of the package.
+- The `./strings` subpath: tka's `editor-strings.ts` imports from the package root,
+  which also exports `VideoEditor.svelte`; a lighter subpath is a 2B choice.
+- Plan risk R12: the device store's three error texts still say "post"; 2B moves
+  them into the strings table without changing what tka's tests assert.
+- The vitest browser project and component tests (Task 3 built the `projects`
+  layout so 2B adds one without restructuring).
+- The bound `evaluatePresetFrame` and `evaluatePresetLayers` wrappers, until the
+  UI callers build a `FrameAlignment` themselves.
+
+#### Plan risk R6
+
+Proven by two production builds. The Task 11 build (`task11-build.txt`, exit 0,
+`built in 3m 44s`) and the Task 15 build (exit 0, `built in 3m 40s`) have no
+warning naming `video-editor-state`, `video-previews`, `$state` or `$derived` from
+the package, and the client chunk holding the package code (it contains the tab
+sync channel prefix `tka:post-studio:tabs`) has no uncompiled `$state(` call. tka
+needed no `optimizeDeps.exclude` change for it.
+
 ## Worktrees and branches
 
 - shared-packages: `E:/worktrees/shared-packages/video-editor`, branch

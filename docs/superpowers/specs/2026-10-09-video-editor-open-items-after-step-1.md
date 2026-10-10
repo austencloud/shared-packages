@@ -3,6 +3,12 @@
 Date: 2026-10-09. Status: the single list of what steps 2, 3 and 4 still owe.
 Parent spec: `2026-10-07-video-editor-extraction-design.md`.
 
+Step 2A update (2026-10-09): a struck title below was closed in step 2A, with the
+task and commit that closed it. A bullet marked "partly closed" names what is
+left. The 2A record and its gate numbers are in the parent spec under "Step 2A
+as built"; what 2A left over is under "Carried out of step 2A" in the Step 2
+section.
+
 This file condenses the step 1 per-task reviews, the whole-step review and the
 notes carried between tasks. They lived in a session scratchpad under a Temp
 folder, which can be cleaned, so this file is now the record. It describes the
@@ -37,8 +43,11 @@ Applies at the start of steps 2, 3 and 4 and in every task after.
   `:88`), so any later main edit to a moved schema needs the same treatment.
   Step 2 moves `PostItemTool` and the workspace, so the conflict grows every
   day main keeps editing them. After a sync, rerun the gates below, and run
-  tka's `check:docs` if main has it.
-- **Guard the core per-kind schemas in tka.** The core exports strict
+  tka's `check:docs` if main has it. 2A applied it twice: Task 1 found main
+  `533b9d1355` already merged, and Task 15 merged the local `main` ref
+  (`6de9ce8fc6`) with `git merge --no-ff main` as `32f1ee5675`, no conflicts, no
+  rebase. tka has no `check:docs` script.
+- ~~**Guard the core per-kind schemas in tka.**~~ Closed in 2A Task 2 (tka `e073fbae7a`). The core exports strict
   `PostCardItemSchema` and `PostVideoItemSchema` with no TKA fields. No tka
   file imports them today, but a main sync can bring one in and the rewriter
   maps it to the strict core name, so tka's `qrUrl`, `cardAppearance` and
@@ -46,7 +55,9 @@ Applies at the start of steps 2, 3 and 4 and in every task after.
   names as forbidden in tka in `tests/unit/video-editor-bound-only.test.ts`;
   if tka needs a per-kind schema, export one from `bound.ts`, taken from the
   bound union. (Step 1 re-review, 2026-10-09.)
-- **Fix the type-gate tooling before relying on it again.** After the main
+- ~~**Fix the type-gate tooling before relying on it again.**~~ Closed in 2A Task 1 (package `b53eee8`): the normalizer cuts each path at its
+  last `node_modules/` and sorts union members and object properties, and the
+  baseline is taken at the synced tip, one environment for both runs. After the main
   merge, `scripts/step1/check-intersection.mjs` printed `new 9` against a
   baseline taken in the primary checkout: eight keys differ only by the
   worktree junction prefix `../../../tka-platform/` on pnpm-store paths, and
@@ -81,6 +92,16 @@ Applies at the start of steps 2, 3 and 4 and in every task after.
     `print-qr-guard`, `serialized-card-front-scan`, `relaxed-contact-grip`
     (baseline loop, saved transition) and `shape-matrix-three-four-parity`.
     Rerun once, keep both outputs, then run the timed-out files alone.
+  - At the end of step 2A (tka `32f1ee5675`, package `dfc3b8f`): parity `Tests 4
+    passed | 1 skipped (5)`; tka type gate baseline 625, after 625, new 0; package
+    37 vitest files with 268 tests, 38 node tests and `svelte-check` 0 errors and
+    0 warnings for both tsconfigs; the trace script prints `No saved post for .`.
+    `test:ci` passed on its second run (2597 files, 22861 tests); the first run
+    failed two `src/lib/shared/landing/data/__tests__/hero-act.test.ts` cases
+    ("shape-matrix source") that pass alone, so that file joins the list of files
+    that time out under load. The tka test subset is
+    `tests/unit/media-composition` plus `tests/unit/post-studio-media-csp.test.ts`
+    (`tests/unit/post-studio` does not exist).
 - **The parity baseline is frozen.** Never set `PARITY_WRITE`; no agent or CI
   run regenerates it. The gate compares 12 committed draw logs
   (`tka:tests/fixtures/video-editor-parity/draw-logs/`) and the hashes in
@@ -214,12 +235,23 @@ Applies at the start of steps 2, 3 and 4 and in every task after.
 
 ## Step 2 (editor UI moves)
 
+2A status (2026-10-09): the bullets struck below are closed. Still open and
+deferred to 2B by the 2A plan: the `surfaces` factory, the memoized text painter
+(2A only pinned the registry's null-factory and first-wins cases, Task 14), the
+per-update `muted` assignment, one module instance of the package, the frame
+recovery type exports and stale request, the weight of the render entry in
+`PostShareSheet`, the vitest browser project and component tests, and the
+`alignment` equivalence case with the bound evaluate wrappers.
+
 ### Plugin members to settle before wiring
 
 The spec's "Step 1 as built" says `alignment`, `painters` and `surfaces` are
 typed but unread. Settle each before anything wires it.
 
-- **`alignment` provider design.** `src/plugin.ts` declares
+- ~~**`alignment` provider design.**~~ Closed in 2A Task 11 with option (b): the plugin member is gone (package
+  `5c609b2`) and tka builds its alignment in a `$derived` inside
+  `post-timing-state.svelte.ts` (tka `5426dd3728`). Still open for 2B: the
+  equivalence case in `alignment.test.ts` and the bound wrappers, below. `src/plugin.ts` declares
   `alignment?: AlignmentProvider` and `createTkaPlugin()` does not wire it;
   tka's `createTkaAlignment(getSequence, getTimings)` is in
   `tka:src/lib/shared/post-studio-plugin/alignment.ts`.
@@ -238,7 +270,8 @@ typed but unread. Settle each before anything wires it.
     its own test. The alignment design need not cover it. Step 2 task: move
     `CompositionSourceBinding` to where its readers live, then delete the state
     file, its context file, the null branch in `PostStudioMediaLayer` and its
-    test.
+    test. Closed in 2A Task 4 (package `f2699a6`, tka `f00a174c8a`); the slots
+    and breakdown modules only it used went too.
   - Before wiring, add an equivalence case to `alignment.test.ts`: the bound
     wrapper with the editor's literal against the package evaluator with the
     provider, deep-equal layers at a few timestamps.
@@ -286,7 +319,11 @@ typed but unread. Settle each before anything wires it.
     about a role no factory answers, which is undocumented either way; pin it
     with a null-factory case. A duplicate role resolves first-wins and has no
     test.
-- **A painted mode with no painter vanishes silently.** In
+- **A painted mode with no painter vanishes silently.** Partly closed in 2A Task 14 (package `dfc3b8f`): a
+  painted layer with no painter now throws, and the DOM-surface branch restores
+  in a `finally`. Still open: `drawPaintedLayer` and the `sourceGeometry` branch
+  restore outside a `finally` (see "Carried out of step 2A"). The registry's
+  null-factory and first-wins cases below were closed in the same task. In
   `src/render/frame-compositor.ts` (the layer drawing path, around 535-587), a
   painted render mode with no matching painter falls into the media branch and
   draws nothing. Treat a missing painter like a missing surface and throw,
@@ -296,14 +333,20 @@ typed but unread. Settle each before anything wires it.
 
 ### Moved callers and the preview cache
 
-- **Every moved caller of `normalizeProject` must take and pass `plugin`.**
+- ~~**Every moved caller of `normalizeProject` must take and pass `plugin`.**~~ Closed in 2A Task 6 (package `4715df2`): `EditContext` carries the
+  plugin, both normalize calls in `finish` pass it, and `assertPluginFor` throws
+  when a project with plugin data meets a context without one.
   Callers that move into the package (`post-project-edits.ts` and the other edit
   modules) that omit it make tka silently lose its hook migrations and motion
   keys on that path. The bound-only test guards only tka `src` imports, not
   calls made inside the package. Add a package test that fails when a moved edit
   path drops the plugin, or route those callers through a plugin-carrying
   context.
-- **One app-wide `IPreviewVideoCache`.** The editor UI that moves reads the
+- **One app-wide `IPreviewVideoCache`.** Partly closed in 2A Task 12 (package `f0d959a`, tka
+  `bca6c8474b`): `createVideoPreviews` takes the cache as a required parameter, the
+  host contract carries `previewCache`, and tka's workspace passes
+  `getPreviewVideoCache()`. The UI that moves in 2B must take the cache from the
+  host as well. The editor UI that moves reads the
   cache through tka's `getPreviewVideoCache()` singleton (via
   `tka:src/lib/shared/media-composition/state/post-video-previews.svelte.ts`).
   The host contract must supply an `IPreviewVideoCache`, or the UI takes one as
@@ -335,38 +378,42 @@ typed but unread. Settle each before anything wires it.
 
 ### Workers and exporter
 
-- **Split zod out of the preview worker.** `src/core/preview-video.ts` defines
+- ~~**Split zod out of the preview worker.**~~ Closed in 2A Task 5 (package `d91b6d8`). `src/core/preview-video.ts` defines
   `EditCopyManifestSchema` beside the preview constants the worker imports, so
   zod lands in the preview worker chunk (540,267 bytes in the Task 14 build; the
   36,226-byte second chunk of the 2026-10-07 build is gone, origin
   undetermined). Move the manifest schema into its own module so the worker
   stops bundling zod, then recheck the chunk.
-- **The worker's uncaught rejection on a failed source.** On a bad source the
+- ~~**The worker's uncaught rejection on a failed source.**~~ Closed in 2A Task 5 (package `d91b6d8`): the worker keeps a
+  `WeakSet` of replied errors, because mediabunny's stray rejection carries the
+  same Error object the caught path already answered. On a bad source the
   preview worker posts its error reply, yet the worker proof console still shows
   `Uncaught (in promise) Error: Error fetching ...`. Something in the
   failed-source path (mediabunny's `UrlSource` prefetch, or `input.dispose()` in
   the `finally` of `src/workers/preview-video.worker.ts`) rejects outside the
   awaited chain. Find it, so the host's `worker.onerror` does not fire a second
   failure for one bad source.
-- **Exporter `finally` order.** `src/render/post-exporter.ts:157-160` releases
+- ~~**Exporter `finally` order.**~~ Closed in 2A Task 14 (package `dfc3b8f`). `src/render/post-exporter.ts:157-160` releases
   surfaces before `videoFrames.dispose()`, so a throwing `release` masks the
   real error and skips dispose. Dispose first, or wrap each release. It matters
   once surfaces carry per-export state.
-- **Exporter setup runs before `try`.** In `src/render/post-exporter.ts` the
+- ~~**Exporter setup runs before `try`.**~~ Closed in 2A Task 14 (package `dfc3b8f`). In `src/render/post-exporter.ts` the
   RangeError guard (61-63) and the constructors (71-77) run before `try`, so
   surfaces are not released on those paths. Move them inside the `try` or
   release in the guard.
 
 ### Package tests and checks
 
-- **Type-check `test/`.** `tsconfig.json` includes `src` only, so nothing
+- ~~**Type-check `test/`.**~~ Closed in 2A Task 3 (package `89e06d8`): `tsconfig.test.json`, in `check`. `tsconfig.json` includes `src` only, so nothing
   type-checks `test/`. `tsc --noEmit` over `test/*.ts` with the package tsconfig
   gives 8 errors, all in moved files: `post-backdrop-painter.test.ts` 47,
   `post-studio-export-video-frames.test.ts` 34 (`findLastIndex` is ES2023 and
   the package lib is ES2022), `post-video-color-grade.test.ts` 39, 50, 69 and 80
   (a readonly `Rgb` into a mutable tuple) and `text-item-painter.test.ts` 348.
   Add a `tsconfig.test.json`, add it to the `check` script and fix the 8.
-- **Vitest `projects`.** Add a jsdom unit project that honors the node docblock
+- **Vitest `projects`.** Partly closed in 2A Task 3 (package `89e06d8`): the `unit` (jsdom),
+  `canvas` and `state` (svelte plugin) projects exist. The browser project and
+  component tests wait for 2B. Add a jsdom unit project that honors the node docblock
   in `test/render-entry-node.test.ts` (that test must never run in a browser
   project) and a browser-mode project with a setup file that supplies a canvas
   2d mock and a `Blob.prototype.arrayBuffer` polyfill (tka's
@@ -376,7 +423,7 @@ typed but unread. Settle each before anything wires it.
   second project exists, add one line of `test/` conventions: flat,
   `<src module>.test.ts`, and `fixtures/` holds only plugin-free, hash-free
   project JSON.
-- **Move the five NEEDS_TKA_SETUP tests in.** `scripts/step1/portable-tests.mjs`
+- ~~**Move the five NEEDS_TKA_SETUP tests in.**~~ Closed in 2A Task 3 (package `89e06d8`, tka `02e97b1e22`). `scripts/step1/portable-tests.mjs`
   keeps the list: `CanvasFrameCapturer` and `preview-video-frame-recovery`
   (canvas `getContext("2d")`), and `background-encoder-timeout`,
   `post-audio-plan` and `post-audio-track` (`Blob.prototype.arrayBuffer`). When
@@ -385,12 +432,12 @@ typed but unread. Settle each before anything wires it.
   (`background-encoder-timeout`, `CanvasFrameCapturer`) are send-backs. The
   script also lists 74 near-misses, tests that import the package but not
   portably; review them as the UI moves.
-- **Package compositor and exporter tests with no plugin.** None exists;
+- ~~**Package compositor and exporter tests with no plugin.**~~ Closed in 2A Task 14 (package `dfc3b8f`). None exists;
   `test/plain-project.test.ts` stops at evaluate. Add: media plus text drawn; a
   DOM mode throwing with the layer name; a painted mode with no painter throwing
   instead of vanishing; surfaces released on success, on a throw and on cancel;
   and a registry first-wins case for a duplicate role.
-- **Test housekeeping.** `globals: true` can go (no test relies on it). Drop the
+- ~~**Test housekeeping.**~~ Closed in 2A Task 3 (package `89e06d8`). `globals: true` can go (no test relies on it). Drop the
   redundant `@vitest-environment jsdom` docblocks in
   `test/post-studio-export-video-frames.test.ts` and
   `test/video-export-codec.test.ts`; the second one's describe titles say
@@ -398,7 +445,7 @@ typed but unread. Settle each before anything wires it.
   (pre-existing, left as is). `prettier --check test` with the package flags
   flags `test/core.test.mjs`, `test/schema-factory.test.ts` (74) and the plain
   fixture (a tab re-serialization); format them or exempt them.
-- **tka-side test nits for the next touch.** The compositor case "names the
+- ~~**tka-side test nits for the next touch.**~~ Closed in 2A Task 13 (package `1d04edc`, tka `1d6c95fcd9`). The compositor case "names the
   layer when a mounted sequence animation has no surface" should pin the label
   (`compiled.preset.regions.find((r) => r.id === "motion")!.label`, since the
   compositor builds the name from `staticRegion.label ?? layer.sourceRole`)
@@ -410,6 +457,36 @@ typed but unread. Settle each before anything wires it.
   compare `PLAYBACK_BASELINE_BPM`, `PLAYBACK_MIN_SPEED` and
   `PLAYBACK_MAX_SPEED`. Optionally add a compile-time assertion in tka's
   `collaborative-video.ts` that `StepMap` extends the package's `LegacyStepMap`.
+
+### Carried out of step 2A
+
+For 2B's first tidy; no 2A task is left to own them.
+
+- **Task 13 review nits.** tka `post-editor-state.svelte.ts:434`: the dispose
+  comment is one 155-character line. tka
+  `docs/development/post-studio-manifest-bridge.md:26` omits
+  `core/edit/music-edits.ts` for the music ops and names PIP edits that ops never
+  call. Package `scripts/step1/check-intersection.mjs` keeps a dead `PNPM_STORE`
+  replace.
+- **Task 14 review nits.** The `DOM_SURFACE_MODES` doc comment at
+  `src/render/frame-compositor.ts:468` still says every other mode reaches the
+  media branch, but a painted mode now throws. The `POST_STUDIO_SOURCES` read at
+  `frame-compositor.ts:28` and `481-485` is one more generic place that knows
+  tka's sequence-carousel (ties to the `DOM_SURFACE_MODES` item in Step 3). The
+  save and restore spans of `drawPaintedLayer` and the `sourceGeometry` branch
+  (`frame-compositor.ts:341-357` and `546-551`) restore outside a `finally`; a
+  next frame cannot see it today, because any frame error ends the export and the
+  canvas is per export. `painter-registry.test.ts` "builds a fresh painter each
+  time" asserts on the fake factory, not the registry.
+- **No package test of `core/edit/music-edits.ts`.** Its only coverage is tka's
+  19-case `post-music-edits.test.ts`, through tka's plugin and fixtures. Add a
+  plugin-free case.
+- **The surface test pins names, not signatures** (plan risk R13), and tka's type
+  gate covers `src` only. A member no `src` file uses has no type check.
+- **`hero-act.test.ts` under load.** `src/lib/shared/landing/data/__tests__/`
+  failed two "shape-matrix source" cases in one of two full `test:ci` runs at
+  Task 15 and passes alone; its `flushUntil` waits 50 timer ticks. Not a video
+  editor file; raise the wait or wait on the mock instead.
 
 ## Step 3 (Ringmaster adopts it)
 
@@ -549,7 +626,8 @@ typed but unread. Settle each before anything wires it.
   modules do"; the "tunnel intro" comments in `normalize.ts` (about 98-107) and
   `compiler.ts` (429) read as tka; and tka `post-project-edits.ts:2100` still
   says "see `post-project-keyframes.ts`" (now `core/project/keyframes.ts`),
-  which can be fixed when that file moves in step 2.
+  which can be fixed when that file moves in step 2. That last item went with the
+  edit engine in 2A Task 6 (tka `0a242bc1fd`).
 
 ## Step 4 (release and merge)
 
