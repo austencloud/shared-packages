@@ -250,6 +250,30 @@ describe("renderPostStudioFrame with no plugin", () => {
 		expect(output.count("save")).toBe(output.count("restore"));
 	});
 
+	it("restores the context when a painter's paint throws", async () => {
+		const output = recordingCanvas(preset.output.width, preset.output.height);
+		const { root } = mount();
+		const carousel = withMediaRole(POST_STUDIO_ROLE.carousel);
+		const painter: PostStudioLayerPainter = {
+			prepare: vi.fn(async () => undefined),
+			paint: vi.fn(() => {
+				throw new Error("painter paint failed");
+			}),
+		};
+
+		const failure = renderPostStudioFrame({
+			...frameInput(output, root),
+			preset: carousel.preset,
+			layers: carousel.layers,
+			painters: new Map([...painters, [POST_STUDIO_ROLE.carousel, painter]]),
+		});
+
+		await expect(failure).rejects.toThrow("painter paint failed");
+		expect(painter.paint).toHaveBeenCalledTimes(1);
+		expect(output.count("save")).toBeGreaterThan(0);
+		expect(output.count("restore")).toBe(output.count("save"));
+	});
+
 	it("restores the context when a surface's draw throws", async () => {
 		const output = recordingCanvas(preset.output.width, preset.output.height);
 		const { root } = mount("x");

@@ -60,6 +60,9 @@ function harness(frameCallbacks = true) {
 		replaceElement: () => {
 			current = false;
 		},
+		restoreElement: () => {
+			current = true;
+		},
 	};
 }
 
@@ -80,6 +83,18 @@ describe("retained preview frames and lifecycle recovery", () => {
 		mounted.splice(0).forEach(({ recovery }) => recovery.destroy());
 		vi.restoreAllMocks();
 		vi.useRealTimers();
+	});
+
+	it("watches playback again after a frame arrived while the preview was not current", () => {
+		const h = mount();
+		h.state.playing = true;
+		h.recovery.update();
+		expect(h.video.requestVideoFrameCallback).toHaveBeenCalledTimes(1);
+		h.replaceElement();
+		h.present();
+		h.restoreElement();
+		h.recovery.update();
+		expect(h.video.requestVideoFrameCallback).toHaveBeenCalledTimes(2);
 	});
 
 	it("retains a decoded frame across paused restore at the same time", () => {

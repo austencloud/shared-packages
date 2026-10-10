@@ -339,22 +339,25 @@ async function drawPaintedLayer(
 		transform: layer.transform,
 	});
 	context.save();
-	turnAboutCentre(context, pixels, region.turn ?? 0);
-	traceRoundedRect(
-		context,
-		{
-			x: pixels.x - surface.rect.x,
-			y: pixels.y - surface.rect.y,
-			width: pixels.width + surface.width - width,
-			height: pixels.height + surface.height - height,
-		},
-		cornerRadius,
-	);
-	context.clip();
-	context.globalAlpha = layer.opacity;
-	if (!painter.ownsTransform) applyLayerTransform(context, geometry);
-	painter.paint(context, geometry.drawRect, toPaintFrame(layer, timeSeconds));
-	context.restore();
+	try {
+		turnAboutCentre(context, pixels, region.turn ?? 0);
+		traceRoundedRect(
+			context,
+			{
+				x: pixels.x - surface.rect.x,
+				y: pixels.y - surface.rect.y,
+				width: pixels.width + surface.width - width,
+				height: pixels.height + surface.height - height,
+			},
+			cornerRadius,
+		);
+		context.clip();
+		context.globalAlpha = layer.opacity;
+		if (!painter.ownsTransform) applyLayerTransform(context, geometry);
+		painter.paint(context, geometry.drawRect, toPaintFrame(layer, timeSeconds));
+	} finally {
+		context.restore();
+	}
 }
 
 /**
@@ -464,8 +467,10 @@ export async function renderPostStudioFrame(input: RenderPostStudioFrameInput): 
 /**
  * Render modes the preview mounts as live DOM: the compositor cannot draw
  * them from media or a painter, so the host passes a surface for each. A
- * layer in one of these modes with no surface throws rather than leave its
- * region empty. Every other mode falls through to the media branch.
+ * layer in one of these modes with no surface throws, as does a painted layer
+ * with no painter; every other mode falls through to the media branch. The
+ * names are tka's (sequence animation, choreo card); step 3 moves them out of
+ * the compositor together with the role table presetRenderMode reads.
  */
 const DOM_SURFACE_MODES: ReadonlySet<string> = new Set(["sequence-animation", "choreo-card"]);
 
@@ -544,11 +549,16 @@ async function drawRegionLayer(
 			sourceGeometry: layer.sourceGeometry,
 		});
 		context.save();
-		context.globalAlpha = layer.opacity;
-		applyLayerTransform(context, geometry);
-		context.filter = videoColorFilter(colorGrade?.kind === "visual" ? colorGrade.colorGrade : null);
-		drawSource(context, media, geometry);
-		context.restore();
+		try {
+			context.globalAlpha = layer.opacity;
+			applyLayerTransform(context, geometry);
+			context.filter = videoColorFilter(
+				colorGrade?.kind === "visual" ? colorGrade.colorGrade : null,
+			);
+			drawSource(context, media, geometry);
+		} finally {
+			context.restore();
+		}
 		return;
 	}
 	context.save();

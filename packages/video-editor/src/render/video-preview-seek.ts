@@ -1,4 +1,4 @@
-interface PreviewSeekState {
+export interface PreviewSeekState {
 	currentTime: number;
 	targetTime: number;
 	previousTargetTime: number | null;

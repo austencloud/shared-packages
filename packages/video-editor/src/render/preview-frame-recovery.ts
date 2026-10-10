@@ -1,10 +1,10 @@
-interface PreviewFrameState {
+export interface PreviewFrameState {
 	playing: boolean;
 	targetTime: number;
 	source: string;
 }
 
-interface PreviewFrameRecoveryOptions {
+export interface PreviewFrameRecoveryOptions {
 	video: HTMLVideoElement;
 	canvas: HTMLCanvasElement;
 	readState: () => PreviewFrameState;
@@ -102,14 +102,16 @@ export class PreviewVideoFrameRecovery {
 		const generation = this.generation;
 		if (typeof video.requestVideoFrameCallback === "function") {
 			this.frameRequest = video.requestVideoFrameCallback(() => {
-				if (!this.current() || generation !== this.generation) return;
+				if (generation !== this.generation) return;
 				this.frameRequest = null;
+				if (!this.current()) return;
 				callback();
 			});
 		} else {
 			this.fallbackRequest = requestAnimationFrame(() => {
-				if (!this.current() || generation !== this.generation) return;
+				if (generation !== this.generation) return;
 				this.fallbackRequest = null;
+				if (!this.current()) return;
 				if (video.readyState >= 2 && !video.seeking) callback();
 				else this.requestFrame(callback);
 			});
