@@ -408,6 +408,21 @@ importers:
         specifier: ^3.0.0
         version: 3.2.4(@types/node@22.19.8)(yaml@1.10.2)
 
+  packages/undo:
+    devDependencies:
+      rimraf:
+        specifier: ^5.0.0
+        version: 5.0.10
+      svelte:
+        specifier: ^5.0.0
+        version: 5.49.1
+      typescript:
+        specifier: ^5.0.0
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.0
+        version: 2.1.9(@types/node@22.19.8)
+
 packages:
 
   '@andrewbranch/untar.js@1.0.3':
