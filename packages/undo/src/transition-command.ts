@@ -26,7 +26,13 @@ export type TransitionResult<V> =
   | { id: string; status: "failed"; error?: unknown };
 
 export interface TransitionStore<V> {
-  /** Apply every change whose expected value still matches. Resolve one result per change. */
+  /**
+   * Apply every change whose expected value still matches. Resolve one result
+   * per change, matched by id. Once any write has landed this must resolve and
+   * never reject: report the writes that did not land as `failed` per change.
+   * A rejection tells the command nothing about which writes landed, so it is
+   * treated as a failure of the whole step and can strand the writes that did.
+   */
   commit(changes: TransitionChange<V>[]): Promise<TransitionResult<V>[]>;
 }
 
@@ -58,7 +64,9 @@ export interface TransitionCommandHandle<V> extends Command {
   readonly transitions: readonly Transition<V>[];
 }
 
-const handles = new WeakSet<Command>();
+// Every handle, with the store it writes through. merge uses the store to
+// decide whether two commands may be folded into one.
+const handles = new WeakMap<Command, TransitionStore<never>>();
 
 export function isTransitionCommand<V = unknown>(command: Command): command is TransitionCommandHandle<V> {
   return handles.has(command);
@@ -66,7 +74,7 @@ export function isTransitionCommand<V = unknown>(command: Command): command is T
 
 export function transitionCommand<V>(options: TransitionCommandOptions<V>): TransitionCommandHandle<V> {
   const equals = options.equals ?? Object.is;
-  let transitions = options.transitions.slice();
+  let transitions = collapseDuplicates(options.transitions, equals);
 
   async function apply(direction: "execute" | "undo"): Promise<Outcome> {
     const changes: TransitionChange<V>[] = transitions.map((t) =>
@@ -74,7 +82,14 @@ export function transitionCommand<V>(options: TransitionCommandOptions<V>): Tran
         ? { id: t.id, expected: t.before, next: t.after }
         : { id: t.id, expected: t.after, next: t.before }
     );
-    const results = changes.length > 0 ? await options.store.commit(changes) : [];
+    const raw = changes.length > 0 ? await options.store.commit(changes) : [];
+    // Match by id, in change order: a missing result is a failed write, a result for an unknown id is noise.
+    const byId = new Map<string, TransitionResult<V>>();
+    for (const r of raw) if (!byId.has(r.id)) byId.set(r.id, r);
+    const results = changes.map(
+      (c): TransitionResult<V> =>
+        byId.get(c.id) ?? { id: c.id, status: "failed", error: new Error("The store returned no result for this change.") }
+    );
     const applied = results.filter((r) => r.status === "applied");
     const stale = results.filter((r) => r.status === "stale").length;
     const failed = results.filter((r) => r.status === "failed").length;
@@ -87,6 +102,13 @@ export function transitionCommand<V>(options: TransitionCommandOptions<V>): Tran
       results,
     };
     if (changes.length === 0) return { kind: "skipped", message: options.describe(report) };
+    if (direction === "undo" && failed > 0) {
+      // The entry stays on the undo stack and covers only the ids that did not
+      // write, so one more undo retries exactly those. Stale ids are never rewritten.
+      const retry = new Set(results.filter((r) => r.status === "failed").map((r) => r.id));
+      transitions = transitions.filter((t) => retry.has(t.id));
+      throw new Error(options.describe(report));
+    }
     if (applied.length === changes.length) return undefined;
     if (applied.length > 0) {
       const keep = new Set(applied.map((r) => r.id));
@@ -98,7 +120,9 @@ export function transitionCommand<V>(options: TransitionCommandOptions<V>): Tran
   }
 
   function merge(next: Command): Command | null {
-    if (!isTransitionCommand<V>(next)) return compositeCommand(handle, next);
+    if (!isTransitionCommand<V>(next) || handles.get(next) !== (options.store as TransitionStore<never>)) {
+      return compositeCommand(handle, next);
+    }
     const byId = new Map<string, Transition<V>>();
     for (const t of transitions) byId.set(t.id, t);
     for (const t of next.transitions) {
@@ -124,8 +148,24 @@ export function transitionCommand<V>(options: TransitionCommandOptions<V>): Tran
       return transitions;
     },
   };
-  handles.add(handle);
+  handles.set(handle, options.store as TransitionStore<never>);
   return handle;
+}
+
+/** One transition per id: the first before, the last after; ones that end up unchanged are dropped. */
+function collapseDuplicates<V>(list: readonly Transition<V>[], equals: (a: V, b: V) => boolean): Transition<V>[] {
+  const byId = new Map<string, Transition<V>>();
+  const repeated = new Set<string>();
+  for (const t of list) {
+    const existing = byId.get(t.id);
+    if (existing) {
+      repeated.add(t.id);
+      byId.set(t.id, { id: t.id, before: existing.before, after: t.after });
+    } else {
+      byId.set(t.id, t);
+    }
+  }
+  return [...byId.values()].filter((t) => !repeated.has(t.id) || !equals(t.before, t.after));
 }
 
 /** Two unrelated commands under one entry: execute in order, undo in reverse. */

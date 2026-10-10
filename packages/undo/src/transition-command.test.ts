@@ -165,3 +165,222 @@ describe("transitionCommand", () => {
     expect(isTransitionCommand({ label: "x", execute() {}, undo() {} })).toBe(false);
   });
 });
+
+describe("transitionCommand undo with failed writes", () => {
+  it("keeps the entry and retries only the failed ids when undo has stale and failed ids but nothing applied", async () => {
+    const store = memoryTransitionStore<string[]>([["a", []], ["b", []]], sameList);
+    const history = createHistory();
+    const command = tagCommand(store, [
+      { id: "a", before: [], after: ["fire"] },
+      { id: "b", before: [], after: ["fire"] },
+    ]);
+    await history.run(command);
+    store.set("a", ["elsewhere"]);
+    store.failNext("b");
+    const first = await history.undo();
+    expect(first.status).toBe("failed");
+    expect((first.error as Error).message).toBe("undo:0/2 stale 1 failed 1");
+    expect(history.state.canUndo).toBe(true);
+    expect(history.state.canRedo).toBe(false);
+    expect(command.transitions.map((t) => t.id)).toEqual(["b"]);
+    expect(await history.undo()).toEqual({ status: "done", label: "Add Fire" });
+    expect(store.get("b")).toEqual([]);
+    expect(store.get("a")).toEqual(["elsewhere"]);
+  });
+
+  it("keeps the entry covering only the failed ids when undo has applied and failed ids", async () => {
+    const store = memoryTransitionStore<string[]>([["a", []], ["b", []], ["c", []], ["d", []]], sameList);
+    const history = createHistory();
+    const command = tagCommand(
+      store,
+      ["a", "b", "c", "d"].map((id) => ({ id, before: [], after: ["fire"] }))
+    );
+    await history.run(command);
+    store.set("d", ["elsewhere"]);
+    store.failNext("b");
+    const first = await history.undo();
+    expect(first.status).toBe("failed");
+    expect(store.get("a")).toEqual([]);
+    expect(store.get("c")).toEqual([]);
+    expect(store.get("b")).toEqual(["fire"]);
+    expect(history.state.canUndo).toBe(true);
+    expect(command.transitions.map((t) => t.id)).toEqual(["b"]);
+    // The retry touches b only; a, c and the stale d are never rewritten.
+    store.set("a", ["later"]);
+    expect(await history.undo()).toEqual({ status: "done", label: "Add Fire" });
+    expect(store.get("b")).toEqual([]);
+    expect(store.get("a")).toEqual(["later"]);
+    expect(store.get("d")).toEqual(["elsewhere"]);
+  });
+
+  it("keeps the execute rules: trim to applied on partial, skipped when only stale and failed", async () => {
+    const store = memoryTransitionStore<string[]>([["a", []], ["b", []], ["c", ["elsewhere"]]], sameList);
+    store.failNext("b");
+    const command = tagCommand(store, [
+      { id: "a", before: [], after: ["fire"] },
+      { id: "b", before: [], after: ["fire"] },
+      { id: "c", before: [], after: ["fire"] },
+    ]);
+    const outcome = await command.execute();
+    expect(outcome?.kind).toBe("partial");
+    expect(command.transitions.map((t) => t.id)).toEqual(["a"]);
+
+    const stuck = memoryTransitionStore<string[]>([["a", ["elsewhere"]], ["b", []]], sameList);
+    stuck.failNext("b");
+    const skipped = await tagCommand(stuck, [
+      { id: "a", before: [], after: ["fire"] },
+      { id: "b", before: [], after: ["fire"] },
+    ]).execute();
+    expect(skipped?.kind).toBe("skipped");
+  });
+});
+
+describe("transitionCommand result matching", () => {
+  const plain = (r: TransitionReport<string>) =>
+    `${r.direction}:${r.applied}/${r.total} stale ${r.stale} failed ${r.failed}`;
+  const two: Transition<string>[] = [
+    { id: "a", before: "0", after: "1" },
+    { id: "b", before: "0", after: "1" },
+  ];
+
+  it("counts a change with no result as failed", async () => {
+    const command = transitionCommand<string>({
+      label: "x",
+      describe: plain,
+      transitions: two,
+      store: { commit: async () => [{ id: "a", status: "applied" }] },
+    });
+    expect(await command.execute()).toEqual({ kind: "partial", message: "execute:1/2 stale 0 failed 1" });
+    expect(command.transitions.map((t) => t.id)).toEqual(["a"]);
+  });
+
+  it("throws when the store returns no results at all", async () => {
+    const command = transitionCommand<string>({
+      label: "x",
+      describe: plain,
+      transitions: two,
+      store: { commit: async () => [] },
+    });
+    await expect(command.execute()).rejects.toThrow("execute:0/2 stale 0 failed 2");
+  });
+
+  it("ignores a result for an id that was not asked about", async () => {
+    const command = transitionCommand<string>({
+      label: "x",
+      describe: plain,
+      transitions: two,
+      store: {
+        commit: async () => [
+          { id: "a", status: "applied" },
+          { id: "zzz", status: "applied" },
+        ],
+      },
+    });
+    expect(await command.execute()).toEqual({ kind: "partial", message: "execute:1/2 stale 0 failed 1" });
+    expect(command.transitions.map((t) => t.id)).toEqual(["a"]);
+  });
+
+  it("matches results by id when the store answers in another order", async () => {
+    const command = transitionCommand<string>({
+      label: "x",
+      describe: plain,
+      transitions: two,
+      store: {
+        commit: async () => [
+          { id: "b", status: "applied" },
+          { id: "a", status: "applied" },
+        ],
+      },
+    });
+    expect(await command.execute()).toBeUndefined();
+  });
+
+  it("collapses duplicate ids to the first before and last after", async () => {
+    const store = memoryTransitionStore<string>([["a", "0"]]);
+    const command = transitionCommand<string>({
+      label: "x",
+      describe: plain,
+      store,
+      transitions: [
+        { id: "a", before: "0", after: "1" },
+        { id: "a", before: "1", after: "2" },
+      ],
+    });
+    expect(command.transitions).toEqual([{ id: "a", before: "0", after: "2" }]);
+    await command.execute();
+    expect(store.get("a")).toBe("2");
+    expect(await command.undo()).toBeUndefined();
+    expect(store.get("a")).toBe("0");
+  });
+
+  it("drops duplicates that end up where they began", () => {
+    const store = memoryTransitionStore<string>([["a", "0"]]);
+    const command = transitionCommand<string>({
+      label: "x",
+      describe: plain,
+      store,
+      transitions: [
+        { id: "a", before: "0", after: "1" },
+        { id: "a", before: "1", after: "0" },
+        { id: "b", before: "0", after: "1" },
+      ],
+    });
+    expect(command.transitions.map((t) => t.id)).toEqual(["b"]);
+  });
+});
+
+describe("transitionCommand across stores", () => {
+  const plain = (r: TransitionReport<string>) => `${r.direction}:${r.applied}/${r.total}`;
+
+  it("does not fold a command that writes through another store", async () => {
+    const s1 = memoryTransitionStore<string>([["a", "0"]]);
+    const s2 = memoryTransitionStore<string>([["a", "0"]]);
+    const history = createHistory();
+    const make = (store: typeof s1) =>
+      transitionCommand<string>({
+        label: "x",
+        describe: plain,
+        store,
+        coalesceKey: "k",
+        transitions: [{ id: "a", before: "0", after: "1" }],
+      });
+    await history.run(make(s1));
+    await history.run(make(s2));
+    expect(s1.get("a")).toBe("1");
+    expect(s2.get("a")).toBe("1");
+    await history.undo();
+    expect(s1.get("a")).toBe("0");
+    expect(s2.get("a")).toBe("0");
+    expect(history.state.canUndo).toBe(false);
+  });
+
+  it("undoes a composite's second command before its first", async () => {
+    const log: string[] = [];
+    const logging = (name: string) => {
+      const inner = memoryTransitionStore<string>([["a", "0"]]);
+      return {
+        ...inner,
+        commit: async (changes: Parameters<typeof inner.commit>[0]) => {
+          log.push(`${name}:${changes[0].next}`);
+          return inner.commit(changes);
+        },
+      };
+    };
+    const history = createHistory();
+    const make = (store: ReturnType<typeof logging>) =>
+      transitionCommand<string>({
+        label: "x",
+        describe: plain,
+        store,
+        coalesceKey: "k",
+        transitions: [{ id: "a", before: "0", after: "1" }],
+      });
+    await history.run(make(logging("first")));
+    await history.run(make(logging("second")));
+    log.length = 0;
+    await history.undo();
+    expect(log).toEqual(["second:0", "first:0"]);
+    await history.redo();
+    expect(log).toEqual(["second:0", "first:0", "first:1", "second:1"]);
+  });
+});

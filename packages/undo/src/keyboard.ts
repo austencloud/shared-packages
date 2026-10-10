@@ -15,18 +15,58 @@ export interface UndoKeyboardOptions {
   onResult?: (kind: "undo" | "redo", result: RunResult) => void;
 }
 
-/** True for inputs, textareas, selects and contenteditable elements. */
+// Input types that take no typed text: Ctrl+Z on them is the page's, not theirs.
+const NON_TEXT_INPUT_TYPES = new Set([
+  "range",
+  "checkbox",
+  "radio",
+  "button",
+  "submit",
+  "reset",
+  "color",
+  "file",
+  "image",
+  "hidden",
+]);
+const TEXT_ENTRY_ROLES = new Set(["textbox", "searchbox", "combobox"]);
+
+/**
+ * True for text-entry inputs (a missing or unknown type counts as text),
+ * textareas, selects, contenteditable elements and elements whose role is
+ * textbox, searchbox or combobox. Range sliders, checkboxes and buttons are not.
+ */
 export function isEditableTarget(target: EventTarget | null): boolean {
   if (!target || typeof target !== "object") return false;
-  const element = target as { tagName?: string; isContentEditable?: boolean };
+  const element = target as {
+    tagName?: string;
+    isContentEditable?: boolean;
+    type?: unknown;
+    role?: unknown;
+    getAttribute?: (name: string) => string | null;
+  };
   const tag = element.tagName;
-  return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || element.isContentEditable === true;
+  if (tag === "INPUT") {
+    const type = element.type ?? element.getAttribute?.("type");
+    return !(typeof type === "string" && NON_TEXT_INPUT_TYPES.has(type.toLowerCase()));
+  }
+  if (tag === "TEXTAREA" || tag === "SELECT" || element.isContentEditable === true) return true;
+  const role = element.getAttribute?.("role") ?? element.role;
+  return typeof role === "string" && TEXT_ENTRY_ROLES.has(role.toLowerCase());
 }
 
-/** Which action a keydown asks for, or null. */
+/**
+ * Which action a keydown asks for, or null. Ignores keys pressed while an input
+ * method is composing. A key that is not an ASCII letter (a Cyrillic or Greek
+ * layout) falls back to the physical key, so Ctrl+Z stays Ctrl+Z.
+ */
 export function chord(event: KeyboardEvent): "undo" | "redo" | null {
   if (!(event.ctrlKey || event.metaKey) || event.altKey) return null;
-  const key = event.key.toLowerCase();
+  if (event.isComposing || event.keyCode === 229) return null;
+  let key = (event.key ?? "").toLowerCase();
+  if (!/^[a-z]$/.test(key)) {
+    if (event.code === "KeyZ") key = "z";
+    else if (event.code === "KeyY") key = "y";
+  }
   if (key === "z") return event.shiftKey ? "redo" : "undo";
   if (key === "y" && !event.shiftKey) return "redo";
   return null;
@@ -41,10 +81,20 @@ export function attachUndoKeyboard(history: History, options: UndoKeyboardOption
     if (event.defaultPrevented || event.repeat) return;
     const action = chord(event);
     if (!action) return;
-    if (isEditable(event.target)) return;
+    // The first node of the composed path is the real origin, even inside an open shadow root.
+    if (isEditable(event.composedPath?.()[0] ?? event.target)) return;
     if (action === "undo" ? !history.state.canUndo : !history.state.canRedo) return;
     event.preventDefault();
-    void history[action]().then((result) => options.onResult?.(action, result));
+    void history[action]().then((result) => {
+      try {
+        options.onResult?.(action, result);
+      } catch (error) {
+        // Surface it as an uncaught error, not an unhandled rejection of a promise nobody holds.
+        queueMicrotask(() => {
+          throw error;
+        });
+      }
+    });
   };
   target.addEventListener("keydown", handler);
   return () => target.removeEventListener("keydown", handler);
