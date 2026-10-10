@@ -252,13 +252,27 @@ export interface PluginUi {
 	addItems?(coreItems: readonly string[]): readonly (string | PluginAddItem)[];
 	mediaSublayer?: { renderModes: readonly string[]; component: Component<MediaSublayerProps> };
 	/**
+	 * Redraws a generic image layer's picture in a look of the plugin's (tka: a QR image in its own
+	 * look or the poster look of the card under it). `look` runs inside a `$derived`, so what it reads
+	 * is tracked; null keeps the imported picture. `render` resolves the redrawn picture's URL; null or
+	 * a rejection keeps the imported picture.
+	 */
+	imageRestyle?: {
+		look(env: {
+			editor: VideoEditorState;
+			sourceItem: PostItem | null;
+			underlyingItem: PostItem | null;
+		}): string | null;
+		render(source: string, look: string): Promise<string | null>;
+	};
+	/**
 	 * Called on a right click on any media layer, with the editor the layer draws for (as a tool's
 	 * `run(editor)` gets it); the editor prevents the default when present.
 	 */
 	layerContextMenu?(event: MouseEvent, editor: VideoEditorState): void;
 	canvasOverlays?: readonly Component<CanvasOverlayProps>[];
 	modes?: readonly EditorMode[];
-	/** Whole panels keyed by a plugin tool id (tka: the "look" animation panel, backup and recovery). */
+	/** Whole panels keyed by a plugin tool id (tka: the "look" animation panel). */
 	panels?: Readonly<Record<string, Component<{ editor: VideoEditorState }>>>;
 	/**
 	 * Made once per editor during the workspace's initialisation, so it may call getContext. `previewUrl` is the
