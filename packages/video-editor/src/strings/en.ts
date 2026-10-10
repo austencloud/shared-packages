@@ -1,6 +1,3 @@
-/** tka shows an em dash in export_app_locked; the source file stays ASCII. */
-const EM_DASH = String.fromCharCode(8212);
-
 /**
  * The editor's English text. Only the keys 2A's moved code needs; 2B grows the table.
  *
@@ -22,7 +19,7 @@ export const EN = {
 	editor_missing_media: "Missing media: {name}",
 	editor_missing_video: "Missing video: {name}",
 	editor_save_failed: "The project could not be saved: {error}",
-	export_app_locked: "Exporting " + EM_DASH + " the app is locked",
+	export_app_locked: "Exporting. The app is locked",
 	export_failed: "Export failed",
 	export_stay_here: "Please don't navigate away.",
 	learn_back: "Back",
