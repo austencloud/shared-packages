@@ -3,6 +3,7 @@ import type {
 	EditorHaptic,
 	EditorNotify,
 	EditorShortcuts,
+	EditorSync,
 	MediaLibrary,
 	VideoEditorHost,
 } from "./host.js";
@@ -15,6 +16,8 @@ export interface EditorServices {
 	previewCache: IPreviewVideoCache;
 	/** Null when the host has none: the editor shows no library section. */
 	mediaLibrary: MediaLibrary | null;
+	/** Null when the host has none: the project lives in the store and syncs between tabs. */
+	sync: EditorSync | null;
 }
 
 /** The host's services, with the package defaults for any it leaves out. */
@@ -25,6 +28,7 @@ export function resolveServices<E>(host: VideoEditorHost<E>): EditorServices {
 		haptics: host.haptics ?? (() => {}),
 		previewCache: host.previewCache ?? createUnsupportedPreviewCache(),
 		mediaLibrary: host.mediaLibrary ?? null,
+		sync: host.sync ?? null,
 	};
 }
 

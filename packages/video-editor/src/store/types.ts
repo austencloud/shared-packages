@@ -34,6 +34,8 @@ export interface RestoredEditorHistory<E = unknown> {
 export interface VideoEditorStore<E = unknown> {
 	/** The saved project for the scope, or a new empty one. */
 	openProject(scope: StoreScope, now: number): PostProject;
+	/** The saved project for the scope, or null when none is saved. A store that can only open (returning a fresh project) leaves it out. */
+	loadProject?(scope: StoreScope): PostProject | null;
 	saveProject(scope: StoreScope, project: PostProject): SaveResult;
 	/** Keeps the current project before an import replaces it. */
 	backupBeforeImport(scope: StoreScope, project: PostProject): void;

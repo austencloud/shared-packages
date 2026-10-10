@@ -1,4 +1,5 @@
 import type { IPreviewVideoCache } from "./render/preview-cache/preview-video-cache-contract.js";
+import type { VideoEditorState } from "./state/video-editor-state.svelte.js";
 import type { VideoEditorStore } from "./store/types.js";
 import type { Translate } from "./strings/translate.js";
 
@@ -23,6 +24,8 @@ export interface VideoEditorHost<E = unknown> {
 	previewCache?: IPreviewVideoCache;
 	/** Toasts. Default: silent, or the console when `dev` is true. */
 	notify?: EditorNotify;
+	/** An outside keeper of the project beside the store. Default: none. */
+	sync?: EditorSync;
 	/** Undo and redo keys, Escape layers and key suppression. Default: one window keydown listener. */
 	shortcuts?: EditorShortcuts;
 	/** Vibration on a phone. Default: none. */
@@ -33,6 +36,35 @@ export interface EditorNotify {
 	success(message: string): void;
 	error(message: string): void;
 	info(message: string): void;
+	/**
+	 * A success notice with one action (tka: "Removed 3 keyframes" with Undo). Returns the dismiss, which the
+	 * editor calls when the action no longer applies. Absent: the editor says the message through `success`.
+	 */
+	undoable?(message: string, action: { label: string; run(): void }): () => void;
+}
+
+/** Where a kept render landed, as the host names it (tka: exports/<name>.mp4 inside the feature's folder). */
+export interface KeptExport {
+	file: string;
+}
+
+/**
+ * An outside keeper of the project beside the store (tka: a feature video's folder on disk, through
+ * the dev server). Absent: the project lives in the store and syncs between tabs through the browser.
+ */
+export interface EditorSync {
+	/** Watches the outside copy. onReplaced runs after a newer copy was adopted into the editor. Returns the stop. */
+	connect(editor: VideoEditorState, onReplaced: () => void): () => void;
+	/** Keeps a finished render outside the browser and resolves with where it landed. Absent: renders stay in the browser. */
+	keepExport?(
+		blob: Blob,
+		name: string | undefined,
+		signal: AbortSignal | undefined,
+	): Promise<KeptExport>;
+	/** Set when device videos are refused: the message the media panel shows instead of opening the picker. */
+	devicePickBlocked?: string;
+	/** False: no browser tab sync for this project, because the sync keeps every copy current itself. Default true. */
+	tabSync?: boolean;
 }
 
 export interface EditorShortcuts {

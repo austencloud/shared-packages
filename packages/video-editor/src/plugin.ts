@@ -274,6 +274,10 @@ export interface PluginUi {
 	/** Two items the timeline draws joined (tka: the animation handing over to the moves square). */
 	timelineJoin?(project: PostProject): TimelineJoin | null;
 	backup?: PluginBackup;
+	/** What the project is about, for the editor's label (tka: the sequence's name or its derived word). Absent: the default name string. */
+	subjectName?(editor: VideoEditorState): string | null;
+	/** The export file's stem (tka: the simplified word). Absent: the subject name, else "video". */
+	exportFileStem?(editor: VideoEditorState): string | null;
 }
 
 /** The top bar's Backup, Restore and Import entries (tka: its JSON backup and the InShot recovery package). Absent: the workspace shows none of them. */

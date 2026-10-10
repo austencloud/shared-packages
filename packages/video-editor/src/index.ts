@@ -9,6 +9,8 @@ export type {
 	EditorHaptic,
 	EditorNotify,
 	EditorShortcuts,
+	EditorSync,
+	KeptExport,
 	LibraryTake,
 	MediaLibrary,
 	VideoEditorHost,
@@ -48,4 +50,5 @@ export {
 } from "./state/video-editor-state.svelte.js";
 export { createVideoPreviews } from "./state/video-previews.svelte.js";
 export { createTabSync, type TabSync } from "./state/tab-sync.js";
+export { createDraftAutosave, isEmptyProject, shouldSubmitDraft } from "./state/draft-autosave.js";
 export { provideEditorUi, useEditorUi, type EditorUi } from "./ui/editor-context.js";

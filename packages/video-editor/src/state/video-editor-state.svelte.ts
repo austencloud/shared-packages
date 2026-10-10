@@ -201,6 +201,8 @@ export interface VideoEditorState<E = unknown> {
 	// Import and other tabs
 	importProject(next: PostProject, files?: ReadonlyMap<string, File>): void;
 	adoptSaved(next: PostProject, options?: { evenIfOlder?: boolean }): boolean;
+	/** The store's saved copy of this project, or null (tka: the device store; tab sync catches up through it). */
+	loadSaved(): PostProject | null;
 	/** Attaches saved media for a project before it is committed (tka: the dev manifest bridge). */
 	loadSavedMedia(source: PostProject): void;
 	dispose(): void;
@@ -1223,6 +1225,7 @@ export function createVideoEditorState<E = unknown>(
 		removeTake,
 		importProject,
 		adoptSaved,
+		loadSaved: () => store.loadProject?.(scope()) ?? null,
 		loadSavedMedia,
 		dispose,
 	};
