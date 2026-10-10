@@ -34,6 +34,11 @@
       "types": "./dist/strings/index.d.ts",
       "import": "./dist/strings/index.js"
     },
+    "./icons": {
+      "types": "./dist/icons/index.d.ts",
+      "svelte": "./dist/icons/index.js",
+      "import": "./dist/icons/index.js"
+    },
     "./css/*": "./css/*"
   },
   "sideEffects": [
@@ -51,6 +56,7 @@
     "clean": "rimraf dist"
   },
   "dependencies": {
+    "@fortawesome/free-solid-svg-icons": "^7.0.1",
     "dexie": "^4.2.1",
     "h264-mp4-encoder": "^1.0.12",
     "zod": "^4.2.1"
