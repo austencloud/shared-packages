@@ -1,10 +1,4 @@
-import type {
-	PostBox,
-	PostFraming,
-	PostKeyframe,
-	PostMotionKey,
-	PostSourceGeometry,
-} from "../project/schema.js";
+import type { PostBox, PostFraming, PostKeyframe, PostSourceGeometry } from "../project/schema.js";
 import type { PostItem, PostProject } from "../project/item-kinds.js";
 import { finish } from "./project-edits.js";
 import type { EditContext } from "./context.js";
@@ -37,19 +31,10 @@ function mirrorFraming(framing: PostFraming): PostFraming {
 	};
 }
 
-/**
- * A keyframe as the item schema types it: an omitted `auto` reads as
- * undefined there, which `PostKeyframe` alone does not allow under
- * exactOptionalPropertyTypes.
- */
-type SchemaKeyframe<Value> = Omit<PostKeyframe<Value>, "auto"> & {
-	auto?: PostMotionKey | undefined;
-};
-
 function mirrorKeys<Value>(
-	keys: readonly SchemaKeyframe<Value>[] | undefined,
+	keys: readonly PostKeyframe<Value>[] | undefined,
 	mirror: (value: Value) => Value,
-): SchemaKeyframe<Value>[] | undefined {
+): PostKeyframe<Value>[] | undefined {
 	return keys?.map((key) => ({ ...key, value: mirror(key.value) }));
 }
 

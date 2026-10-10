@@ -165,8 +165,10 @@ function legacyStepMapSource(source: LegacyStepMap["source"]): SequenceTimeMap["
 }
 
 /**
- * The fields of tka's collaborative-video StepMap that the migration reads.
- * tka's StepMap stays assignable to it.
+ * The fields of tka's collaborative-video StepMap that the migration reads. It is a migration
+ * input only: the package reads one just to convert it with migrateLegacyStepMap, and tka finds
+ * the move at a given time through its own `getStepIndexFromVideo`. tka's StepMap stays
+ * assignable to it.
  */
 export interface LegacyStepMap {
 	/**
@@ -175,8 +177,8 @@ export interface LegacyStepMap {
 	 * index k is the landing of move k.
 	 *
 	 * A performer usually runs a LOOP several times on one take, so this may hold
-	 * several passes' worth: index k is move `((k - 1) % stepCount) + 1`. Read it
-	 * through `getStepIndexFromVideo` rather than indexing the sequence with a
+	 * several passes' worth: index k is move `((k - 1) % stepCount) + 1`. In tka,
+	 * read it through `getStepIndexFromVideo` rather than indexing the sequence with a
 	 * raw position - the off-by-one between "the move that landed" and "the move
 	 * being travelled to" is exactly what that function owns.
 	 */

@@ -37,15 +37,21 @@ const worker = chunks[0];
 console.log("worker chunk:", worker);
 
 // The page collects every reply and reports once a second has passed after the
-// first, so a second reply or a late rejection is still counted.
+// first, so a second reply or a late rejection is still counted. A worker that
+// fails to load or throws is recorded as a reply too and schedules the report the
+// same way, so it shows as a FAIL line naming the error, not as the 30 s timeout.
 const html = `<!doctype html><meta charset="utf-8"><link rel="icon" href="data:,"><body><script type="module">
 const replies = [];
-const worker = new Worker("/_app/immutable/workers/${worker}", { type: "module" });
-worker.onmessage = (event) => {
-	replies.push(event.data);
-	if (replies.length === 1) setTimeout(() => { document.body.dataset.result = JSON.stringify(replies); }, 1000);
+let scheduled = false;
+const record = (reply) => {
+	replies.push(reply);
+	if (scheduled) return;
+	scheduled = true;
+	setTimeout(() => { document.body.dataset.result = JSON.stringify(replies); }, 1000);
 };
-worker.onerror = (event) => { replies.push({ type: "worker-error", message: event.message }); };
+const worker = new Worker("/_app/immutable/workers/${worker}", { type: "module" });
+worker.onmessage = (event) => record(event.data);
+worker.onerror = (event) => record({ type: "worker-error", message: event.message });
 worker.postMessage({ sourceUrl: location.origin + "/missing.mp4" });
 </script></body>`;
 const types = {

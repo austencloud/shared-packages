@@ -2,10 +2,11 @@
 //
 // Compares two logs of tka's `npm run check:fast`. svelte-fast-check prints each diagnostic as a
 // colored "path:line:col" line followed by an "Error: message (tsNNNN)" line; the two are joined
-// into one key of path, message and TS code, with line and column numbers stripped and pnpm store
-// folders reduced to name@version, and each key is counted. Paths are cut to their last
-// node_modules/, the members of every quoted union are sorted, and so are the top-level properties
-// of each object-type member, so a junction path or a reordered union is not a new error.
+// into one key of path, message and TS code, with line and column numbers stripped, and each key is
+// counted. Paths are cut to their last node_modules/, so a junction path and the primary checkout's
+// path key alike. In each quoted type only the top-level union is sorted, plus the top-level
+// properties of each object-type member; a union nested inside <>, () or {} keeps the order
+// TypeScript printed it in. A reordered top-level union is not a new error.
 //
 // Exit 1 when a key appears more often after than before (each NEW line shows both counts).
 // Exit 2 when the after log cannot be trusted: a log lacks the "Found N error(s)" summary, a

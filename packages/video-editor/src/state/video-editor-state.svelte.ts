@@ -401,8 +401,9 @@ export function createVideoEditorState<E = unknown>(
 		const pending = historyToKeep;
 		if (!pending) return;
 		historyToKeep = null;
-		// Effects are read now: a plugin may record its effect only after its
-		// step is saved.
+		// Effects are read now, when the history is written, not when the write
+		// was scheduled. commit(next, effect) records a plugin's effect before it
+		// persists, so every step in these lists already has the one it carries.
 		const entry = (step: PostProject): HistoryEntry<E> => {
 			const effect = effects.get(step);
 			return effect !== undefined ? { project: step, effect } : { project: step };

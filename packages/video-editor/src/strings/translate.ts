@@ -2,10 +2,13 @@ import { EN, type StringKey } from "./en.js";
 
 export type Translate = (key: StringKey, params?: Record<string, string | number>) => string;
 
-/** Fills {name} placeholders from params; a missing param leaves the placeholder. */
+/**
+ * Fills {name} placeholders from params; a missing param leaves the placeholder. Only a param
+ * the caller passed counts, so {constructor} or {__proto__} never reads an inherited member.
+ */
 export function formatString(text: string, params: Record<string, string | number> = {}): string {
 	return text.replace(/[{]([a-z_]+)[}]/g, (whole, name: string) =>
-		name in params ? String(params[name]) : whole,
+		Object.hasOwn(params, name) ? String(params[name]) : whole,
 	);
 }
 

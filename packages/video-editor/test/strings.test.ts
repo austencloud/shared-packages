@@ -7,6 +7,11 @@ describe("strings", () => {
 		expect(formatString("{a} and {b}", { a: 1 })).toBe("1 and {b}");
 	});
 
+	it("does not read a placeholder name from the params' prototype", () => {
+		expect(formatString("{constructor} {__proto__}", {})).toBe("{constructor} {__proto__}");
+		expect(formatString("{constructor}", { constructor: "own" })).toBe("own");
+	});
+
 	it("does not rescan an inserted value", () => {
 		expect(formatString("Missing video: {name}", { name: "{error}.mp4" })).toBe(
 			"Missing video: {error}.mp4",

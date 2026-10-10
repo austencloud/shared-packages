@@ -192,7 +192,7 @@ function rewriteImports(files, { dry = false, task = 4 } = {}) {
 	];
 	const run = spawnSync(process.execPath, args, {
 		encoding: "utf8",
-		env: { ...process.env, STEP1_TKA: root },
+		env: { ...process.env, STEP1_TKA: root, STEP_MOVES: "./moves.json" },
 	});
 	return {
 		root,
@@ -622,7 +622,10 @@ test("rewrite-imports merges all-type declarations into one import type", () => 
 	const again = spawnSync(
 		process.execPath,
 		[stepScript("rewrite-imports.mjs"), "--task", "4", "--dry"],
-		{ encoding: "utf8", env: { ...process.env, STEP1_TKA: run.root } },
+		{
+			encoding: "utf8",
+			env: { ...process.env, STEP1_TKA: run.root, STEP_MOVES: "./moves.json" },
+		},
 	);
 	assert.equal(again.stdout.trim(), "would change 0 files");
 });
@@ -771,7 +774,7 @@ function portableTests(files) {
 	const root = tree(files);
 	const run = spawnSync(process.execPath, [stepScript("portable-tests.mjs")], {
 		encoding: "utf8",
-		env: { ...process.env, STEP1_TKA: root },
+		env: { ...process.env, STEP1_TKA: root, STEP_MOVES: "./moves.json" },
 	});
 	return { status: run.status, stderr: run.stderr, out: run.stdout.split(NL) };
 }
@@ -856,6 +859,50 @@ test("check-intersection ignores the junction prefix, union order and property o
 		},
 	);
 	assert.match(out, /baseline 3, after 3, new 0/);
+});
+
+test("check-intersection still prints NEW for a different union or property set", () => {
+	const dir = fs.mkdtempSync(path.join(os.tmpdir(), "intersection-new-"));
+	roots.push(dir);
+	const baseline = path.join(dir, "baseline.txt");
+	const after = path.join(dir, "after.txt");
+	fs.writeFileSync(
+		baseline,
+		[
+			"src/lib/a.ts:1:1",
+			`Error: Type '"a" | "b"' is not assignable to type 'C'. (ts2322)`,
+			"src/lib/b.svelte:5:1",
+			`Error: Type '{ x: 1; y: 2; }' is not assignable to type 'T'. (ts2322)`,
+			"Found 2 errors",
+		].join(NL),
+	);
+	fs.writeFileSync(
+		after,
+		[
+			"src/lib/a.ts:1:1",
+			`Error: Type '"a" | "c"' is not assignable to type 'C'. (ts2322)`,
+			"src/lib/b.svelte:5:1",
+			`Error: Type '{ x: 1; z: 2; }' is not assignable to type 'T'. (ts2322)`,
+			"Found 2 errors",
+		].join(NL),
+	);
+	const run = spawnSync(process.execPath, [stepScript("check-intersection.mjs"), baseline, after], {
+		encoding: "utf8",
+	});
+	// Exit 1 and one NEW line for each key that changed: the union with a different member, and
+	// the object type with a different property.
+	assert.equal(run.status, 1, run.stderr);
+	assert.match(run.stdout, /baseline 2, after 2, new 2/);
+	const added = run.stdout.split(NL).filter((row) => row.startsWith("NEW: "));
+	assert.equal(added.length, 2, run.stdout);
+	assert.ok(
+		added.some((row) => row.includes(`'"a" | "c"'`)),
+		run.stdout,
+	);
+	assert.ok(
+		added.some((row) => row.includes("'{ x: 1; z: 2; }'")),
+		run.stdout,
+	);
 });
 
 test("STEP_MOVES selects the move list", () => {

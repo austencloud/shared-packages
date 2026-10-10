@@ -5,6 +5,7 @@ import {
 	isCrossfadeVisual,
 	newItemOfKind,
 	relinkTake,
+	replaceTakeMedia,
 	updateItem,
 } from "../src/core/edit/project-edits.js";
 import type { ItemKindDefinition, VideoEditorPlugin } from "../src/plugin.js";
@@ -68,6 +69,39 @@ describe("edit hooks", () => {
 			},
 			expect.objectContaining({ now: 3 }),
 		);
+	});
+
+	it("tells takeMediaChanged about a replaced take, and keeps what the hook returns", () => {
+		const base = project();
+		const take = base.takes[0]!;
+		const marked = (p: ReturnType<typeof project>) => ({
+			...p,
+			takes: p.takes.map((entry) => (entry.id === take.id ? { ...entry, label: "marked" } : entry)),
+		});
+		const takeMediaChanged = vi.fn(marked);
+		const next = replaceTakeMedia(
+			base,
+			take.id,
+			{ ref: take.ref, takeKey: "replaced", durationSeconds: 30, offsetSeconds: 4 },
+			{ now: 3, plugin: plugin({ editHooks: { takeMediaChanged } }) },
+		);
+		expect(takeMediaChanged).toHaveBeenCalledWith(
+			expect.anything(),
+			{
+				kind: "replace",
+				takeId: take.id,
+				offsetSeconds: 4,
+				takeKey: "replaced",
+				durationSeconds: 30,
+			},
+			expect.objectContaining({ now: 3 }),
+		);
+		// The hook sees the project with the take already pointed at the longer copy.
+		const seen = takeMediaChanged.mock.calls[0]![0];
+		expect(seen.takes[0]).toMatchObject({ takeKey: "replaced", durationSeconds: 30 });
+		// What it returns is what the edit finishes, so its mark survives into the result.
+		expect(next.takes[0]).toMatchObject({ label: "marked", takeKey: "replaced" });
+		expect(next.updatedAt).toBe(3);
 	});
 
 	it("builds a plugin kind through its create member", () => {

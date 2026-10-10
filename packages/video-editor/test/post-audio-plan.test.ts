@@ -9,9 +9,6 @@ import {
 import type { CompiledPostProject } from "../src/core/compile/compiler.js";
 import type { CompiledAct } from "../src/core/plan/plan-compiler.js";
 
-/** mixPostAudio always returns a left and a right channel. */
-type Stereo = [Float32Array, Float32Array];
-
 function act(overrides: Partial<CompiledAct>): CompiledAct {
 	return {
 		actId: "act",
@@ -226,7 +223,7 @@ describe("planProjectAudio", () => {
 			sampleRate: 100,
 			durationSeconds: 3,
 			fadeSeconds: 0,
-		}) as Stereo;
+		});
 		expect(mixed[125]).toBeCloseTo(0.4, 2);
 		expect(mixed[150]).toBeCloseTo(0.4, 2);
 		expect(mixed[175]).toBeCloseTo(0.4, 2);
@@ -255,7 +252,7 @@ describe("mixPostAudio", () => {
 			sampleRate,
 			durationSeconds: 0.3,
 			fadeSeconds: 0.01, // 10 samples at this rate
-		}) as Stereo;
+		});
 
 		expect(left.length).toBe(300);
 
@@ -299,7 +296,7 @@ describe("mixPostAudio", () => {
 			sources: new Map(),
 			sampleRate: 1000,
 			durationSeconds: 0.1,
-		}) as Stereo;
+		});
 		expect(Array.from(left)).toEqual(new Array(100).fill(0));
 	});
 
@@ -332,7 +329,7 @@ describe("mixPostAudio", () => {
 			sampleRate: outSampleRate,
 			durationSeconds: totalDurationSeconds,
 			fadeSeconds: 0, // isolate resampling from the fade envelope
-		}) as Stereo;
+		});
 
 		// The mixed bed is sized off the POST duration at the OUTPUT rate.
 		expect(left.length).toBe(Math.round(totalDurationSeconds * outSampleRate));
@@ -367,7 +364,7 @@ describe("mixPostAudio", () => {
 			sampleRate,
 			durationSeconds: 0.1,
 			fadeSeconds: 0, // isolate the read rate from the fade envelope
-		}) as Stereo;
+		});
 
 		// At half rate, output sample i lands on source position i * 0.5 - it
 		// takes two output samples to advance one source sample.
@@ -400,7 +397,7 @@ describe("mixPostAudio", () => {
 			sampleRate,
 			durationSeconds: 0.3,
 			fadeSeconds: 0.01, // same envelope as the fade test above, gain layered on top
-		}) as Stereo;
+		});
 
 		// Fade-in sample i=4 (fade gain 0.4) also carries the segment's own gain.
 		expect(left[54]).toBeCloseTo(constant * 0.4 * gain, 6);

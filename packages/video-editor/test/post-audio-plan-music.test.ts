@@ -106,7 +106,7 @@ describe("mixing the music", () => {
 			sampleRate: 1000,
 			durationSeconds: 1,
 		});
-		const at = (i: number) => left![i]!;
+		const at = (i: number) => left[i]!;
 		expect(at(0)).toBe(0);
 		expect(at(50)).toBeCloseTo(0.2, 6);
 		expect(at(100)).toBeCloseTo(0.4, 6);
@@ -134,6 +134,6 @@ describe("mixing the music", () => {
 			durationSeconds: 0.25,
 			fadeSeconds: 0,
 		});
-		expect(Array.from(left!, Math.abs)).toEqual(new Array(256).fill(1));
+		expect(Array.from(left, Math.abs)).toEqual(new Array(256).fill(1));
 	});
 });

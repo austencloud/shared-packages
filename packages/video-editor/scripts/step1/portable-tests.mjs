@@ -10,7 +10,8 @@
 //
 // Prints the movers, the relative helpers they need, the tests that import the package but are not
 // portable (with the specifiers that stop them), and the tests that stay by name: tka guards, and
-// portable tests that rely on tka's vitest setup file (the package has none).
+// portable tests that rely on tka's vitest setup file (none now: the package has its own setup
+// files in test/setup/, so that list is empty unless a new test needs a tka-only setup).
 // Run it from the package directory: node scripts/step1/portable-tests.mjs
 import fs from "node:fs";
 import path from "node:path";

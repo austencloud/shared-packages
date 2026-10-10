@@ -194,7 +194,7 @@ const DEFAULT_FADE_SECONDS = 0.008;
  * upstream needs to pre-resample a whole take just to place a few seconds
  * of it.
  */
-export function mixPostAudio(input: MixPostAudioInput): Float32Array[] {
+export function mixPostAudio(input: MixPostAudioInput): [Float32Array, Float32Array] {
 	const { segments, sources, sampleRate, durationSeconds } = input;
 	const fadeSeconds = input.fadeSeconds ?? DEFAULT_FADE_SECONDS;
 	const totalSamples = Math.max(0, Math.round(durationSeconds * sampleRate));

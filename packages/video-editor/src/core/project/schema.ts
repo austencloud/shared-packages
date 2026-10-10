@@ -159,7 +159,7 @@ export type PostKeyframe<V> = {
 	t: number;
 	value: V;
 	easing: PostEasing;
-	auto?: PostMotionKey;
+	auto?: PostMotionKey | undefined;
 };
 
 /** Channels an item's `keyframes` may animate; `framing` is video only. */
