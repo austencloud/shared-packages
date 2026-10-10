@@ -226,9 +226,8 @@ function source(
 
 /**
  * Every media type a slot can hold. This is the list the empty-slot chooser
- * renders and the only place a new source type has to be declared - the slot
- * verbs in `post-studio-slots.ts` read roles, fit and clip shape from here
- * rather than each carrying their own switch.
+ * renders and the only place a new source type has to be declared; the editor
+ * reads roles, fit and clip shape from here rather than carrying its own switch.
  */
 export const POST_STUDIO_SOURCES: Readonly<Record<PostStudioRoleKey, PostStudioSource>> = {
 	[POST_STUDIO_ROLE.animation]: source(

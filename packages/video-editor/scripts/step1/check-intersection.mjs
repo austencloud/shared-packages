@@ -17,7 +17,6 @@ const NL = String.fromCharCode(10);
 const ESC = String.fromCharCode(27);
 const BACKSLASH = String.fromCharCode(92);
 const ANSI = new RegExp(`${ESC}\\[[0-9;]*m`, "g");
-const PNPM_STORE = /node_modules[/][.]pnpm[/]((?:@[^/+]+[+])?[^/@]+)@([^/_]+)(?:_[^/]*)?/g;
 
 // Everything up to the last node_modules/ goes, so a worktree's junction path
 // (../../../tka-platform/node_modules/...) and the primary's (node_modules/...) key alike.
@@ -60,7 +59,6 @@ const keyOf = (location, message) =>
 	`${location
 		.split(BACKSLASH)
 		.join("/")
-		.replace(PNPM_STORE, "$1@$2")
 		.replace(
 			LAST_NODE_MODULES,
 			"node_modules/",
