@@ -128,6 +128,17 @@ describe("video editor state with no plugin", () => {
 		expect(editor.selectedPart).toBeNull();
 		editor.dispose();
 	});
+
+	it("drops the part when its item is deleted", () => {
+		const editor = createVideoEditorState(hostWith(seeded()), undefined, { subjectId: "seq" });
+		const item = textOf(editor.project)!;
+		editor.selectPart(item.id, "opening");
+		expect(editor.selectedPart).toBe("opening");
+		expect(editor.deleteSelected()).toBe(true);
+		expect(editor.selectedItemId).toBeNull();
+		expect(editor.selectedPart).toBeNull();
+		editor.dispose();
+	});
 });
 
 describe("state extension", () => {

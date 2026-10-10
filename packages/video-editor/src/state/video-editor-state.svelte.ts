@@ -365,8 +365,14 @@ export function createVideoEditorState<E = unknown>(
 
 	// ---- The project and its history ---------------------------------------
 
+	/** Every selection change goes through here, so a part never outlives its item's selection. */
+	function setSelectedItem(next: string | null): void {
+		selectedPart = null;
+		selectedItemId = next;
+	}
+
 	function keepSelectionValid(next: PostProject): void {
-		if (selectedItemId && !findItem(next, selectedItemId)) selectedItemId = null;
+		if (selectedItemId && !findItem(next, selectedItemId)) setSelectedItem(null);
 		if (previewSeconds > projectDurationSeconds(next)) {
 			previewSeconds = projectDurationSeconds(next);
 		}
@@ -750,7 +756,7 @@ export function createVideoEditorState<E = unknown>(
 		imageMedia = nextImages;
 		commit(parsed);
 		previewSeconds = 0;
-		selectedItemId = null;
+		setSelectedItem(null);
 	}
 
 	/**
@@ -836,7 +842,7 @@ export function createVideoEditorState<E = unknown>(
 	function selectItemAtStart(itemId: string): void {
 		const item = findItem(project, itemId)?.item;
 		if (!item) return;
-		selectedItemId = itemId;
+		setSelectedItem(itemId);
 		previewSeconds = item.start;
 	}
 
@@ -992,7 +998,7 @@ export function createVideoEditorState<E = unknown>(
 		if (!target || gestureBase) return false;
 		const result = splitItemAt(project, target.id, previewSeconds, editContext());
 		if (!result || !commit(result.project)) return false;
-		selectedItemId = result.newItemId;
+		setSelectedItem(result.newItemId);
 		return true;
 	}
 
@@ -1007,7 +1013,7 @@ export function createVideoEditorState<E = unknown>(
 		if (!target || gestureBase || isLocked(target.id)) return false;
 		const result = duplicateItem(project, target.id, editContext());
 		if (!result || !commit(result.project)) return false;
-		selectedItemId = result.newItemId;
+		setSelectedItem(result.newItemId);
 		return true;
 	}
 
@@ -1015,7 +1021,7 @@ export function createVideoEditorState<E = unknown>(
 		if (gestureBase) return null;
 		const result = addOverlayItem(project, spec, editContext());
 		if (!result || !commit(result.project)) return null;
-		selectedItemId = result.itemId;
+		setSelectedItem(result.itemId);
 		return result.itemId;
 	}
 
@@ -1148,8 +1154,7 @@ export function createVideoEditorState<E = unknown>(
 			return selectedItemId;
 		},
 		set selectedItemId(next: string | null) {
-			selectedPart = null;
-			selectedItemId = next && findItem(project, next) ? next : null;
+			setSelectedItem(next && findItem(project, next) ? next : null);
 			extension?.selected?.(selectedItemId);
 		},
 		get selectedItem() {
