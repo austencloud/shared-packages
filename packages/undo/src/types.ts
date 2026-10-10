@@ -18,7 +18,9 @@ export interface Command {
   /**
    * Commands sharing a key fold into one history entry while they arrive back
    * to back (every item painted in one drag). Only the entry on top of the
-   * undo stack merges; anything else starts a new entry.
+   * undo stack merges, and only when the newest thing the history did was a
+   * run: after an undo, a redo or a clear the next command starts a new entry.
+   * If merge throws, the command is kept as its own entry.
    */
   coalesceKey?: string;
   /**
