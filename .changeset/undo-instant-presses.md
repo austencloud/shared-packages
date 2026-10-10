@@ -13,4 +13,7 @@ calls the new optional `store.show(changes)` for that, tells `commit` whether
 the press was previewed through a new optional second argument, and takes a
 `shown` option for a first execute the caller already put on screen.
 Coalescing now merges at the press into a group that reads its parts'
-transitions as they settle.
+transitions as they settle. A step that fails cancels every later press of the
+same entry still queued behind it; the new optional `Command.reconcile()` (which
+`transitionCommand` implements) then puts the screen back to what the store
+holds.

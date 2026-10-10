@@ -61,13 +61,21 @@ The writes are still queued and run one at a time in press order, so an undo
 pressed while its own run is still writing simply runs after that run. When a
 step settles it only corrects what turned out differently:
 
-- a run that was skipped or threw is removed from whichever stack holds it,
-  and any undo or redo of it still queued does not run;
-- an undo that throws goes back on top of the undo stack, even if a newer run
-  cleared redo meanwhile (the undo did not happen, so it is still undoable);
-  one that was skipped is dropped from redo;
+- a run that was skipped or threw is removed from whichever stack holds it;
+- an undo that throws goes back on top of the undo stack, covering what is
+  left to retry, even if a newer run cleared redo meanwhile (the undo did not
+  happen, so it is still undoable); one that was skipped is dropped from redo;
 - a redo that throws goes back on top of the redo stack, or is dropped when a
   newer change cleared redo since; one that was skipped is dropped.
+
+A failure cancels every later press of the same entry still queued behind it
+(a run that applied nothing counts as a failure here). Each cancelled step
+answers `{ status: "skipped" }` without calling the command and without
+touching `lastAction`, so the failure stays the visible message. The entry is
+placed by the failed step alone, as above, wherever the cancelled presses had
+moved it. If anything was cancelled, the history then calls the command's
+`reconcile()`, which drops the cancelled previews and re-shows what the store
+actually holds.
 
 A settle replaces `lastAction` and `lastMessage` only when no newer press has
 happened since, so a late `done` never overwrites a newer `pending`. `partial`,
@@ -78,9 +86,10 @@ results of work still in flight and stops queued runs, undos and redos from
 executing at all.
 
 A command can implement `preview(direction)` (`"execute"` or `"undo"`) to put
-the coming change on screen at the press. The history calls it inside a
-try/catch and rethrows a failure asynchronously. Without it, nothing changes
-on screen until the work runs.
+the coming change on screen at the press, and `reconcile()` to put the screen
+right after its later presses were cancelled. The history calls both inside a
+try/catch and rethrows a failure asynchronously. Without `preview`, nothing
+changes on screen until the work runs.
 
 ## Guarded transitions
 
@@ -92,19 +101,22 @@ undo retries exactly them; once it finishes, redo re-applies everything that
 was undone. A store must resolve, not reject, once any write has landed. A
 first execute that applies nothing leaves the command covering nothing.
 
-For instant presses give the store a `show(changes)` method that puts each
-change's `next` on screen, synchronously, without writing. The command's
-`preview` calls it at every press with the changes that press will commit.
-`commit(changes, context)` then receives `{ direction, previewed }`:
-`previewed: true` means the screen already shows `next` for these ids, so the
-store only corrects the ones that did not apply (a stale id shows what the
-server holds; a failed id goes back, if nothing newer has changed it since).
-`previewed: false` means the store puts applied values on screen itself, as a
-store without `show` always does. If the command's list grew between press and
-commit (a retried undo that finishes restores ids), `show` is called for the
-new ids just before the commit. Pass `shown: true` when the caller already put
-the first execute on screen (a chip that flips as it is clicked): its preview
-then shows nothing and its commit is told `previewed: true`.
+For instant presses give the store a `show` method. The four pieces work
+together:
+
+| Piece | Who sets or calls it | What it means |
+| --- | --- | --- |
+| `preview(direction)` | The history, on the command, at every run, undo and redo press | Put the coming change on screen now. A transition command does it through `store.show`. |
+| `store.show(changes)` | The command's `preview` and `reconcile` | Put each change's `next` on screen, synchronously, without writing. Also called just before a commit for ids its press did not cover (a retried undo that finishes restores ids). |
+| `shown: true` | The app, as a `transitionCommand` option | The caller already put the first execute on screen (a chip that flips as it is clicked). That press's preview shows nothing, and its commit is told `previewed: true`. |
+| `previewed` | The command, in `commit(changes, { direction, previewed })` | `true`: the screen already shows `next` for these ids. `false`: it does not (no `show`, a direct call with no press, or an earlier step's correction has overwritten this press's preview), so the store puts applied values on screen itself. |
+
+The store rule: on a previewed commit, leave applied ids alone and show the
+stored value for every id that did not apply, failed ids included (a stale id
+shows the `current` it found; a failed id shows `expected`). On a commit that
+was not previewed, show the stored value for every id. A transition command's
+`reconcile()` shows the truth of its last settled step the same way: applied
+ids its `next`, failed ids its `expected`, stale ids their `current`.
 
 `coalesceKey` folds back-to-back commands into one entry (every item painted in
 one drag). Folding happens at the press, before either command has executed:
@@ -113,19 +125,14 @@ they settle (per id, the first part's before and the last part's after), so a
 part that fails drops out and Undo takes back only what landed. Each part
 executes as its own queued run; the group's `execute` runs only for a redo. A
 group that cancels out at the press removes the entry while its parts still
-run. Once every part of a group has applied nothing and no other work is
-queued, the history drops the group's entry. Transition commands that share a
+run, and the next run starts a new entry rather than folding into the older
+one below. Once every part of a group has applied nothing and no part or press
+of that group is still queued, the history drops the group's entry. Transition commands that share a
 key are folded together even when each has its own store object, so a key must
 only be shared by commands that write through equivalent stores; anything else
 becomes a composite entry, whose preview forwards to both commands (in reverse
 for undo). `memoryTransitionStore` is an in-memory store for tests; it records
 every `show` and `commit` call.
-
-One limit: when an undo or redo is pressed while its entry's first write is
-still running and that write then applies nothing, the queued undo or redo does
-not run, so its preview is never committed. The store's correction for the
-failed or stale first write is the place to put that id right (it sees that a
-newer press touched the id).
 
 ## Keyboard
 

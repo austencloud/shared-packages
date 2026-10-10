@@ -765,3 +765,175 @@ describe("transitionCommand at press time", () => {
     expect(previews).toEqual([`plain:execute:${showsBefore + 2}`]);
   });
 });
+
+describe("a failed step cancels later presses of the same entry", () => {
+  const msg = () => "msg";
+
+  /**
+   * A memory store with a screen, the way an app uses one: show puts next on
+   * screen; a previewed commit shows the stored value for every id that did
+   * not apply; a commit that was not previewed shows the stored value for all.
+   */
+  function appStore(initial: [string, number][]) {
+    const inner = memoryTransitionStore<number>(initial);
+    const screen = new Map<string, number | undefined>(initial);
+    const store: TransitionStore<number> = {
+      show(changes) {
+        inner.show(changes);
+        for (const c of changes) screen.set(c.id, c.next);
+      },
+      async commit(changes, context) {
+        const results = await inner.commit(changes, context);
+        for (const r of results) if (r.status !== "applied" || !context?.previewed) screen.set(r.id, inner.get(r.id));
+        return results;
+      },
+    };
+    return { store, inner, screen };
+  }
+
+  const cmd = (store: TransitionStore<number>, transitions: Transition<number>[], extra: Partial<TransitionCommandOptions<number>> = {}) =>
+    transitionCommand<number>({ label: "A", store, describe: msg, transitions, ...extra });
+
+  it("an undo that partly fails, with a redo pressed behind it, keeps the entry undoable and the screen true", async () => {
+    const { store, inner, screen } = appStore([["x", 0], ["y", 0]]);
+    const history = createHistory();
+    const a = cmd(store, [
+      { id: "x", before: 0, after: 1 },
+      { id: "y", before: 0, after: 1 },
+    ]);
+    await history.run(a);
+    inner.failNext("y");
+    const undoing = history.undo();
+    const redoing = history.redo();
+    expect((await undoing).status).toBe("failed");
+    expect(await redoing).toEqual({ status: "skipped", label: "A" });
+    expect([inner.get("x"), inner.get("y")]).toEqual([0, 1]);
+    expect([screen.get("x"), screen.get("y")]).toEqual([0, 1]);
+    expect(history.state).toMatchObject({ undoLabel: "A", canRedo: false });
+    expect(history.state.lastAction).toEqual({ kind: "undo", label: "A", status: "failed" });
+    // The retry covers what is left: y.
+    expect(await history.undo()).toEqual({ status: "done", label: "A" });
+    expect([inner.get("x"), inner.get("y")]).toEqual([0, 0]);
+    expect([screen.get("x"), screen.get("y")]).toEqual([0, 0]);
+    expect(history.state.redoLabel).toBe("A");
+  });
+
+  it("a redo that throws, with an undo and a redo pressed behind it, goes back to redo and the screen shows the store", async () => {
+    const { store, inner, screen } = appStore([["x", 0]]);
+    const history = createHistory();
+    await history.run(cmd(store, [{ id: "x", before: 0, after: 1 }]));
+    await history.undo();
+    inner.failNext("x");
+    const first = history.redo();
+    const undoing = history.undo();
+    const second = history.redo();
+    expect((await first).status).toBe("failed");
+    expect(await undoing).toEqual({ status: "skipped", label: "A" });
+    expect(await second).toEqual({ status: "skipped", label: "A" });
+    expect(inner.get("x")).toBe(0);
+    expect(screen.get("x")).toBe(0);
+    expect(history.state).toMatchObject({ canUndo: false, redoLabel: "A" });
+    expect(history.state.lastAction).toEqual({ kind: "redo", label: "A", status: "failed" });
+    expect(await history.redo()).toEqual({ status: "done", label: "A" });
+    expect([inner.get("x"), screen.get("x")]).toEqual([1, 1]);
+  });
+
+  it("an undo that throws, with a redo and an undo pressed behind it, stays undoable and the screen shows the store", async () => {
+    const { store, inner, screen } = appStore([["x", 0]]);
+    const history = createHistory();
+    await history.run(cmd(store, [{ id: "x", before: 0, after: 1 }]));
+    inner.failNext("x");
+    const first = history.undo();
+    const redoing = history.redo();
+    const second = history.undo();
+    expect((await first).status).toBe("failed");
+    expect((await redoing).status).toBe("skipped");
+    expect((await second).status).toBe("skipped");
+    expect([inner.get("x"), screen.get("x")]).toEqual([1, 1]);
+    expect(history.state).toMatchObject({ undoLabel: "A", canRedo: false });
+    expect(await history.undo()).toEqual({ status: "done", label: "A" });
+    expect([inner.get("x"), screen.get("x")]).toEqual([0, 0]);
+  });
+
+  it("a run that is skipped, with an undo pressed behind it, re-shows what the store holds", async () => {
+    const { store, inner, screen } = appStore([["x", 7]]);
+    const history = createHistory();
+    const running = history.run(cmd(store, [{ id: "x", before: 0, after: 1 }]));
+    const undoing = history.undo();
+    expect(screen.get("x")).toBe(0);
+    expect((await running).status).toBe("skipped");
+    expect(await undoing).toEqual({ status: "skipped", label: "A" });
+    expect([inner.get("x"), screen.get("x")]).toEqual([7, 7]);
+    expect(history.state).toMatchObject({ canUndo: false, canRedo: false });
+  });
+
+  it("a commit queued behind a step that did not fully apply is told it was not previewed", async () => {
+    const { store, inner, screen } = appStore([["x", 0]]);
+    const history = createHistory();
+    await history.run(cmd(store, [{ id: "x", before: 0, after: 1 }]));
+    // Someone else put x back; the undo finds it stale, the redo then applies.
+    inner.set("x", 0);
+    const undoing = history.undo();
+    const redoing = history.redo();
+    expect((await undoing).status).toBe("skipped");
+    expect((await redoing).status).toBe("done");
+    expect(inner.commitCalls.at(-1)?.context).toEqual({ direction: "execute", previewed: false });
+    expect([inner.get("x"), screen.get("x")]).toEqual([1, 1]);
+  });
+
+  it("a merge that cancels out does not let the next run fold into the older entry", async () => {
+    const { store, inner } = appStore([["x", 0], ["z", 0]]);
+    const history = createHistory();
+    const paint = (label: string, id: string, before: number, after: number) =>
+      transitionCommand<number>({ label, store, describe: msg, coalesceKey: "paint", transitions: [{ id, before, after }] });
+    await history.run(paint("E0", "z", 0, 1));
+    await history.undo();
+    await history.redo();
+    await history.run(paint("p1", "x", 0, 1));
+    await history.run(paint("p2", "x", 1, 0));
+    await history.run(paint("p3", "x", 0, 5));
+    expect(history.state.undoLabel).toBe("p3");
+    await history.undo();
+    expect([inner.get("z"), inner.get("x")]).toEqual([1, 0]);
+    expect(history.state.undoLabel).toBe("E0");
+  });
+
+  it("drops a group whose parts all failed even while unrelated work is queued", async () => {
+    const { store, inner } = appStore([["x", 9], ["y", 9], ["q", 0]]);
+    const history = createHistory();
+    const part = (label: string, id: string, key: string) =>
+      transitionCommand<number>({ label, store, describe: msg, coalesceKey: key, transitions: [{ id, before: 0, after: 1 }] });
+    const runs = [history.run(part("p1", "x", "k")), history.run(part("p2", "y", "k")), history.run(part("q", "q", "other"))];
+    await Promise.all(runs);
+    expect(history.state.undoLabel).toBe("q");
+    await history.undo();
+    expect(history.state).toMatchObject({ canUndo: false, redoLabel: "q" });
+    expect(inner.get("q")).toBe(0);
+  });
+
+  it("a composite whose second undo throws keeps the first command's previews in step", async () => {
+    const { store, inner, screen } = appStore([["a", 0]]);
+    const history = createHistory();
+    let failUndo = true;
+    await history.run(cmd(store, [{ id: "a", before: 0, after: 1 }], { coalesceKey: "k" }));
+    await history.run({
+      label: "plain",
+      coalesceKey: "k",
+      execute() {},
+      undo() {
+        if (failUndo) {
+          failUndo = false;
+          throw new Error("offline");
+        }
+      },
+    });
+    expect((await history.undo()).status).toBe("failed");
+    expect(history.state.undoLabel).toBe("plain");
+    expect(await history.undo()).toEqual({ status: "done", label: "plain" });
+    expect([inner.get("a"), screen.get("a")]).toEqual([0, 0]);
+    expect(inner.commitCalls.at(-1)?.context).toEqual({ direction: "undo", previewed: true });
+    expect(await history.redo()).toEqual({ status: "done", label: "plain" });
+    expect(inner.commitCalls.at(-1)?.context).toEqual({ direction: "execute", previewed: true });
+    expect([inner.get("a"), screen.get("a")]).toEqual([1, 1]);
+  });
+});

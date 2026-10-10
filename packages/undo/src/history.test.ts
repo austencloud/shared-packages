@@ -757,3 +757,48 @@ describe("press-time stacks", () => {
     expect(previews).toEqual(["p1:execute", "p2:execute", "group:undo"]);
   });
 });
+
+describe("cancelling later presses after a failure", () => {
+  it("skips every later queued step of the failed entry without calling it, and reconciles it once", async () => {
+    const log: string[] = [];
+    const history = createHistory();
+    const a = command("A", log, {
+      undo: () => {
+        log.push("undo A");
+        throw new Error("offline");
+      },
+      reconcile: () => {
+        log.push("reconcile A");
+      },
+    });
+    await history.run(a);
+    const b = command("B", log);
+    const undoing = history.undo();
+    const redoing = history.redo();
+    const runB = history.run(b);
+    const again = history.undo();
+    // The last undo took B (on top), not A.
+    await Promise.all([undoing, redoing, runB, again]);
+    expect(await redoing).toEqual({ status: "skipped", label: "A" });
+    expect(log).toEqual(["do A", "undo A", "reconcile A", "do B", "undo B"]);
+    // The failed undo alone places A: back on top of the undo stack.
+    expect(history.state).toMatchObject({ undoLabel: "A", redoLabel: "B" });
+  });
+
+  it("does not reconcile when nothing was cancelled", async () => {
+    const log: string[] = [];
+    const history = createHistory();
+    await history.run(
+      command("A", log, {
+        undo: () => {
+          throw new Error("offline");
+        },
+        reconcile: () => {
+          log.push("reconcile A");
+        },
+      })
+    );
+    expect((await history.undo()).status).toBe("failed");
+    expect(log).toEqual(["do A"]);
+  });
+});

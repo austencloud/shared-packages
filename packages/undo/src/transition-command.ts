@@ -108,6 +108,12 @@ export interface TransitionCommandHandle<V> extends Command {
    */
   readonly transitions: readonly Transition<V>[];
   preview(direction: "execute" | "undo"): void;
+  /**
+   * Drop every preview still waiting for a commit, and show what the last
+   * settled step left in the store: applied ids show its `next`, failed ids
+   * its `expected`, stale ids the `current` the store reported.
+   */
+  reconcile(): void;
 }
 
 type Direction = "execute" | "undo";
@@ -120,6 +126,9 @@ interface PressPreview {
 }
 
 const handles = new WeakSet<Command>();
+// Consumes a command's oldest waiting preview without committing, for a
+// composite whose other half threw before this half's step ran.
+const skipPress = new WeakMap<Command, (direction: Direction) => void>();
 // A merged entry that has not run yet exposes its parts here, so merging it
 // again extends one flat list instead of nesting groups.
 const groupParts = new WeakMap<Command, () => readonly TransitionCommandHandle<unknown>[] | null>();
@@ -156,8 +165,11 @@ function build<V>(
   // The caller showed the first execute; it has not been committed yet.
   let pendingShown = !isGroup && options.shown === true;
   // One entry per press that previewed, in press order. The history queues
-  // steps in press order too, so each commit takes the oldest entry.
+  // steps in press order too, so each commit takes the oldest entry. Every
+  // path that runs a step, or skips one, takes exactly one entry.
   const previews: PressPreview[] = [];
+  // The last step that reached the store, for reconcile.
+  let lastStep: { changes: TransitionChange<V>[]; results: TransitionResult<V>[] } | null = null;
 
   function current(): Transition<V>[] {
     return own ?? foldParts(parts ?? [], equals);
@@ -184,21 +196,47 @@ function build<V>(
     entry.ids = new Set(changes.map((c) => c.id));
   }
 
-  async function apply(direction: Direction): Promise<Outcome> {
-    const firstExecute = !isGroup && applies === 0 && direction === "execute";
-    applies += 1;
-    let shownByCaller = false;
-    let press: PressPreview | undefined;
-    if (firstExecute && pendingShown) {
-      shownByCaller = true;
-    } else {
-      press = previews.shift();
-      if (press && press.direction !== direction) press = undefined;
+  /** Take the preview record of the press this step belongs to. */
+  function takePress(direction: Direction): { shownByCaller: boolean; ids: ReadonlySet<string> | null } {
+    if (direction === "execute" && applies === 0 && pendingShown && !isGroup) {
+      pendingShown = false;
+      return { shownByCaller: true, ids: null };
     }
     pendingShown = false;
-    if (!firstExecute) return commitStep(direction, shownByCaller, press?.ids ?? null);
+    const press = previews.shift();
+    return { shownByCaller: false, ids: press && press.direction === direction ? press.ids : null };
+  }
+
+  /**
+   * The store's correction for ids that did not apply has overwritten what
+   * later presses previewed for them, so those presses' commits are no longer
+   * previewed: the store must put their applied values on screen itself.
+   */
+  function invalidateWaitingPreviews() {
+    for (const press of previews) press.ids = null;
+  }
+
+  function reconcile() {
+    previews.length = 0;
+    pendingShown = false;
+    if (!lastStep || !options.store.show) return;
+    const truth: TransitionChange<V>[] = [];
+    lastStep.changes.forEach((c, i) => {
+      const r = lastStep!.results[i];
+      if (r.status === "applied") truth.push(c);
+      else if (r.status === "failed") truth.push({ id: c.id, expected: c.next, next: c.expected });
+      else if (r.current !== undefined) truth.push({ id: c.id, expected: c.expected, next: r.current });
+    });
+    if (truth.length > 0) options.store.show(truth);
+  }
+
+  async function apply(direction: Direction): Promise<Outcome> {
+    const firstExecute = !isGroup && applies === 0 && direction === "execute";
+    const { shownByCaller, ids } = takePress(direction);
+    applies += 1;
+    if (!firstExecute) return commitStep(direction, shownByCaller, ids);
     try {
-      const outcome = await commitStep(direction, shownByCaller, press?.ids ?? null);
+      const outcome = await commitStep(direction, shownByCaller, ids);
       // The run applied nothing, so the command covers nothing. The history drops
       // the entry anyway; this keeps a merged entry from undoing a part that never landed.
       if (outcome?.kind === "skipped") own = [];
@@ -230,7 +268,17 @@ function build<V>(
         }
       }
     }
-    const raw = changes.length > 0 ? await options.store.commit(changes, { direction, previewed }) : [];
+    let raw: TransitionResult<V>[] = [];
+    if (changes.length > 0) {
+      try {
+        raw = await options.store.commit(changes, { direction, previewed });
+      } catch (error) {
+        // Nothing is known about what landed; reconcile treats every id as failed.
+        lastStep = { changes, results: changes.map((c) => ({ id: c.id, status: "failed", error })) };
+        invalidateWaitingPreviews();
+        throw error;
+      }
+    }
     // Match by id, in change order: a missing result is a failed write, a result for an unknown id is noise.
     const byId = new Map<string, TransitionResult<V>>();
     for (const r of raw) if (!byId.has(r.id)) byId.set(r.id, r);
@@ -241,6 +289,8 @@ function build<V>(
     const applied = results.filter((r) => r.status === "applied");
     const stale = results.filter((r) => r.status === "stale").length;
     const failed = results.filter((r) => r.status === "failed").length;
+    if (changes.length > 0) lastStep = { changes, results };
+    if (applied.length < changes.length) invalidateWaitingPreviews();
     const report: TransitionReport<V> = {
       direction,
       total: changes.length,
@@ -306,12 +356,16 @@ function build<V>(
     execute: () => apply("execute"),
     undo: () => apply("undo"),
     preview,
+    reconcile,
     merge,
     get transitions() {
       return current();
     },
   };
   handles.add(handle);
+  skipPress.set(handle, (direction) => {
+    takePress(direction);
+  });
   if (isGroup) groupParts.set(handle, () => (own === null ? parts : null));
   return handle;
 }
@@ -354,16 +408,37 @@ function collapseDuplicates<V>(list: readonly Transition<V>[], equals: (a: V, b:
 
 /** Two unrelated commands under one entry: execute in order, undo in reverse. */
 function compositeCommand(first: Command, second: Command): Command {
-  return {
+  // When one half throws, the other half's step never runs; its waiting
+  // preview is consumed so its previews stay paired with its steps.
+  async function stepOrSkip(run: () => Promise<Outcome> | Outcome, other: Command, direction: Direction): Promise<Outcome> {
+    try {
+      return await run();
+    } catch (error) {
+      skipPress.get(other)?.(direction);
+      throw error;
+    }
+  }
+  const composite: Command = {
     label: second.label,
     coalesceKey: first.coalesceKey,
     async execute() {
-      return combine(await first.execute(), await second.execute());
+      const a = await stepOrSkip(() => first.execute(), second, "execute");
+      return combine(a, await second.execute());
     },
     async undo() {
-      const b = await second.undo();
-      const a = await first.undo();
-      return combine(a, b);
+      const b = await stepOrSkip(() => second.undo(), first, "undo");
+      return combine(await first.undo(), b);
+    },
+    reconcile() {
+      let failure: { error: unknown } | null = null;
+      for (const part of [second, first]) {
+        try {
+          part.reconcile?.();
+        } catch (error) {
+          failure ??= { error };
+        }
+      }
+      if (failure) throw failure.error;
     },
     preview(direction) {
       // Both parts preview even if one throws; the first error is rethrown for the history to surface.
@@ -379,6 +454,11 @@ function compositeCommand(first: Command, second: Command): Command {
       if (failure) throw failure.error;
     },
   };
+  skipPress.set(composite, (direction) => {
+    skipPress.get(first)?.(direction);
+    skipPress.get(second)?.(direction);
+  });
+  return composite;
 }
 
 function combine(a: Outcome, b: Outcome): Outcome {
