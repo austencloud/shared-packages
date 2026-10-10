@@ -232,7 +232,8 @@ describe("createHistory", () => {
     await history.run(command("A", log));
     stop();
     await history.run(command("B", log));
-    expect(seen).toEqual(["busy:-", "idle:A"]);
+    // The entry is on the stack from the press, in the same publish that reports busy.
+    expect(seen).toEqual(["busy:A", "idle:A"]);
     expect(history.state.undoLabel).toBe("B");
   });
 
@@ -245,6 +246,22 @@ describe("createHistory", () => {
   });
 
   describe("clear and record while work is in flight", () => {
+    it("has a command discard its queued previews at clear, and never reconciles it", async () => {
+      const log: string[] = [];
+      const gate = deferred();
+      const history = createHistory();
+      const running = history.run(command("A", log, { execute: () => gate.promise }));
+      const reconcile = vi.fn();
+      const discardPreviews = vi.fn();
+      const dropped = history.run(command("B", log, { reconcile, discardPreviews }));
+      history.clear();
+      expect(discardPreviews).toHaveBeenCalledTimes(1);
+      gate.resolve();
+      await Promise.all([running, dropped]);
+      expect(log).not.toContain("do B");
+      expect(reconcile).not.toHaveBeenCalled();
+    });
+
     it("clear during a pending run leaves both stacks empty after it settles", async () => {
       const log: string[] = [];
       const gate = deferred();
@@ -462,5 +479,342 @@ describe("createHistory", () => {
       expect(first.merge).toHaveBeenCalledTimes(1);
       expect(history.state.undoLabel).toBe("P merged");
     });
+  });
+});
+
+describe("press-time stacks", () => {
+  /** A command whose execute and undo wait on deferreds the test settles by hand. */
+  function gated(label: string, log: string[]) {
+    const runs: ReturnType<typeof deferred<Outcome>>[] = [];
+    const undos: ReturnType<typeof deferred<Outcome>>[] = [];
+    const previews: string[] = [];
+    const cmd: Command = {
+      label,
+      execute: () => {
+        log.push(`do ${label}`);
+        const d = deferred<Outcome>();
+        runs.push(d);
+        return d.promise;
+      },
+      undo: () => {
+        log.push(`undo ${label}`);
+        const d = deferred<Outcome>();
+        undos.push(d);
+        return d.promise;
+      },
+      preview: (direction) => {
+        previews.push(direction);
+      },
+    };
+    return { cmd, runs, undos, previews };
+  }
+
+  it("moves the stacks and labels at the press, before any write settles", async () => {
+    const log: string[] = [];
+    const history = createHistory();
+    const a = gated("A", log);
+    const running = history.run(a.cmd);
+    expect(history.state).toMatchObject({ canUndo: true, undoLabel: "A", canRedo: false, busy: true, lastAction: null });
+    const undoing = history.undo();
+    expect(history.state).toMatchObject({ canUndo: false, canRedo: true, redoLabel: "A", busy: true });
+    expect(history.state.lastAction).toEqual({ kind: "undo", label: "A", status: "pending" });
+    const redoing = history.redo();
+    expect(history.state).toMatchObject({ canUndo: true, undoLabel: "A", canRedo: false });
+    expect(history.state.lastAction).toEqual({ kind: "redo", label: "A", status: "pending" });
+    expect(a.previews).toEqual(["execute", "undo", "execute"]);
+
+    // The writes still run one at a time, in press order: the undo waits for the run.
+    await tick();
+    expect(log).toEqual(["do A"]);
+    a.runs[0].resolve();
+    await running;
+    expect(history.state).toMatchObject({ canUndo: true, canRedo: false, busy: true });
+    await tick();
+    expect(log).toEqual(["do A", "undo A"]);
+    a.undos[0].resolve();
+    await undoing;
+    expect(history.state).toMatchObject({ canUndo: true, canRedo: false, busy: true });
+    expect(history.state.lastAction).toEqual({ kind: "redo", label: "A", status: "pending" });
+    await tick();
+    a.runs[1].resolve();
+    expect(await redoing).toEqual({ status: "done", label: "A" });
+    expect(log).toEqual(["do A", "undo A", "do A"]);
+    expect(history.state).toMatchObject({ canUndo: true, undoLabel: "A", canRedo: false, busy: false });
+    expect(history.state.lastAction).toEqual({ kind: "redo", label: "A", status: "done" });
+  });
+
+  it("an undo that throws puts the entry back on top of the undo stack", async () => {
+    const log: string[] = [];
+    const history = createHistory();
+    await history.run(command("A", log));
+    const b = gated("B", log);
+    const runB = history.run(b.cmd);
+    await tick();
+    b.runs[0].resolve();
+    await runB;
+    const undoing = history.undo();
+    expect(history.state).toMatchObject({ undoLabel: "A", redoLabel: "B" });
+    await tick();
+    const boom = new Error("offline");
+    b.undos[0].reject(boom);
+    expect(await undoing).toEqual({ status: "failed", label: "B", error: boom });
+    expect(history.state).toMatchObject({ undoLabel: "B", canRedo: false });
+    expect(history.state.lastAction).toEqual({ kind: "undo", label: "B", status: "failed" });
+  });
+
+  it("an undo that throws after a newer run cleared redo is still undoable, on top", async () => {
+    const log: string[] = [];
+    const history = createHistory();
+    const a = gated("A", log);
+    const runA = history.run(a.cmd);
+    await tick();
+    a.runs[0].resolve();
+    await runA;
+    const undoing = history.undo();
+    const runC = history.run(command("C", log));
+    expect(history.state).toMatchObject({ undoLabel: "C", canRedo: false });
+    await tick();
+    a.undos[0].reject(new Error("offline"));
+    await Promise.all([undoing, runC]);
+    expect(history.state).toMatchObject({ undoLabel: "A", canRedo: false });
+    const again = history.undo();
+    await tick();
+    a.undos[1].resolve();
+    await again;
+    expect(history.state.undoLabel).toBe("C");
+  });
+
+  it("a redo that throws goes back on top of the redo stack", async () => {
+    const log: string[] = [];
+    const history = createHistory();
+    const a = gated("A", log);
+    const runA = history.run(a.cmd);
+    await tick();
+    a.runs[0].resolve();
+    await runA;
+    const undoing = history.undo();
+    await tick();
+    a.undos[0].resolve();
+    await undoing;
+    const redoing = history.redo();
+    expect(history.state).toMatchObject({ undoLabel: "A", canRedo: false });
+    await tick();
+    a.runs[1].reject(new Error("offline"));
+    expect((await redoing).status).toBe("failed");
+    expect(history.state).toMatchObject({ canUndo: false, redoLabel: "A" });
+    expect(history.state.lastAction).toEqual({ kind: "redo", label: "A", status: "failed" });
+  });
+
+  it("a redo that throws after a newer run cleared redo is dropped", async () => {
+    const log: string[] = [];
+    const history = createHistory();
+    const a = gated("A", log);
+    const runA = history.run(a.cmd);
+    await tick();
+    a.runs[0].resolve();
+    await runA;
+    const undoing = history.undo();
+    await tick();
+    a.undos[0].resolve();
+    await undoing;
+    const redoing = history.redo();
+    const runC = history.run(command("C", log));
+    await tick();
+    a.runs[1].reject(new Error("offline"));
+    await Promise.all([redoing, runC]);
+    expect(history.state).toMatchObject({ undoLabel: "C", canRedo: false });
+    await history.undo();
+    expect(history.state).toMatchObject({ canUndo: false, redoLabel: "C" });
+  });
+
+  it("a run that throws leaves nothing undoable, even after a press-time undo moved it to redo", async () => {
+    const log: string[] = [];
+    const history = createHistory();
+    const a = gated("A", log);
+    const running = history.run(a.cmd);
+    const undoing = history.undo();
+    expect(history.state).toMatchObject({ canUndo: false, redoLabel: "A" });
+    await tick();
+    a.runs[0].reject(new Error("offline"));
+    expect((await running).status).toBe("failed");
+    expect(history.state).toMatchObject({ canUndo: false, canRedo: false });
+    // Its run applied nothing, so there is nothing for the queued undo to take back.
+    expect(await undoing).toEqual({ status: "skipped", label: "A" });
+    expect(log).toEqual(["do A"]);
+    expect(history.state.lastAction).toEqual({ kind: "run", label: "A", status: "failed" });
+  });
+
+  it("a skipped run is removed from whichever stack holds it", async () => {
+    const log: string[] = [];
+    const history = createHistory();
+    await history.run(command("Z", log));
+    const a = gated("A", log);
+    const running = history.run(a.cmd);
+    expect(history.state.undoLabel).toBe("A");
+    await tick();
+    a.runs[0].resolve({ kind: "skipped", message: "changed elsewhere" });
+    await running;
+    expect(history.state).toMatchObject({ undoLabel: "Z", canRedo: false, lastMessage: "changed elsewhere" });
+  });
+
+  it("a stale done does not overwrite a newer pending action, but a stale failure surfaces", async () => {
+    const log: string[] = [];
+    const history = createHistory();
+    const a = gated("A", log);
+    const b = gated("B", log);
+    const runA = history.run(a.cmd);
+    const runB = history.run(b.cmd);
+    const undoB = history.undo();
+    expect(history.state.lastAction).toEqual({ kind: "undo", label: "B", status: "pending" });
+    await tick();
+    await tick();
+    a.runs[0].resolve();
+    await runA;
+    expect(history.state.lastAction).toEqual({ kind: "undo", label: "B", status: "pending" });
+    await tick();
+    b.runs[0].resolve({ kind: "partial", message: "1 of 2" });
+    await runB;
+    expect(history.state.lastAction).toEqual({ kind: "run", label: "B", status: "partial" });
+    expect(history.state.lastMessage).toBe("1 of 2");
+    await tick();
+    b.undos[0].resolve();
+    await undoB;
+    expect(history.state.lastAction).toEqual({ kind: "undo", label: "B", status: "done" });
+    expect(history.state.lastMessage).toBeNull();
+
+    const c = gated("C", log);
+    const runC = history.run(c.cmd);
+    const undoC = history.undo();
+    await tick();
+    c.runs[0].reject(new Error("offline"));
+    await runC;
+    expect(history.state.lastAction).toEqual({ kind: "run", label: "C", status: "failed" });
+    await undoC;
+  });
+
+  it("clear between press and settle leaves the cleared state alone", async () => {
+    const log: string[] = [];
+    const history = createHistory();
+    const a = gated("A", log);
+    const runA = history.run(a.cmd);
+    await tick();
+    a.runs[0].resolve();
+    await runA;
+    const undoing = history.undo();
+    history.clear();
+    expect(history.state).toMatchObject({ canUndo: false, canRedo: false, lastAction: null });
+    await tick();
+    expect(await undoing).toEqual({ status: "empty", label: null });
+    expect(log).toEqual(["do A"]);
+    expect(history.state).toMatchObject({ canUndo: false, canRedo: false, lastAction: null, busy: false });
+  });
+
+  it("an empty undo or redo answers at once without queueing or publishing", async () => {
+    const history = createHistory();
+    const seen: unknown[] = [];
+    history.subscribe((state) => seen.push(state));
+    const gate = deferred();
+    const running = history.run({ label: "A", execute: () => gate.promise, undo() {} });
+    seen.length = 0;
+    // Nothing on redo: the empty redo does not wait behind the pending run.
+    expect(await history.redo()).toEqual({ status: "empty", label: null });
+    expect(seen).toEqual([]);
+    gate.resolve();
+    await running;
+    await history.undo();
+    await history.redo();
+    await history.undo();
+    seen.length = 0;
+    expect(await history.undo()).toEqual({ status: "empty", label: null });
+    expect(seen).toEqual([]);
+    expect(history.state.busy).toBe(false);
+  });
+
+  it("calls preview once per press, and surfaces a throwing preview asynchronously", async () => {
+    const rethrown: unknown[] = [];
+    const stub = vi.spyOn(globalThis, "queueMicrotask").mockImplementation((callback) => {
+      try {
+        callback();
+      } catch (error) {
+        rethrown.push(error);
+      }
+    });
+    try {
+      const history = createHistory();
+      const boom = new Error("preview");
+      const directions: string[] = [];
+      const result = await history.run({
+        label: "A",
+        execute() {},
+        undo() {},
+        preview(direction) {
+          directions.push(direction);
+          throw boom;
+        },
+      });
+      expect(result).toEqual({ status: "done", label: "A" });
+      await history.undo();
+      expect(directions).toEqual(["execute", "undo"]);
+      expect(rethrown).toEqual([boom, boom]);
+      expect(history.state).toMatchObject({ canUndo: false, redoLabel: "A" });
+    } finally {
+      stub.mockRestore();
+    }
+  });
+
+  it("previews the pressed part, not the coalesced entry it folds into", async () => {
+    const log: string[] = [];
+    const history = createHistory();
+    const previews: string[] = [];
+    const group = command("Group", log, { preview: (d) => previews.push(`group:${d}`) });
+    await history.run(command("P1", log, { coalesceKey: "k", merge: () => group, preview: (d) => previews.push(`p1:${d}`) }));
+    await history.run(command("P2", log, { coalesceKey: "k", preview: (d) => previews.push(`p2:${d}`) }));
+    await history.undo();
+    expect(previews).toEqual(["p1:execute", "p2:execute", "group:undo"]);
+  });
+});
+
+describe("cancelling later presses after a failure", () => {
+  it("skips every later queued step of the failed entry without calling it, and reconciles it once", async () => {
+    const log: string[] = [];
+    const history = createHistory();
+    const a = command("A", log, {
+      undo: () => {
+        log.push("undo A");
+        throw new Error("offline");
+      },
+      reconcile: () => {
+        log.push("reconcile A");
+      },
+    });
+    await history.run(a);
+    const b = command("B", log);
+    const undoing = history.undo();
+    const redoing = history.redo();
+    const runB = history.run(b);
+    const again = history.undo();
+    // The last undo took B (on top), not A.
+    await Promise.all([undoing, redoing, runB, again]);
+    expect(await redoing).toEqual({ status: "skipped", label: "A" });
+    expect(log).toEqual(["do A", "undo A", "reconcile A", "do B", "undo B"]);
+    // The failed undo alone places A: back on top of the undo stack.
+    expect(history.state).toMatchObject({ undoLabel: "A", redoLabel: "B" });
+  });
+
+  it("does not reconcile when nothing was cancelled", async () => {
+    const log: string[] = [];
+    const history = createHistory();
+    await history.run(
+      command("A", log, {
+        undo: () => {
+          throw new Error("offline");
+        },
+        reconcile: () => {
+          log.push("reconcile A");
+        },
+      })
+    );
+    expect((await history.undo()).status).toBe("failed");
+    expect(log).toEqual(["do A"]);
   });
 });

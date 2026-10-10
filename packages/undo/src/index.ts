@@ -9,6 +9,7 @@ export type {
   Transition,
   TransitionChange,
   TransitionCommandHandle,
+  TransitionCommitContext,
   TransitionCommandOptions,
   TransitionReport,
   TransitionResult,

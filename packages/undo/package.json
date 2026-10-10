@@ -1,6 +1,6 @@
 {
   "name": "@austencloud/undo",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Async command history with undo and redo, guarded before/after transitions, keyboard binding, and a Svelte 5 reactive view. Shared across AustenCloud apps.",
   "type": "module",
   "svelte": "./dist/index.js",
