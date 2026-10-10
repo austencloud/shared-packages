@@ -26,8 +26,22 @@ export interface Command {
   /**
    * Fold `next` into this command when both share a coalesceKey. Returns the
    * merged command, or null when the two cancel out and the entry should go.
+   * It runs at the press, before either command's work has settled (`next`
+   * has not executed yet, and this one may still be writing). Each part still
+   * executes as its own queued run; the merged command's `execute` is only
+   * called for a redo.
    */
   merge?(next: Command): Command | null;
+  /**
+   * Put the effect of the coming execute or undo on screen, synchronously.
+   * The history calls it at the press (run, undo, redo), before the queued
+   * work starts, so the screen changes on the same frame as the click or key.
+   * When the work settles, the command's own write path corrects anything that
+   * turned out differently. A throw is surfaced asynchronously and does not
+   * stop the press. Commands without it change nothing on screen until their
+   * work runs.
+   */
+  preview?(direction: "execute" | "undo"): void;
 }
 
 export type RunStatus = "done" | "partial" | "skipped" | "failed" | "empty";
@@ -45,7 +59,13 @@ export interface RunResult {
 export interface HistoryAction {
   kind: "run" | "undo" | "redo";
   label: string;
-  status: Exclude<RunStatus, "empty">;
+  /**
+   * How it went. `pending` is set the moment an undo or redo is pressed,
+   * before its write settles; show it like `done` ("Undone: X"). A settle
+   * replaces it, unless a newer press has happened since: a late `done` is
+   * then dropped, while `partial`, `skipped` and `failed` always surface.
+   */
+  status: Exclude<RunStatus, "empty"> | "pending";
 }
 
 export interface HistoryState {
@@ -57,22 +77,40 @@ export interface HistoryState {
   readonly redoLabel: string | null;
   /** A command is queued or running. */
   readonly busy: boolean;
-  /** The message of the last partial or skipped outcome; null after a clean or failed one. */
+  /** The message of the last partial or skipped outcome; null after a clean or failed one, and from an undo or redo press. */
   readonly lastMessage: string | null;
   /** The last thing the history did and how it went. */
   readonly lastAction: HistoryAction | null;
 }
 
+/**
+ * The stacks move at the press: `run` puts the command on the undo stack,
+ * `undo` and `redo` move the top entry across, all before the call returns,
+ * so canUndo, canRedo, the labels and `lastAction` are right on the same
+ * frame. The work itself is queued and runs one step at a time, in press
+ * order. When a step settles it only corrects what turned out differently: a
+ * run that was skipped or threw is removed, an undo or redo that threw is
+ * moved back, one that was skipped is dropped.
+ */
 export interface History {
   /** An immutable snapshot; a new object after every change. */
   readonly state: HistoryState;
-  /** Execute a command and, unless it was skipped or threw, keep it for undo. Never rejects. */
+  /**
+   * Keep the command for undo at once and queue its execute. If the execute
+   * is skipped or throws, the entry is removed again. Never rejects.
+   */
   run(command: Command): Promise<RunResult>;
   /** Keep a command that has already been applied, without executing it. */
   record(command: Command): void;
-  /** Undo the newest entry. Never rejects; `status: "empty"` when there is none. */
+  /**
+   * Move the newest entry to the redo stack at once and queue its undo. Never
+   * rejects; `status: "empty"` right away, with nothing queued, when there is none.
+   */
   undo(): Promise<RunResult>;
-  /** Redo the newest undone entry. Never rejects; `status: "empty"` when there is none. */
+  /**
+   * Move the newest undone entry back to the undo stack at once and queue its
+   * execute. Never rejects; `status: "empty"` right away when there is none.
+   */
   redo(): Promise<RunResult>;
   /** Forget everything, including the last message and action. */
   clear(): void;

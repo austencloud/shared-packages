@@ -1,12 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { createHistory } from "./history.js";
-import { memoryTransitionStore } from "./memory-store.js";
+import { memoryTransitionStore, type MemoryTransitionStore } from "./memory-store.js";
 import {
   isTransitionCommand,
   transitionCommand,
   type Transition,
   type TransitionCommandOptions,
   type TransitionReport,
+  type TransitionStore,
 } from "./transition-command.js";
 import type { Command } from "./types.js";
 
@@ -468,5 +469,299 @@ describe("transitionCommand coalescing", () => {
     expect(log).toEqual(["second:undo", "first:0"]);
     await history.redo();
     expect(log).toEqual(["second:undo", "first:0", "first:1", "second:do"]);
+  });
+});
+
+describe("transitionCommand at press time", () => {
+  const plain = (r: TransitionReport<string>) => `${r.direction}:${r.applied}/${r.total} stale ${r.stale} failed ${r.failed}`;
+  const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+  /** A memory store whose commits wait until the test opens the gate. */
+  function gatedStore(initial: [string, string][]) {
+    const inner = memoryTransitionStore<string>(initial);
+    const gates: (() => void)[] = [];
+    const store: MemoryTransitionStore<string> = {
+      ...inner,
+      show: (changes) => inner.show(changes),
+      async commit(changes, context) {
+        await new Promise<void>((resolve) => gates.push(resolve));
+        return inner.commit(changes, context);
+      },
+    };
+    /** Let the oldest waiting commit through and wait for it to settle. */
+    async function open() {
+      while (gates.length === 0) await tick();
+      gates.shift()!();
+      await tick();
+    }
+    return { store, inner, open };
+  }
+
+  const one = (store: TransitionStore<string>, id: string, before: string, after: string, extra: Partial<TransitionCommandOptions<string>> = {}) =>
+    transitionCommand<string>({ label: `set ${id}`, describe: plain, store, transitions: [{ id, before, after }], ...extra });
+
+  it("shows each press on the same call, before the deferred store answers", async () => {
+    const { store, inner, open } = gatedStore([["a", "0"]]);
+    const history = createHistory();
+    const running = history.run(one(store, "a", "0", "1"));
+    expect(inner.showCalls).toEqual([[{ id: "a", expected: "0", next: "1" }]]);
+    expect(history.state).toMatchObject({ undoLabel: "set a", busy: true });
+    const undoing = history.undo();
+    expect(inner.showCalls.at(-1)).toEqual([{ id: "a", expected: "1", next: "0" }]);
+    expect(history.state).toMatchObject({ canUndo: false, redoLabel: "set a" });
+    const redoing = history.redo();
+    expect(inner.showCalls.at(-1)).toEqual([{ id: "a", expected: "0", next: "1" }]);
+    expect(inner.showCalls).toHaveLength(3);
+    expect(inner.commitCalls).toEqual([]);
+    await open();
+    await open();
+    await open();
+    await Promise.all([running, undoing, redoing]);
+    expect(inner.get("a")).toBe("1");
+    expect(inner.commitCalls.map((c) => c.context)).toEqual([
+      { direction: "execute", previewed: true },
+      { direction: "undo", previewed: true },
+      { direction: "execute", previewed: true },
+    ]);
+    expect(history.state).toMatchObject({ undoLabel: "set a", canRedo: false, busy: false });
+  });
+
+  it("with shown, skips the first execute's show but still tells the commit it was previewed", async () => {
+    const store = memoryTransitionStore<string>([["a", "0"]]);
+    const history = createHistory();
+    await history.run(one(store, "a", "0", "1", { shown: true }));
+    expect(store.showCalls).toEqual([]);
+    await history.undo();
+    await history.redo();
+    expect(store.showCalls).toEqual([
+      [{ id: "a", expected: "1", next: "0" }],
+      [{ id: "a", expected: "0", next: "1" }],
+    ]);
+    expect(store.commitCalls.map((c) => c.context)).toEqual([
+      { direction: "execute", previewed: true },
+      { direction: "undo", previewed: true },
+      { direction: "execute", previewed: true },
+    ]);
+  });
+
+  it("with shown, an undo pressed before the first write still pairs each commit with its own press", async () => {
+    const { store, inner, open } = gatedStore([["a", "0"]]);
+    const history = createHistory();
+    const running = history.run(one(store, "a", "0", "1", { shown: true }));
+    const undoing = history.undo();
+    expect(inner.showCalls).toEqual([[{ id: "a", expected: "1", next: "0" }]]);
+    await open();
+    await open();
+    await Promise.all([running, undoing]);
+    expect(inner.commitCalls.map((c) => c.context)).toEqual([
+      { direction: "execute", previewed: true },
+      { direction: "undo", previewed: true },
+    ]);
+    expect(inner.get("a")).toBe("0");
+  });
+
+  it("tells the commit nothing was previewed when the store cannot show", async () => {
+    const inner = memoryTransitionStore<string>([["a", "0"], ["b", "0"]]);
+    const contexts: unknown[] = [];
+    const noShow: TransitionStore<string> = {
+      commit: (changes, context) => {
+        contexts.push(context);
+        return inner.commit(changes);
+      },
+    };
+    const history = createHistory();
+    await history.run(one(noShow, "a", "0", "1"));
+    await history.undo();
+    await history.run(one(noShow, "b", "0", "1", { shown: true }));
+    await history.undo();
+    expect(contexts).toEqual([
+      { direction: "execute", previewed: false },
+      { direction: "undo", previewed: false },
+      { direction: "execute", previewed: true },
+      { direction: "undo", previewed: false },
+    ]);
+    expect(inner.get("a")).toBe("0");
+    expect(inner.get("b")).toBe("0");
+  });
+
+  it("calling execute or undo directly, with no press, commits as not previewed", async () => {
+    const store = memoryTransitionStore<string>([["a", "0"]]);
+    const command = one(store, "a", "0", "1");
+    await command.execute();
+    await command.undo();
+    expect(store.commitCalls.map((c) => c.context)).toEqual([
+      { direction: "execute", previewed: false },
+      { direction: "undo", previewed: false },
+    ]);
+  });
+
+  it("a first execute that applies nothing covers nothing afterwards", async () => {
+    const stale = memoryTransitionStore<string>([["a", "elsewhere"]]);
+    const skipped = one(stale, "a", "0", "1");
+    expect((await skipped.execute())?.kind).toBe("skipped");
+    expect(skipped.transitions).toEqual([]);
+
+    const broken = memoryTransitionStore<string>([["a", "0"]]);
+    broken.failNext("a");
+    const failed = one(broken, "a", "0", "1");
+    await expect(failed.execute()).rejects.toThrow("execute:0/1 stale 0 failed 1");
+    expect(failed.transitions).toEqual([]);
+
+    const rejecting = one({ commit: () => Promise.reject(new Error("network")) }, "a", "0", "1");
+    await expect(rejecting.execute()).rejects.toThrow("network");
+    expect(rejecting.transitions).toEqual([]);
+  });
+
+  it("a redo whose execute throws keeps its transitions for a retry", async () => {
+    const store = memoryTransitionStore<string>([["a", "0"]]);
+    const command = one(store, "a", "0", "1");
+    await command.execute();
+    await command.undo();
+    store.failNext("a");
+    await expect(command.execute()).rejects.toThrow();
+    expect(command.transitions.map((t) => t.id)).toEqual(["a"]);
+  });
+
+  it("a coalesced stroke whose second part fails undoes only the first part's ids", async () => {
+    const { store, inner, open } = gatedStore([["a", "0"], ["b", "0"]]);
+    const history = createHistory();
+    const stroke = { coalesceKey: "stroke", relabel: (m: readonly Transition<string>[]) => `Paint ${m.length}` };
+    const first = history.run(one(store, "a", "0", "1", stroke));
+    const second = history.run(one(store, "b", "0", "1", stroke));
+    expect(history.state.undoLabel).toBe("Paint 2");
+    await open(); // a lands
+    inner.failNext("b");
+    await open(); // b fails
+    await Promise.all([first, second]);
+    expect(history.state).toMatchObject({ undoLabel: "Paint 2", canUndo: true });
+    const undoing = history.undo();
+    await open();
+    expect(await undoing).toEqual({ status: "done", label: "Paint 2" });
+    expect(inner.commitCalls.at(-1)?.changes).toEqual([{ id: "a", expected: "1", next: "0" }]);
+    expect([inner.get("a"), inner.get("b")]).toEqual(["0", "0"]);
+    expect(history.state).toMatchObject({ canUndo: false, redoLabel: "Paint 2" });
+  });
+
+  it("a coalesced group undone mid-stroke previews every part and undoes what landed", async () => {
+    const { store, inner, open } = gatedStore([["a", "0"], ["b", "0"]]);
+    const history = createHistory();
+    const first = history.run(one(store, "a", "0", "1", { coalesceKey: "k" }));
+    const second = history.run(one(store, "b", "0", "1", { coalesceKey: "k" }));
+    const undoing = history.undo();
+    expect(inner.showCalls.at(-1)).toEqual([
+      { id: "a", expected: "1", next: "0" },
+      { id: "b", expected: "1", next: "0" },
+    ]);
+    await open();
+    await open();
+    await open();
+    await Promise.all([first, second, undoing]);
+    expect([inner.get("a"), inner.get("b")]).toEqual(["0", "0"]);
+    // One store commit for the whole group's undo.
+    expect(inner.commitCalls).toHaveLength(3);
+    expect(inner.commitCalls[2].context).toEqual({ direction: "undo", previewed: true });
+    const redoing = history.redo();
+    await open();
+    await redoing;
+    expect([inner.get("a"), inner.get("b")]).toEqual(["1", "1"]);
+  });
+
+  it("a group that cancels out at the press drops the entry and the part still runs", async () => {
+    const { store, inner, open } = gatedStore([["a", "0"]]);
+    const history = createHistory();
+    const first = history.run(one(store, "a", "0", "1", { coalesceKey: "k" }));
+    const second = history.run(one(store, "a", "1", "0", { coalesceKey: "k" }));
+    expect(history.state).toMatchObject({ canUndo: false, canRedo: false });
+    await open();
+    await open();
+    await Promise.all([first, second]);
+    expect(inner.commitCalls).toHaveLength(2);
+    expect(inner.get("a")).toBe("0");
+    expect(history.state.canUndo).toBe(false);
+  });
+
+  it("drops a coalesced entry once every part has failed", async () => {
+    const { store, inner, open } = gatedStore([["a", "0"], ["b", "0"]]);
+    const history = createHistory();
+    const first = history.run(one(store, "a", "0", "1", { coalesceKey: "k" }));
+    const second = history.run(one(store, "b", "0", "1", { coalesceKey: "k" }));
+    inner.failNext("a");
+    await open();
+    inner.failNext("b");
+    await open();
+    await Promise.all([first, second]);
+    expect(history.state).toMatchObject({ canUndo: false, canRedo: false });
+  });
+
+  it("a merged group is a transition command that redoes through its own execute", async () => {
+    const store = memoryTransitionStore<string>([["a", "0"], ["b", "0"]]);
+    const history = createHistory();
+    const first = one(store, "a", "0", "1", { coalesceKey: "k" });
+    const merged = first.merge!(one(store, "b", "0", "1", { coalesceKey: "k" }));
+    expect(merged && isTransitionCommand(merged)).toBe(true);
+    await history.run(first);
+    await history.run(one(store, "b", "0", "1", { coalesceKey: "k" }));
+    await history.undo();
+    await history.redo();
+    expect([store.get("a"), store.get("b")]).toEqual(["1", "1"]);
+  });
+
+  it("shows ids a press did not preview right before committing them", async () => {
+    // An undo retry that finishes restores ids to the entry after a redo was already pressed.
+    const { store, inner, open } = gatedStore([["a", "0"], ["b", "0"]]);
+    const history = createHistory();
+    const command = transitionCommand<string>({
+      label: "ab",
+      describe: plain,
+      store,
+      transitions: [
+        { id: "a", before: "0", after: "1" },
+        { id: "b", before: "0", after: "1" },
+      ],
+    });
+    const running = history.run(command);
+    await open();
+    await running;
+    inner.failNext("b");
+    const firstUndo = history.undo();
+    await open();
+    expect((await firstUndo).status).toBe("failed");
+    const retry = history.undo();
+    const redoing = history.redo();
+    expect(inner.showCalls.at(-1)).toEqual([{ id: "b", expected: "0", next: "1" }]);
+    const showsBefore = inner.showCalls.length;
+    await open();
+    await retry;
+    expect(command.transitions.map((t) => t.id)).toEqual(["a", "b"]);
+    await open();
+    await redoing;
+    expect(inner.showCalls.slice(showsBefore)).toEqual([[{ id: "a", expected: "0", next: "1" }]]);
+    expect(inner.commitCalls.at(-1)?.context).toEqual({ direction: "execute", previewed: true });
+    expect([inner.get("a"), inner.get("b")]).toEqual(["1", "1"]);
+  });
+
+  it("a composite entry previews both commands, the second first on undo", async () => {
+    const store = memoryTransitionStore<string>([["a", "0"]]);
+    const history = createHistory();
+    const previews: string[] = [];
+    await history.run(one(store, "a", "0", "1", { coalesceKey: "k" }));
+    await history.run({
+      label: "plain",
+      coalesceKey: "k",
+      execute() {},
+      undo() {},
+      preview: (direction) => {
+        previews.push(`plain:${direction}:${store.showCalls.length}`);
+      },
+    });
+    const showsBefore = store.showCalls.length;
+    previews.length = 0;
+    await history.undo();
+    // The plain command previews before the transition command's show is recorded.
+    expect(previews).toEqual([`plain:undo:${showsBefore}`]);
+    expect(store.showCalls.length).toBe(showsBefore + 1);
+    previews.length = 0;
+    await history.redo();
+    expect(previews).toEqual([`plain:execute:${showsBefore + 2}`]);
   });
 });
