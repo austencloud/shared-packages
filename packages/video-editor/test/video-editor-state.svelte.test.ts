@@ -108,6 +108,26 @@ describe("video editor state with no plugin", () => {
 		expect(state.saveError).toBe("editor_save_failed:full");
 		state.dispose();
 	});
+
+	it("starts in the edit mode and keeps a plugin mode's id", () => {
+		const editor = createVideoEditorState(hostWith(seeded()), undefined, { subjectId: "seq" });
+		expect(editor.mode).toBe("edit");
+		editor.mode = "timing";
+		expect(editor.mode).toBe("timing");
+		editor.dispose();
+	});
+
+	it("selects a part of an item and drops the part when any item is selected", () => {
+		const editor = createVideoEditorState(hostWith(seeded()), undefined, { subjectId: "seq" });
+		const [first, second] = editor.project.tracks.flatMap((track) => track.items);
+		if (!first || !second) throw new Error("the plain fixture has two items");
+		editor.selectPart(first.id, "opening");
+		expect(editor.selectedItemId).toBe(first.id);
+		expect(editor.selectedPart).toBe("opening");
+		editor.selectedItemId = second.id;
+		expect(editor.selectedPart).toBeNull();
+		editor.dispose();
+	});
 });
 
 describe("state extension", () => {

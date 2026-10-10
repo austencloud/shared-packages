@@ -151,6 +151,13 @@ export interface VideoEditorState<E = unknown> {
 	/** A selection whose layer is not locked. */
 	readonly selectionEditable: boolean;
 	isLocked(itemId: string): boolean;
+	// Modes and parts
+	/** "edit", or the id of a plugin mode (`PluginUi.modes`) that owns the screen. */
+	mode: string;
+	/** The selected part of the selected item (an `ItemPart` id), or null for the whole item. */
+	readonly selectedPart: string | null;
+	/** Selects the item and one of its parts. */
+	selectPart(itemId: string, part: string): void;
 	// History
 	readonly canUndo: boolean;
 	readonly canRedo: boolean;
@@ -302,6 +309,8 @@ export function createVideoEditorState<E = unknown>(
 	let previewSeconds = $state(0);
 	let playing = $state(false);
 	let selectedItemId = $state<string | null>(null);
+	let mode = $state("edit");
+	let selectedPart = $state<string | null>(null);
 
 	const compiled = $derived<CompiledPostProject | null>(
 		compilePostProject(
@@ -1139,11 +1148,25 @@ export function createVideoEditorState<E = unknown>(
 			return selectedItemId;
 		},
 		set selectedItemId(next: string | null) {
+			selectedPart = null;
 			selectedItemId = next && findItem(project, next) ? next : null;
 			extension?.selected?.(selectedItemId);
 		},
 		get selectedItem() {
 			return selectedItem;
+		},
+		get mode() {
+			return mode;
+		},
+		set mode(next: string) {
+			mode = next;
+		},
+		get selectedPart() {
+			return selectedPart;
+		},
+		selectPart(itemId: string, part: string) {
+			this.selectedItemId = itemId;
+			if (selectedItemId === itemId) selectedPart = part;
 		},
 		get splitTarget() {
 			return splitTarget;

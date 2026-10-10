@@ -1,12 +1,20 @@
+import type { IconDefinition } from "@fortawesome/free-solid-svg-icons";
+import type { Component, Snippet } from "svelte";
 import type { z } from "zod";
 import type { CompileItemEnv, ProjectCompileHooks } from "./core/compile/hooks.js";
 import type { EditContext } from "./core/edit/context.js";
 import type { NewItemBase, NewOverlaySpec, PostItemPatch } from "./core/edit/project-edits.js";
 import type { PostTake } from "./core/plan/post-plan.js";
+import type { MediaCompositionPreset } from "./core/preset/preset-schema.js";
 import type { CoreItemKind, PostItem, PostProject } from "./core/project/item-kinds.js";
 import type { PostBox } from "./core/project/schema.js";
+import type { EvaluatedFrameLayer } from "./render/frame-evaluator.js";
+import type { PostStudioLayerPainter } from "./render/layer-painter.js";
 import type { PainterFactory } from "./render/painter-registry.js";
 import type { SurfaceCapture } from "./render/surfaces.js";
+import type { CompositionSourceBinding } from "./state/source-binding.js";
+import type { VideoEditorState } from "./state/video-editor-state.svelte.js";
+import type { Translate } from "./strings/translate.js";
 
 export interface ShapeExtension {
 	shape: z.ZodRawShape;
@@ -44,6 +52,8 @@ export interface ItemKindDefinition {
 	 * Absent: { ...base, kind }.
 	 */
 	create?: (base: NewItemBase, spec: NewOverlaySpec) => PostItem;
+	/** The kind's editor UI; absent for a kind the core UI draws on its own. */
+	ui?: ItemKindUi;
 }
 
 export interface VideoEditorPlugin {
@@ -95,6 +105,8 @@ export interface VideoEditorPlugin {
 	subjectKey?: string;
 	/** Plugin behaviour inside the edit engine. */
 	editHooks?: EditHooks;
+	/** The plugin's editor UI. A missing member renders nothing. */
+	ui?: PluginUi;
 }
 
 export interface EditHooks {
@@ -123,3 +135,153 @@ export type TakeMediaChange =
 			takeKey: string;
 			durationSeconds: number;
 	  };
+
+/** What every plugin tool panel receives. `editor` is the generic state; a plugin that needs its own members reads them from its own context. */
+export interface ToolPanelProps {
+	editor: VideoEditorState;
+	/** The selected item, or null when the tool belongs to no item (the empty selection row). */
+	item: PostItem | null;
+	/** The active tool id. */
+	tool: string;
+	locked: boolean;
+}
+
+/** A part of an item that the timeline draws as its own block and the canvas selects on its own (tka: an animation's opening tunnel). */
+export interface ItemPart {
+	id: string;
+	/** Seconds in post time, or null when the item has no such part now. */
+	span(item: PostItem): { start: number; end: number } | null;
+	label(t: (key: string) => string): string;
+	icon: IconDefinition;
+}
+
+export interface ItemKindUi {
+	/** Icon on timeline blocks, the add panel and the tool row; `iconFor` lets a mode pick its own (tka: a mandala). */
+	icon: IconDefinition;
+	iconFor?(item: PostItem): IconDefinition;
+	/** The translated kind name; without it the editor shows the definition's `label`. */
+	label?(t: (key: string) => string, item: PostItem | null): string;
+	/** The kind's own tool panels; renders nothing for a tool it does not own. */
+	toolPanel?: Component<ToolPanelProps>;
+	parts?: readonly ItemPart[];
+}
+
+/** A tool a plugin adds to the tool row. A panel tool opens its panel; an action tool runs. */
+export type PluginTool =
+	| { id: string; type: "panel"; label(t: (key: string) => string): string; icon: IconDefinition }
+	| {
+			id: string;
+			type: "action";
+			label(t: (key: string) => string): string;
+			icon: IconDefinition;
+			run(editor: VideoEditorState): void;
+	  };
+
+/** An entry the plugin adds to the add panel. */
+export interface PluginAddItem {
+	id: string;
+	label(t: (key: string) => string): string;
+	icon: IconDefinition;
+	/** False hides the entry (tka: the tunnel hook when the post already has one). */
+	available(editor: VideoEditorState): boolean;
+	/** Runs after the panel pauses playback. Returns the kind it added (the panel then opens that kind's tools, as for a core add), or null. */
+	add(editor: VideoEditorState): string | null;
+}
+
+export interface MediaSublayerProps {
+	editor: VideoEditorState;
+	binding: CompositionSourceBinding;
+	layer: EvaluatedFrameLayer;
+	role: string;
+	regionId: string;
+	preset: MediaCompositionPreset | null;
+	/** The item the layer draws, and the item under it when the layer is an overlay of a main item. */
+	sourceItem: PostItem | null;
+	underlyingItem: PostItem | null;
+	playing: boolean;
+	exporting: boolean;
+}
+
+export interface CanvasOverlayProps {
+	editor: VideoEditorState;
+	/** True while the crop screen owns the canvas; an overlay hides itself. */
+	cropping: boolean;
+}
+
+/** A screen state the plugin owns (tka: the timing mode). Each slot replaces the edit mode's slot while the mode is active. */
+export interface EditorMode {
+	id: string;
+	dock?: Component<{ editor: VideoEditorState }>;
+	panel?: Component<{ editor: VideoEditorState }>;
+	stage?: Component<{ editor: VideoEditorState }>;
+	timeline?: Component<{ editor: VideoEditorState }>;
+	/** The bar above the stage while the mode is active (tka: Back, the take picker, the save status). It replaces the top bar slot and owns the mode's own undo keys; `draftStatus` is the workspace's save-status snippet. */
+	toolbar?: Component<{ editor: VideoEditorState; draftStatus: Snippet }>;
+	/** Keys while the mode is active; return true when handled. */
+	keydown?(event: KeyboardEvent, editor: VideoEditorState): boolean;
+}
+
+/** Source bindings and painters for the plugin's roles, made once per editor. */
+export interface PluginBindings {
+	bindingFor(role: string): CompositionSourceBinding | null;
+	exportPainters(): ReadonlyMap<string, PostStudioLayerPainter>;
+	dispose(): void;
+}
+
+export interface PluginUi {
+	/** Panels for plugin tools on core kinds, and additions after a core tool's own panel. */
+	toolPanel?: Component<ToolPanelProps>;
+	tools?: readonly PluginTool[];
+	/** The tool row for a selection, given the core row; return the row in display order. The editor answers what the row depends on (tka: the selected part, a QR image, a backdrop). */
+	toolRow?(
+		selection: PostItem | null,
+		coreRow: readonly string[],
+		editor: VideoEditorState,
+	): readonly string[];
+	addItems?(coreItems: readonly string[]): readonly (string | PluginAddItem)[];
+	mediaSublayer?: { renderModes: readonly string[]; component: Component<MediaSublayerProps> };
+	/** Called on a right click on any media layer; the editor prevents the default when present. */
+	layerContextMenu?(event: MouseEvent): void;
+	canvasOverlays?: readonly Component<CanvasOverlayProps>[];
+	modes?: readonly EditorMode[];
+	/** Whole panels keyed by a plugin tool id (tka: the "look" animation panel, backup and recovery). */
+	panels?: Readonly<Record<string, Component<{ editor: VideoEditorState }>>>;
+	/**
+	 * Made once per editor during the workspace's initialisation, so it may call getContext. `previewUrl` is the
+	 * workspace's preview resolver: the URL a take plays from (its preview copy when ready, else `url`).
+	 */
+	createBindings?(env: {
+		editor: VideoEditorState;
+		t: Translate;
+		previewUrl(takeId: string, url: string | null): string | null;
+	}): PluginBindings;
+	/** Crop screen landing marks for a video item (tka: the tapped placements). */
+	cropSteps?(editor: VideoEditorState, itemId: string): readonly ClipStep[];
+	/** Two items the timeline draws joined (tka: the animation handing over to the moves square). */
+	timelineJoin?(project: PostProject): TimelineJoin | null;
+}
+
+/** A landing mark on the crop screen's clip timeline. */
+export interface ClipStep {
+	/** Post seconds. */
+	seconds: number;
+	/** Arrival position: 0 is the opening, p the landing of step p. */
+	position: number;
+	/** The plugin's own index for the step; null for the opening. */
+	stepIndex: number | null;
+	/** The label the crop timeline shows. */
+	label: string;
+	/** The first step of a pass. */
+	passStart: boolean;
+}
+
+/** Two items the timeline draws as one block on the first item's row, joined from start to end. */
+export interface TimelineJoin {
+	fromId: string;
+	toId: string;
+	fromTrackIndex: number;
+	toTrackIndex: number;
+	/** Post seconds where the first becomes the second. */
+	start: number;
+	end: number;
+}
