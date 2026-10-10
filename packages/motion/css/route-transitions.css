@@ -1,7 +1,9 @@
 /* Page changes (src/route-motion.ts). The root is not captured, so chrome
    outside the page area stays live; only [data-route-content] moves. Chrome
    that overlaps the page area (a fixed header, a phone bottom bar) carries
-   [data-route-hold] so it gets a layer that paints above the page. */
+   [data-route-hold] so it gets a layer that paints above the page. The
+   attribute takes exactly two values, "header" and "nav". The durations and
+   easing below come from css/tokens.css, which must be loaded too. */
 html.route-transition {
 	view-transition-name: none;
 }

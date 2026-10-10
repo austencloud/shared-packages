@@ -54,7 +54,7 @@ Call `installRouteMotion` once from the root layout's script, during component i
 Mark up the page with these attributes:
 
 - `data-route-content` on the page area that fades between pages.
-- `data-route-hold="header"` or `data-route-hold="nav"` on chrome that overlaps the page area (a fixed header, a phone bottom bar), so it keeps its own layer above the page.
+- `data-route-hold` on chrome that overlaps the page area (a fixed header, a phone bottom bar), so it keeps its own layer above the page. It takes exactly two values, `header` and `nav`; any other value does nothing.
 - `data-record="kind:id"` on the box that opens a record. Several route params are joined with `/`, so the service page above is `service:fire/fire-show`.
 - `data-record-target="kind:id"` on the header of the page that shows that record.
 - `data-record-photo` on a photo that should travel with the box.
@@ -70,6 +70,8 @@ A query-only change on the same page is that page's own motion and gets none her
 ```
 
 or, from a layout script, `import '@austencloud/motion/css/tokens.css'` and `import '@austencloud/motion/css/route-transitions.css'`. `tokens.css` defines the `--duration-*`, `--ease-standard*` and `--stagger-*` custom properties. `route-transitions.css` holds the `::view-transition-*` rules and keyframes keyed on the attributes above. The token values are tested against `DURATION` and `STAGGER`.
+
+`route-transitions.css` reads those tokens through `var(--duration-*)` and `var(--ease-standard*)`. Load `tokens.css` too, or define the same tokens in the app's own CSS. Without them the animation declarations are invalid at computed-value time and page transitions silently drop to no animation.
 
 ## Coverage scanner
 
@@ -99,3 +101,7 @@ It flags `svelte/transition` imports, `transition: all`, raw millisecond duratio
 - A second change mid-animation continues from what is on screen.
 - Keep keyboard focus, scroll position and immediate interaction during transitions.
 - A structural motion change is not done until its frames have been watched in a real browser.
+
+## Releasing
+
+0.1.0 is published by hand. Later versions go through changesets like the rest of the shared-packages repo: run `pnpm changeset` in the repo root, merge to `main`, and the Release workflow publishes.

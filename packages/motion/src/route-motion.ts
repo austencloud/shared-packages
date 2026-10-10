@@ -9,6 +9,7 @@
  * page's own motion. Reduced motion and browsers without view transitions
  * get the plain swap. Styles: css/route-transitions.css.
  */
+import { onMount } from 'svelte';
 import { reducedMotion } from './reduced-motion';
 import { createRecordResolver, decideRouteMotion, type RecordRoutes, type RouteTarget } from './route-morph';
 import { clickedRecord, recordTarget, runRouteTransition, trackRecordClicks, visibleRecord } from './record-morph';
@@ -50,19 +51,16 @@ export function routeMotionHandler(routes: RecordRoutes) {
 	};
 }
 
-let tracking = false;
-
 /**
  * Call once from the root layout's script, during component init (SvelteKit's
- * onNavigate requires that). Pass SvelteKit's `onNavigate` from `$app/navigation`.
+ * onNavigate and Svelte's onMount both require that). Pass SvelteKit's
+ * `onNavigate` from `$app/navigation`. The click listener behind the record
+ * morphs is removed when the component unmounts.
  */
 export function installRouteMotion(options: {
 	routes: RecordRoutes;
 	onNavigate: (callback: (navigation: NavigationLike) => Promise<void> | undefined) => void;
 }): void {
-	if (typeof document !== 'undefined' && !tracking) {
-		tracking = true;
-		trackRecordClicks(document);
-	}
+	onMount(() => trackRecordClicks(document));
 	options.onNavigate(routeMotionHandler(options.routes));
 }
