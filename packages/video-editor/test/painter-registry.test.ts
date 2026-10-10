@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import { compilePostProject, createProjectSchema, normalizeProject } from "../src/core/index.js";
-import { createPainterRegistry } from "../src/render/index.js";
+import {
+	createPainterRegistry,
+	createTextPainters,
+	textPainterFactory,
+} from "../src/render/index.js";
 import type { PainterEnv, PainterFactory, PostStudioLayerPainter } from "../src/render/index.js";
 import plain from "./fixtures/plain.project.json";
 
@@ -82,15 +86,19 @@ describe("createPainterRegistry", () => {
 		expect(askedOfFirst).toHaveLength(roles.filter((candidate) => candidate === role).length * 2);
 	});
 
-	it("asks again on every paintersFor call and builds a fresh painter each time", () => {
+	it("asks again on every paintersFor call and returns what the factory returned that time", () => {
 		const create = vi.fn(() => painter());
 		const registry = createPainterRegistry([{ id: "only", create }]);
 
 		const one = registry.paintersFor(env);
 		const two = registry.paintersFor(env);
 
-		expect(create).toHaveBeenCalledTimes(new Set(roles).size * 2);
-		expect(two.get(role)).not.toBe(one.get(role));
+		const distinct = new Set(roles).size;
+		expect(create).toHaveBeenCalledTimes(distinct * 2);
+		// `role` is the first clip's role, so it is the first one asked on each call.
+		const results = create.mock.results.map((result) => result.value);
+		expect(one.get(role)).toBe(results[0]);
+		expect(two.get(role)).toBe(results[distinct]);
 	});
 
 	it("gives every role to the first of two factories that both answer it", () => {
@@ -106,5 +114,30 @@ describe("createPainterRegistry", () => {
 		// The order is the whole rule: swap the factories and the other one wins.
 		const swapped = createPainterRegistry([second, first]).paintersFor(env);
 		for (const answered of new Set(roles)) expect(swapped.get(answered)).toBe(fromSecond);
+	});
+});
+
+describe("createTextPainters", () => {
+	const textRole = compiled.texts[0]?.role;
+
+	it("keeps one painter per text item across compiles", () => {
+		if (textRole === undefined) throw new Error("the plain fixture must have a text item");
+		const factory = createTextPainters(() => compiled);
+		const first = factory.create(textRole, env);
+		const second = factory.create(textRole, { project, compiled: { ...compiled } });
+		expect(first).not.toBeNull();
+		expect(second).toBe(first);
+	});
+
+	it("answers null for a role no text item draws", () => {
+		const factory = createTextPainters(() => compiled);
+		expect(factory.create("no-such-role", env)).toBeNull();
+	});
+
+	it("builds a new painter per call in the plain factory, which the memo replaces", () => {
+		if (textRole === undefined) throw new Error("the plain fixture must have a text item");
+		expect(textPainterFactory.create(textRole, env)).not.toBe(
+			textPainterFactory.create(textRole, env),
+		);
 	});
 });

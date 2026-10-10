@@ -81,11 +81,11 @@ export interface VideoEditorPlugin {
 	 */
 	painters?: readonly PainterFactory[];
 	/**
-	 * DOM surfaces for the render modes the compositor cannot draw from media or
-	 * a painter. A surface may hold state across the frames of one export; the
-	 * exporter releases each when the export ends.
+	 * DOM surfaces for the render modes the compositor cannot draw from media or a painter.
+	 * Called once per render (an export or a still); the exporter releases each surface when that
+	 * render ends, so per-render caches live inside one call and never cross renders.
 	 */
-	surfaces?: readonly SurfaceCapture[];
+	createSurfaces?(): readonly SurfaceCapture[];
 	/**
 	 * The music URL check; core accepts any non-empty string, and a host that allows only some
 	 * URLs passes its own check.

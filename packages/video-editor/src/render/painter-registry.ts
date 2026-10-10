@@ -55,3 +55,28 @@ export const textPainterFactory: PainterFactory = {
 		);
 	},
 };
+
+/**
+ * The text painter factory an editor keeps for its lifetime: one painter per text item, reused
+ * across compiles, reading the item's words from the latest compile. A fresh painter starts
+ * with its font not ready, so building one per compile would flash the fallback font.
+ */
+export function createTextPainters(getCompiled: () => CompiledPostProject | null): PainterFactory {
+	const painters = new Map<string, PostStudioLayerPainter>();
+	return {
+		id: "text",
+		create(role, env) {
+			const entry = env.compiled.texts.find((text) => text.role === role);
+			if (!entry) return null;
+			const { itemId } = entry;
+			let painter = painters.get(itemId);
+			if (!painter) {
+				painter = createTextItemPainter(
+					() => getCompiled()?.texts.find((text) => text.itemId === itemId) ?? null,
+				);
+				painters.set(itemId, painter);
+			}
+			return painter;
+		},
+	};
+}
