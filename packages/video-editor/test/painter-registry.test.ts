@@ -58,4 +58,53 @@ describe("createPainterRegistry", () => {
 		const askedRoles = create.mock.calls.map((call) => (call as unknown[])[0]);
 		expect(new Set(askedRoles).size).toBe(distinct.size);
 	});
+
+	it("leaves a role no factory answers out of the map, and asks again for every clip that repeats it", () => {
+		// Pins today's behaviour: a null answer is not remembered, so the registry has no
+		// 'unanswered' cache and each clip carrying the role asks every factory once more.
+		const repeated = {
+			...compiled,
+			preset: { ...compiled.preset, clips: [...compiled.preset.clips, ...compiled.preset.clips] },
+		};
+		const first = { id: "first", create: vi.fn((): PostStudioLayerPainter | null => null) };
+		const second = { id: "second", create: vi.fn((): PostStudioLayerPainter | null => null) };
+
+		const painters = createPainterRegistry([first, second]).paintersFor({
+			project,
+			compiled: repeated,
+		});
+
+		expect(painters.size).toBe(0);
+		expect(painters.get(role)).toBeUndefined();
+		expect(first.create).toHaveBeenCalledTimes(repeated.preset.clips.length);
+		expect(second.create).toHaveBeenCalledTimes(repeated.preset.clips.length);
+		const askedOfFirst = first.create.mock.calls.filter((call) => (call as unknown[])[0] === role);
+		expect(askedOfFirst).toHaveLength(roles.filter((candidate) => candidate === role).length * 2);
+	});
+
+	it("asks again on every paintersFor call and builds a fresh painter each time", () => {
+		const create = vi.fn(() => painter());
+		const registry = createPainterRegistry([{ id: "only", create }]);
+
+		const one = registry.paintersFor(env);
+		const two = registry.paintersFor(env);
+
+		expect(create).toHaveBeenCalledTimes(new Set(roles).size * 2);
+		expect(two.get(role)).not.toBe(one.get(role));
+	});
+
+	it("gives every role to the first of two factories that both answer it", () => {
+		const fromFirst = painter();
+		const fromSecond = painter();
+		const first: PainterFactory = { id: "first", create: vi.fn(() => fromFirst) };
+		const second: PainterFactory = { id: "second", create: vi.fn(() => fromSecond) };
+
+		const painters = createPainterRegistry([first, second]).paintersFor(env);
+
+		for (const answered of new Set(roles)) expect(painters.get(answered)).toBe(fromFirst);
+		expect(second.create).not.toHaveBeenCalled();
+		// The order is the whole rule: swap the factories and the other one wins.
+		const swapped = createPainterRegistry([second, first]).paintersFor(env);
+		for (const answered of new Set(roles)) expect(swapped.get(answered)).toBe(fromSecond);
+	});
 });

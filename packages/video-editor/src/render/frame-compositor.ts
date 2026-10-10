@@ -25,6 +25,7 @@ import {
 } from "./region-edge-painter.js";
 import { traceRoundedRect } from "./rounded-rect.js";
 import { videoColorFilter } from "../core/color-grade.js";
+import { POST_STUDIO_SOURCES, type PostStudioRenderMode } from "../core/plan/presets.js";
 import type { PostStudioExportVideoFrames } from "./export-video-frames.js";
 import type { SurfaceCapture } from "./surfaces.js";
 
@@ -468,6 +469,21 @@ export async function renderPostStudioFrame(input: RenderPostStudioFrameInput): 
  */
 const DOM_SURFACE_MODES: ReadonlySet<string> = new Set(["sequence-animation", "choreo-card"]);
 
+/**
+ * A painted layer is drawn by a painter and by nothing else; with none for its
+ * role it would fall into the media branch and leave its region empty.
+ */
+function missingPainterError(label: string): Error {
+	return new Error(`No painter for the ${label} layer (painted mode).`);
+}
+
+/** The render mode the preset gives a source role, if the role is one it names. */
+function presetRenderMode(role: string): PostStudioRenderMode | undefined {
+	const sources: Readonly<Record<string, { renderMode: PostStudioRenderMode } | undefined>> =
+		POST_STUDIO_SOURCES;
+	return sources[role]?.renderMode;
+}
+
 interface DrawnLayer {
 	layer: EvaluatedFrameLayer;
 	staticRegion: LayoutRegion;
@@ -495,6 +511,9 @@ async function drawRegionLayer(
 			cornerRadius,
 		);
 		return;
+	}
+	if (presetRenderMode(layer.sourceRole) === "painted") {
+		throw missingPainterError(staticRegion.label ?? layer.sourceRole);
 	}
 
 	const layerElement = layerElementForClip(input.root, layer.clipId);
@@ -533,56 +552,57 @@ async function drawRegionLayer(
 		return;
 	}
 	context.save();
-	turnAboutCentre(context, regionPixels, region.turn ?? 0);
-	traceRoundedRect(context, regionPixels, cornerRadius);
-	context.clip();
-	context.globalAlpha = layer.opacity;
+	try {
+		turnAboutCentre(context, regionPixels, region.turn ?? 0);
+		traceRoundedRect(context, regionPixels, cornerRadius);
+		context.clip();
+		context.globalAlpha = layer.opacity;
 
-	const renderMode = layerElement.dataset.renderMode;
-	const surface = input.surfaces?.find((candidate) => candidate.renderMode === renderMode);
-	if (surface) {
-		await surface.draw({
-			context,
-			layerElement,
-			layer,
-			preset: input.preset,
-			region,
-			regionPixels,
-			cache: input.surfaceCache,
-		});
-	} else if (renderMode !== undefined && DOM_SURFACE_MODES.has(renderMode)) {
-		throw new Error(
-			`The ${staticRegion.label ?? layer.sourceRole} layer has no surface for its ${renderMode} render mode.`,
-		);
-	} else {
-		const media = input.videoFrames?.has(layer.sourceRole)
-			? await input.videoFrames.frameFor(layer.sourceRole, layer.sourceTimeSeconds)
-			: mediaIn(layerElement);
-		if (!media) {
-			context.restore();
-			return;
+		const renderMode = layerElement.dataset.renderMode;
+		const surface = input.surfaces?.find((candidate) => candidate.renderMode === renderMode);
+		if (surface) {
+			await surface.draw({
+				context,
+				layerElement,
+				layer,
+				preset: input.preset,
+				region,
+				regionPixels,
+				cache: input.surfaceCache,
+			});
+		} else if (renderMode !== undefined && DOM_SURFACE_MODES.has(renderMode)) {
+			throw new Error(
+				`The ${staticRegion.label ?? layer.sourceRole} layer has no surface for its ${renderMode} render mode.`,
+			);
+		} else if (renderMode === "painted") {
+			throw missingPainterError(staticRegion.label ?? layer.sourceRole);
+		} else {
+			const media = input.videoFrames?.has(layer.sourceRole)
+				? await input.videoFrames.frameFor(layer.sourceRole, layer.sourceTimeSeconds)
+				: mediaIn(layerElement);
+			if (!media) return;
+			if (media instanceof HTMLVideoElement) {
+				await syncVideo(media, layer.sourceTimeSeconds);
+			} else if (media instanceof HTMLImageElement && !media.complete) {
+				await media.decode();
+			}
+			const dimensions = mediaDimensions(media);
+			if (dimensions.width <= 0 || dimensions.height <= 0) return;
+			const geometry = resolveFrameLayerGeometry({
+				preset: input.preset,
+				region,
+				sourceWidth: dimensions.width,
+				sourceHeight: dimensions.height,
+				transform: layer.transform,
+			});
+			applyLayerTransform(context, geometry);
+			context.filter = videoColorFilter(
+				colorGrade?.kind === "visual" ? colorGrade.colorGrade : null,
+			);
+			drawSource(context, media, geometry);
 		}
-		if (media instanceof HTMLVideoElement) {
-			await syncVideo(media, layer.sourceTimeSeconds);
-		} else if (media instanceof HTMLImageElement && !media.complete) {
-			await media.decode();
-		}
-		const dimensions = mediaDimensions(media);
-		if (dimensions.width <= 0 || dimensions.height <= 0) {
-			context.restore();
-			return;
-		}
-		const geometry = resolveFrameLayerGeometry({
-			preset: input.preset,
-			region,
-			sourceWidth: dimensions.width,
-			sourceHeight: dimensions.height,
-			transform: layer.transform,
-		});
-		applyLayerTransform(context, geometry);
-		context.filter = videoColorFilter(colorGrade?.kind === "visual" ? colorGrade.colorGrade : null);
-		drawSource(context, media, geometry);
+	} finally {
+		// Every way out of the layer, a throw included, leaves the context as it was found.
+		context.restore();
 	}
-
-	context.restore();
 }

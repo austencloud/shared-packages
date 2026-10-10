@@ -58,37 +58,38 @@ function exportBitrate(width: number, height: number, fps: number): number {
  * encoder. The editor supplies source surfaces, but never timing math.
  */
 export async function exportPostStudioVideo(input: ExportPostStudioVideoInput): Promise<Blob> {
-	if (!Number.isFinite(input.durationSeconds) || input.durationSeconds <= 0) {
-		throw new RangeError("Post duration must be positive");
-	}
-
-	const { width, height, frameRate } = input.preset.output;
-	const totalFrames = Math.max(1, Math.ceil(input.durationSeconds * frameRate));
-	const frameMicros = Math.round(1_000_000 / frameRate);
-	const canvas = document.createElement("canvas");
-	canvas.width = width;
-	canvas.height = height;
-	const encoder = new BackgroundVideoEncoder();
-	const capturer = new CanvasFrameCapturer();
-	const surfaceCache = new Map<string, HTMLCanvasElement>();
-	const videoFrames = new PostStudioExportVideoFrames(
-		input.videoSources ?? new Map(),
-		input.signal,
-	);
-	let captureComplete = false;
-	let encodedFrames = 0;
-
-	encoder.onProgress = (frameIndex) => {
-		encodedFrames = Math.min(totalFrames, frameIndex + 1);
-		if (!captureComplete) return;
-		input.onProgress?.({
-			completedFrames: encodedFrames,
-			totalFrames,
-			phase: "encoding",
-		});
-	};
-
+	// Everything that can fail runs inside the try, so the finally below always has the
+	// surfaces to release. The decoder and encoder exist only once their constructors ran.
+	let encoder: BackgroundVideoEncoder | undefined;
+	let videoFrames: PostStudioExportVideoFrames | undefined;
 	try {
+		if (!Number.isFinite(input.durationSeconds) || input.durationSeconds <= 0) {
+			throw new RangeError("Post duration must be positive");
+		}
+
+		const { width, height, frameRate } = input.preset.output;
+		const totalFrames = Math.max(1, Math.ceil(input.durationSeconds * frameRate));
+		const frameMicros = Math.round(1_000_000 / frameRate);
+		const canvas = document.createElement("canvas");
+		canvas.width = width;
+		canvas.height = height;
+		encoder = new BackgroundVideoEncoder();
+		const capturer = new CanvasFrameCapturer();
+		const surfaceCache = new Map<string, HTMLCanvasElement>();
+		videoFrames = new PostStudioExportVideoFrames(input.videoSources ?? new Map(), input.signal);
+		let captureComplete = false;
+		let encodedFrames = 0;
+
+		encoder.onProgress = (frameIndex) => {
+			encodedFrames = Math.min(totalFrames, frameIndex + 1);
+			if (!captureComplete) return;
+			input.onProgress?.({
+				completedFrames: encodedFrames,
+				totalFrames,
+				phase: "encoding",
+			});
+		};
+
 		await encoder.initialize({
 			width,
 			height,
@@ -152,10 +153,16 @@ export async function exportPostStudioVideo(input: ExportPostStudioVideoInput): 
 		}
 		return await encoder.finish();
 	} catch (error) {
-		encoder.cancel();
+		encoder?.cancel();
 		throw error;
 	} finally {
-		for (const surface of input.surfaces ?? []) surface.release?.();
-		videoFrames.dispose();
+		videoFrames?.dispose();
+		for (const surface of input.surfaces ?? []) {
+			try {
+				surface.release?.();
+			} catch {
+				// A failed release must not mask the export's own error.
+			}
+		}
 	}
 }
