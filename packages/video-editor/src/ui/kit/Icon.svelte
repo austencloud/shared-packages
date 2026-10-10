@@ -3,7 +3,7 @@
 
 	interface Props {
 		icon: IconDefinition;
-		/** Turns once a second, as Font Awesome's spin did. */
+		/** Turns once every two seconds, as Font Awesome's spin did. */
 		spin?: boolean;
 		/** Set for an icon that is the only content of a control; otherwise the icon is hidden from assistive tech. */
 		label?: string;
@@ -40,7 +40,7 @@
 		flex-shrink: 0;
 	}
 	.spin {
-		animation: ve-icon-spin 1s linear infinite;
+		animation: ve-icon-spin 2s linear infinite;
 	}
 	@keyframes ve-icon-spin {
 		to {
