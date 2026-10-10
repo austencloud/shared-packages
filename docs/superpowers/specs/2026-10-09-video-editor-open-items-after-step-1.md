@@ -212,7 +212,7 @@ Applies at the start of steps 2, 3 and 4 and in every task after.
     to an empty string. A file with a rejected character is left unchanged and
     the script exits 1. It turns a spaced em dash into one hyphen.
   - The node test helper in `test/step1-tools.test.mjs` takes a `task` option
-    (default 4). Package vitest has `globals: true`; node tests live in
+    (default 4). Node tests live in
     `test/*.test.mjs` and vitest tests in `test/**/*.test.ts`.
   - The Bash tool halves doubled backslashes in heredocs; write any file with
     regex escapes (`String.raw`, `\s`) with the Write tool.
@@ -323,7 +323,7 @@ typed but unread. Settle each before anything wires it.
   painted layer with no painter now throws, and the DOM-surface branch restores
   in a `finally`. Still open: `drawPaintedLayer` and the `sourceGeometry` branch
   restore outside a `finally` (see "Carried out of step 2A"). The registry's
-  null-factory and first-wins cases below were closed in the same task. In
+  null-factory and first-wins cases above were closed in the same task. In
   `src/render/frame-compositor.ts` (the layer drawing path, around 535-587), a
   painted render mode with no matching painter falls into the media branch and
   draws nothing. Treat a missing painter like a missing surface and throw,
@@ -729,7 +729,9 @@ In the package:
 - **CI test script.** The package root has no `test` script, so package tests do
   not run in CI. Add one (it is also in the checklist above) and wire
   `forbidden-imports.mjs` and `tsconfig.test.json` into the package `check` or
-  `test` script.
+  `test` script. Partly closed in 2A Task 3: the package has a `test` script and
+  `check` runs `tsconfig.test.json`; whether CI invokes `test`, and wiring
+  `forbidden-imports.mjs` into a script, are still open.
 
 ## How to retire an item
 

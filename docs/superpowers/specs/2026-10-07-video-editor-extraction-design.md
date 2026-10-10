@@ -486,6 +486,12 @@ What shipped:
   `options.extension`. tka's take timing lives in `post-timing-state.svelte.ts`
   beside the package state, so Ringmaster never sees a timing type. The "Host
   contract" section above says the same.
+- **Two type additions from the plan that the spec's code blocks do not show.**
+  The host and the store carry an effect type parameter `E` (`src/host.ts`,
+  `src/store/types.ts`) so tka's timing effect rides through history without
+  the package naming it, and `src/core/project/item-kinds.ts` declares the
+  augmentable `PluginOverlaySpec` and `PluginItemPatch` interfaces that tka's
+  `item-kinds.ts` extends.
 - **Plugin members.** `VideoEditorPlugin` gained `subjectKey` and `editHooks`,
   `ItemKindDefinition` gained `create`, and `alignment` was dropped (option b of
   the open item): tka builds its alignment in a `$derived` inside its timing
@@ -530,17 +536,17 @@ the numbers are repeated here because that folder is a Temp folder.
 
 | Criterion | Result | Output |
 | --- | --- | --- |
-| Parity green at every task | `Tests 4 passed \| 1 skipped (5)` at Tasks 2 to 9 and 11 to 15 (one `task<N>-parity.txt` each; Tasks 1 and 10 changed nothing the gate reads); `PARITY_WRITE` never set | `task15-parity.txt` |
+| Parity green at every task | `Tests 4 passed \| 1 skipped (5)` at Tasks 2 to 9 and 11 to 15 (one parity output per task, named `task<N>-parity.txt` except `task4-parity-gate.txt` and `task05-parity.txt`; Tasks 1 and 10 changed nothing the gate reads); `PARITY_WRITE` never set | `task15-parity.txt` |
 | tka's UI unchanged | Held in substance, wider than the criterion's file list: 12 files, see note 1 | `task15-ui-unchanged.txt` |
-| Browser proof | Not run yet: the controller fills in the two sections below | none yet |
+| Browser proof | Feature route PASS on all 11 checks on both servers (tka main on 5173 as the console baseline, the branch on 5221 after the merge, the suite and the build), no new console errors; real sequence (`/post`) PENDING on Austen's signed-in session, not claimed as passed; details in the Browser proof section below | `task15-proof-baseline/`, `task15-proof-branch/`, `task15-proof-feature.mjs` |
 | Moved tests pass in the package | build exit 0; `svelte-check found 0 errors and 0 warnings` for `tsconfig.json` and `tsconfig.test.json`; node tests 38 pass, 0 fail; vitest 37 files, 268 tests passed (projects `unit`, `canvas`, `state`) | `task15-package-build.txt`, `task15-package-check.txt`, `task15-package-test.txt` |
 | tka type gate empty | `baseline 625, after 625, new 0` (`check:fast` itself exits 1 on the 625 baseline errors) | `task15-check-after.txt`, `task15-intersection.txt` |
 | `test:ci` | Green on the second full run, one flaky file on the first, see note 2 | `task15-test-ci.txt`, `task15-test-ci-run2.txt` |
-| Production build | exit 0; vite `built in 3m 40s`; 76 vite-plugin-svelte warnings, all in tka components | `task15-build.txt` |
+| Production build | finished: the log ends with the adapter's `done` line after vite's two `built in` lines (3m 40s and 4m 42s); the implementer saw exit 0 in its shell but the log records no exit line; 76 vite-plugin-svelte warnings, all in tka components | `task15-build.txt` |
 | Ringmaster readiness | `--project state test/video-editor-state.svelte.test.ts` 5 passed; `--project unit test/device-store.test.ts` 8 passed | `task15-ringmaster-readiness.txt` |
 | Trace gate | prints `No saved post for .` (exit 1, because that message is a thrown error) | `task15-trace.txt` |
 | Package hygiene | `forbidden imports: 0`, `unexported package subpaths: 0`, `barrel imports: 0` for both move lists; ASCII clean, see note 3 | `task15-hygiene.txt`, `task15-ascii.txt` |
-| Saved posts and history still open | `post-device-keys.test.ts` and the 11 `post-editor-*.test.ts` files: 12 files, 75 tests passed | `task15-saved-posts.txt` |
+| Saved posts and history still open | `post-device-keys.test.ts` and the 11 `post-editor-*.test.ts` files: 12 files, 75 tests passed. Three of the 12 are new in 2A (`post-device-keys`, Task 9; `post-editor-surface` and `post-editor-legacy-map`, Task 11); `post-editor-history.test.ts` had a five-line import-only change in Task 6; the other eight are unchanged from the 2A base | `task15-saved-posts.txt` |
 
 Also run: export smoke (`offline-3d-exporter-cancellation`,
 `export-coordinator-scene-take-lifecycle`, `video-export-orchestrator-init`)
@@ -781,7 +787,7 @@ Waits for 2B:
 #### Plan risk R6
 
 Proven by two production builds. The Task 11 build (`task11-build.txt`, exit 0,
-`built in 3m 44s`) and the Task 15 build (exit 0, `built in 3m 40s`) have no
+`built in 3m 44s`) and the Task 15 build (`task15-build.txt`, `built in 4m 42s`, adapter `done`; no exit line in the log) have no
 warning naming `video-editor-state`, `video-previews`, `$state` or `$derived` from
 the package, and the client chunk holding the package code (it contains the tab
 sync channel prefix `tka:post-studio:tabs`) has no uncompiled `$state(` call. tka
