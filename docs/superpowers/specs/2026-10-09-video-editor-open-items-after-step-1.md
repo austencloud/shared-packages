@@ -729,9 +729,11 @@ In the package:
 - **CI test script.** The package root has no `test` script, so package tests do
   not run in CI. Add one (it is also in the checklist above) and wire
   `forbidden-imports.mjs` and `tsconfig.test.json` into the package `check` or
-  `test` script. Partly closed in 2A Task 3: the package has a `test` script and
-  `check` runs `tsconfig.test.json`; whether CI invokes `test`, and wiring
-  `forbidden-imports.mjs` into a script, are still open.
+  `test` script. Status after 2A: the package has had a `test` script since
+  `1f7f648`; 2A Task 3 made `check` run `tsconfig.test.json`. CI still runs only
+  `pnpm check` (`.github/workflows/ci.yml:32`) and the root has no `test` script,
+  so package tests do not run in CI; that, and wiring `forbidden-imports.mjs`
+  into a script, stay open for 2B's first tidy or step 4.
 
 ## How to retire an item
 

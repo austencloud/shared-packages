@@ -542,7 +542,7 @@ the numbers are repeated here because that folder is a Temp folder.
 | Moved tests pass in the package | build exit 0; `svelte-check found 0 errors and 0 warnings` for `tsconfig.json` and `tsconfig.test.json`; node tests 38 pass, 0 fail; vitest 37 files, 268 tests passed (projects `unit`, `canvas`, `state`) | `task15-package-build.txt`, `task15-package-check.txt`, `task15-package-test.txt` |
 | tka type gate empty | `baseline 625, after 625, new 0` (`check:fast` itself exits 1 on the 625 baseline errors) | `task15-check-after.txt`, `task15-intersection.txt` |
 | `test:ci` | Green on the second full run, one flaky file on the first, see note 2 | `task15-test-ci.txt`, `task15-test-ci-run2.txt` |
-| Production build | finished: the log ends with the adapter's `done` line after vite's two `built in` lines (3m 40s and 4m 42s); the implementer saw exit 0 in its shell but the log records no exit line; 76 vite-plugin-svelte warnings, all in tka components | `task15-build.txt` |
+| Production build | finished: the log reaches the adapter's `done` line after vite's two `built in` lines (3m 40s and 4m 42s); the implementer saw exit 0 in its shell but the log records no exit line; 76 vite-plugin-svelte warnings, all in tka components | `task15-build.txt` |
 | Ringmaster readiness | `--project state test/video-editor-state.svelte.test.ts` 5 passed; `--project unit test/device-store.test.ts` 8 passed | `task15-ringmaster-readiness.txt` |
 | Trace gate | prints `No saved post for .` (exit 1, because that message is a thrown error) | `task15-trace.txt` |
 | Package hygiene | `forbidden imports: 0`, `unexported package subpaths: 0`, `barrel imports: 0` for both move lists; ASCII clean, see note 3 | `task15-hygiene.txt`, `task15-ascii.txt` |
