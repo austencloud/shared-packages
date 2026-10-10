@@ -129,6 +129,17 @@ const handles = new WeakSet<Command>();
 // Consumes a command's oldest waiting preview without committing, for a
 // composite whose other half threw before this half's step ran.
 const skipPress = new WeakMap<Command, (direction: Direction) => void>();
+// Every handle that has presses waiting for their commit. A store correction
+// (an id that did not apply) or a reconcile may overwrite what any of those
+// presses put on screen, even from another command or another store whose ids
+// collide, so it unmarks them all: their commits go out as not previewed and
+// the store re-shows what it applied. Coarse on purpose; the cost is one extra
+// screen write. A handle leaves the set as soon as nothing of it is waiting.
+const waiting = new Set<{ invalidate(): void }>();
+
+function invalidateEveryWaitingPreview() {
+  for (const waiter of [...waiting]) waiter.invalidate();
+}
 // A merged entry that has not run yet exposes its parts here, so merging it
 // again extends one flat list instead of nesting groups.
 const groupParts = new WeakMap<Command, () => readonly TransitionCommandHandle<unknown>[] | null>();
@@ -170,6 +181,19 @@ function build<V>(
   const previews: PressPreview[] = [];
   // The last step that reached the store, for reconcile.
   let lastStep: { changes: TransitionChange<V>[]; results: TransitionResult<V>[] } | null = null;
+  // The caller-shown first execute was pressed and still holds the screen.
+  let shownPressed = false;
+  let shownValid = true;
+  const waiter = {
+    invalidate() {
+      for (const press of previews) press.ids = null;
+      shownValid = false;
+    },
+  };
+  function syncWaiting() {
+    if (previews.length > 0 || shownPressed) waiting.add(waiter);
+    else waiting.delete(waiter);
+  }
 
   function current(): Transition<V>[] {
     return own ?? foldParts(parts ?? [], equals);
@@ -186,9 +210,14 @@ function build<V>(
 
   function preview(direction: Direction) {
     // The caller already put the first execute on screen.
-    if (direction === "execute" && pendingShown && previews.length === 0) return;
+    if (direction === "execute" && pendingShown && previews.length === 0) {
+      shownPressed = true;
+      syncWaiting();
+      return;
+    }
     const entry: PressPreview = { direction, ids: null };
     previews.push(entry);
+    syncWaiting();
     if (!options.store.show) return;
     const changes = changesFor(direction, current());
     if (changes.length > 0) options.store.show(changes);
@@ -200,25 +229,24 @@ function build<V>(
   function takePress(direction: Direction): { shownByCaller: boolean; ids: ReadonlySet<string> | null } {
     if (direction === "execute" && applies === 0 && pendingShown && !isGroup) {
       pendingShown = false;
-      return { shownByCaller: true, ids: null };
+      shownPressed = false;
+      syncWaiting();
+      return { shownByCaller: shownValid, ids: null };
     }
     pendingShown = false;
+    shownPressed = false;
     const press = previews.shift();
+    syncWaiting();
     return { shownByCaller: false, ids: press && press.direction === direction ? press.ids : null };
-  }
-
-  /**
-   * The store's correction for ids that did not apply has overwritten what
-   * later presses previewed for them, so those presses' commits are no longer
-   * previewed: the store must put their applied values on screen itself.
-   */
-  function invalidateWaitingPreviews() {
-    for (const press of previews) press.ids = null;
   }
 
   function reconcile() {
     previews.length = 0;
     pendingShown = false;
+    shownPressed = false;
+    syncWaiting();
+    // What it re-shows below may overwrite other commands' waiting previews.
+    invalidateEveryWaitingPreview();
     if (!lastStep || !options.store.show) return;
     const truth: TransitionChange<V>[] = [];
     lastStep.changes.forEach((c, i) => {
@@ -275,7 +303,7 @@ function build<V>(
       } catch (error) {
         // Nothing is known about what landed; reconcile treats every id as failed.
         lastStep = { changes, results: changes.map((c) => ({ id: c.id, status: "failed", error })) };
-        invalidateWaitingPreviews();
+        invalidateEveryWaitingPreview();
         throw error;
       }
     }
@@ -290,7 +318,7 @@ function build<V>(
     const stale = results.filter((r) => r.status === "stale").length;
     const failed = results.filter((r) => r.status === "failed").length;
     if (changes.length > 0) lastStep = { changes, results };
-    if (applied.length < changes.length) invalidateWaitingPreviews();
+    if (applied.length < changes.length) invalidateEveryWaitingPreview();
     const report: TransitionReport<V> = {
       direction,
       total: changes.length,

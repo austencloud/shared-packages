@@ -197,9 +197,13 @@ export function createHistory(options: HistoryOptions = {}): History {
         cancelled += 1;
       }
     }
-    if (cancelled === 0 || !current.command.reconcile) return;
+    if (cancelled > 0) reconcile(current.command);
+  }
+
+  function reconcile(command: Command) {
+    if (!command.reconcile) return;
     try {
-      current.command.reconcile();
+      command.reconcile();
     } catch (error) {
       surfaceLater(error);
     }
@@ -242,7 +246,12 @@ export function createHistory(options: HistoryOptions = {}): History {
     publish();
     const result = queue
       .then(async (): Promise<RunResult> => {
-        if (queuedGeneration !== generation) return EMPTY;
+        if (queuedGeneration !== generation) {
+          // Dropped by a clear: its press-time preview will never commit, so
+          // the command drops it and re-shows the truth.
+          reconcile(step.command);
+          return EMPTY;
+        }
         // The failure that cancelled it is the news; lastAction stays as that failure left it.
         if (step.cancelled) return { status: "skipped", label: step.command.label };
         return work(queuedGeneration);

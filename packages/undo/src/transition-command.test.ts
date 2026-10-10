@@ -911,6 +911,49 @@ describe("a failed step cancels later presses of the same entry", () => {
     expect(inner.get("q")).toBe(0);
   });
 
+  it("a failed undo's correction makes a newer press by another command on the same id commit as not previewed", async () => {
+    const { store, inner, screen } = appStore([["x", 0]]);
+    const history = createHistory();
+    await history.run(cmd(store, [{ id: "x", before: 0, after: 1 }]));
+    inner.failNext("x");
+    const undoing = history.undo();
+    const runB = history.run(cmd(store, [{ id: "x", before: 1, after: 2 }], { label: "B" }));
+    expect(screen.get("x")).toBe(2);
+    expect((await undoing).status).toBe("failed");
+    expect((await runB).status).toBe("done");
+    expect(inner.commitCalls.at(-1)?.context).toEqual({ direction: "execute", previewed: false });
+    expect([inner.get("x"), screen.get("x")]).toEqual([2, 2]);
+  });
+
+  it("a reconcile makes a newer press by another command on the same id commit as not previewed", async () => {
+    const { store, inner, screen } = appStore([["x", 0]]);
+    const history = createHistory();
+    await history.run(cmd(store, [{ id: "x", before: 0, after: 1 }]));
+    inner.failNext("x");
+    const results = await Promise.all([
+      history.undo(),
+      history.redo(),
+      history.run(cmd(store, [{ id: "x", before: 1, after: 2 }], { label: "B" })),
+    ]);
+    expect(results.map((r) => r.status)).toEqual(["failed", "skipped", "done"]);
+    expect(inner.commitCalls.at(-1)?.context).toEqual({ direction: "execute", previewed: false });
+    expect([inner.get("x"), screen.get("x")]).toEqual([2, 2]);
+  });
+
+  it("a correction also unmarks a caller-shown first execute of another command", async () => {
+    const { store, inner, screen } = appStore([["x", 0]]);
+    const history = createHistory();
+    await history.run(cmd(store, [{ id: "x", before: 0, after: 1 }]));
+    inner.failNext("x");
+    const undoing = history.undo();
+    // The chip flips as it is clicked; the caller shows it, not the store.
+    screen.set("x", 2);
+    const runB = history.run(cmd(store, [{ id: "x", before: 1, after: 2 }], { label: "B", shown: true }));
+    await Promise.all([undoing, runB]);
+    expect(inner.commitCalls.at(-1)?.context).toEqual({ direction: "execute", previewed: false });
+    expect([inner.get("x"), screen.get("x")]).toEqual([2, 2]);
+  });
+
   it("a composite whose second undo throws keeps the first command's previews in step", async () => {
     const { store, inner, screen } = appStore([["a", 0]]);
     const history = createHistory();

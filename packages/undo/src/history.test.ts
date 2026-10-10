@@ -246,6 +246,20 @@ describe("createHistory", () => {
   });
 
   describe("clear and record while work is in flight", () => {
+    it("asks a command to reconcile when clear drops its queued press", async () => {
+      const log: string[] = [];
+      const gate = deferred();
+      const history = createHistory();
+      const running = history.run(command("A", log, { execute: () => gate.promise }));
+      const reconcile = vi.fn();
+      const dropped = history.run(command("B", log, { reconcile }));
+      history.clear();
+      gate.resolve();
+      await Promise.all([running, dropped]);
+      expect(log).not.toContain("do B");
+      expect(reconcile).toHaveBeenCalledTimes(1);
+    });
+
     it("clear during a pending run leaves both stacks empty after it settles", async () => {
       const log: string[] = [];
       const gate = deferred();

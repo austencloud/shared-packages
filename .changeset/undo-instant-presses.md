@@ -16,4 +16,6 @@ Coalescing now merges at the press into a group that reads its parts'
 transitions as they settle. A step that fails cancels every later press of the
 same entry still queued behind it; the new optional `Command.reconcile()` (which
 `transitionCommand` implements) then puts the screen back to what the store
-holds.
+holds. `clear()` also reconciles a command whose queued press it drops. Any
+step that ends with ids not applied, and any reconcile, marks every transition
+press still waiting as not previewed, so its commit re-shows what it applied.

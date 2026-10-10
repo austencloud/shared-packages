@@ -44,9 +44,9 @@ export interface Command {
   preview?(direction: "execute" | "undo"): void;
   /**
    * Called when a step of this command failed (or its first run applied
-   * nothing) while later presses of it were still queued. The history skips
-   * those later steps without calling the command, so their previews will
-   * never be committed. Drop any previews still waiting, and put the screen
+   * nothing) while later presses of it were still queued, and when clear()
+   * drops a queued press of it. The history skips those steps without calling
+   * the command, so their previews will never be committed. Drop any previews still waiting, and put the screen
    * back to what the failed step actually left in the store. A throw is
    * surfaced asynchronously.
    */
