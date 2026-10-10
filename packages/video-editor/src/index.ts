@@ -5,7 +5,20 @@ export { runtimeProbe } from "./runtime-probe.js";
 export { VIDEO_EDITOR_VERSION, formatTimecode } from "./core/index.js";
 export type * from "./plugin.js";
 export type { CompositionSourceBinding, CompositionSourceStatus } from "./state/source-binding.js";
-export type { LibraryTake, MediaLibrary, VideoEditorHost } from "./host.js";
+export type {
+	EditorHaptic,
+	EditorNotify,
+	EditorShortcuts,
+	LibraryTake,
+	MediaLibrary,
+	VideoEditorHost,
+} from "./host.js";
+export {
+	createUnsupportedPreviewCache,
+	createWindowShortcuts,
+	resolveServices,
+	type EditorServices,
+} from "./host-defaults.js";
 export type {
 	EditorHistory,
 	HistoryEntry,
