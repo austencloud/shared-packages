@@ -242,8 +242,11 @@ export interface PluginUi {
 	): readonly string[];
 	addItems?(coreItems: readonly string[]): readonly (string | PluginAddItem)[];
 	mediaSublayer?: { renderModes: readonly string[]; component: Component<MediaSublayerProps> };
-	/** Called on a right click on any media layer; the editor prevents the default when present. */
-	layerContextMenu?(event: MouseEvent): void;
+	/**
+	 * Called on a right click on any media layer, with the editor the layer draws for (as a tool's
+	 * `run(editor)` gets it); the editor prevents the default when present.
+	 */
+	layerContextMenu?(event: MouseEvent, editor: VideoEditorState): void;
 	canvasOverlays?: readonly Component<CanvasOverlayProps>[];
 	modes?: readonly EditorMode[];
 	/** Whole panels keyed by a plugin tool id (tka: the "look" animation panel, backup and recovery). */
