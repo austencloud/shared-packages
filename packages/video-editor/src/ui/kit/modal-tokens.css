@@ -1,0 +1,442 @@
+/**
+ * Modal Design Tokens & Animations
+ *
+ * 2026 cutting-edge approach using:
+ * - CSS @starting-style for entry animations
+ * - transition-behavior: allow-discrete for exit animations
+ * - Native ::backdrop pseudo-element
+ */
+
+:root {
+	--modal-duration-in: 350ms;
+	--modal-duration-out: 200ms;
+	--modal-duration-content: 350ms;
+
+	--modal-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+	--modal-ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+	--modal-ease-content: cubic-bezier(0.22, 1, 0.36, 1);
+
+	--modal-backdrop-bg: rgba(0, 0, 0, 0.75);
+	--modal-backdrop-blur: 8px;
+
+	--modal-width-sm: 360px;
+	--modal-width-md: 480px;
+	--modal-width-lg: 640px;
+	--modal-width-xl: min(90vw, 1400px);
+	--modal-width-full: min(95vw, 900px);
+	--modal-width-fit: 480px;
+
+	--modal-padding: 24px;
+	--modal-padding-mobile: 20px;
+	--modal-gap: 18px;
+	--modal-border-radius: 20px;
+	--modal-border-radius-mobile: 16px;
+
+	--modal-stagger-base: 0.05s;
+}
+
+dialog.base-modal {
+	/* Reset browser defaults */
+	border: none;
+	padding: 0;
+	box-sizing: border-box;
+	max-width: none;
+	max-height: none;
+
+	/* Positioning */
+	position: fixed;
+	margin: auto;
+	inset: 0;
+	/* Keep fixed dialogs inside the visual viewport while a software keyboard
+     is open. Browsers that resize the layout viewport publish zero offsets. */
+	inset-block-start: var(--viewport-offset-top, 0px);
+	inset-block-end: var(--viewport-offset-bottom, 0px);
+
+	/* Appearance */
+	background: var(--ve-theme-panel-bg, rgba(18, 18, 28, 0.98));
+	border-radius: var(--modal-border-radius);
+	box-shadow:
+		0 25px 80px rgba(0, 0, 0, 0.5),
+		0 10px 30px rgba(0, 0, 0, 0.3),
+		inset 0 1px 0 var(--ve-theme-stroke-strong, rgba(255, 255, 255, 0.1));
+	color: var(--ve-theme-text, white);
+	overflow: hidden;
+
+	/* Closed state (default) */
+	opacity: 0;
+	transform: scale(0.95) translateY(15px);
+
+	/* Transition for closing - allow-discrete keeps element visible during transition */
+	transition:
+		opacity var(--modal-duration-out) var(--modal-ease-out),
+		transform var(--modal-duration-out) var(--modal-ease-out),
+		overlay var(--modal-duration-out) allow-discrete,
+		display var(--modal-duration-out) allow-discrete;
+}
+
+/* Open state */
+dialog.base-modal[open] {
+	display: flex;
+	flex-direction: column;
+	opacity: 1;
+	transform: scale(1) translateY(0);
+}
+
+/* ===== Drag Mode - Disable transforms to fix position:fixed =====
+   When a drag operation is in progress, we need to remove transforms
+   because CSS transforms create a new containing block that breaks
+   position: fixed calculations for drag overlays.
+   ================================================================= */
+dialog.base-modal[data-dragging="true"] {
+	transform: none !important;
+	transition: none !important;
+}
+
+/* ===== Entry Animation - @starting-style (2026) ===== */
+@starting-style {
+	dialog.base-modal[open] {
+		opacity: 0;
+		transform: scale(0.92) translateY(24px);
+	}
+}
+
+dialog.base-modal[data-closing="true"] {
+	opacity: 0;
+	transform: scale(0.95) translateY(10px);
+}
+
+dialog.base-modal[data-size="sm"] {
+	width: var(--modal-width-sm);
+	max-height: min(85vh, 500px);
+	max-height: min(
+		85dvh,
+		500px,
+		calc(
+			var(--viewport-height, 100dvh) - 32px - env(safe-area-inset-top, 0px) -
+				env(safe-area-inset-bottom, 0px)
+		)
+	);
+}
+
+dialog.base-modal[data-size="md"] {
+	width: var(--modal-width-md);
+	max-height: min(85vh, 650px);
+	max-height: min(
+		85dvh,
+		650px,
+		calc(
+			var(--viewport-height, 100dvh) - 32px - env(safe-area-inset-top, 0px) -
+				env(safe-area-inset-bottom, 0px)
+		)
+	);
+}
+
+dialog.base-modal[data-size="lg"] {
+	width: var(--modal-width-lg);
+	max-height: min(85vh, 800px);
+	max-height: min(
+		85dvh,
+		800px,
+		calc(
+			var(--viewport-height, 100dvh) - 32px - env(safe-area-inset-top, 0px) -
+				env(safe-area-inset-bottom, 0px)
+		)
+	);
+}
+
+dialog.base-modal[data-size="xl"] {
+	width: var(--modal-width-xl);
+	max-height: 90vh;
+	max-height: min(
+		90dvh,
+		calc(
+			var(--viewport-height, 100dvh) - 32px - env(safe-area-inset-top, 0px) -
+				env(safe-area-inset-bottom, 0px)
+		)
+	);
+}
+
+dialog.base-modal[data-size="full"] {
+	width: var(--modal-width-full);
+	max-height: 90vh;
+	max-height: min(
+		90dvh,
+		calc(
+			var(--viewport-height, 100dvh) - 32px - env(safe-area-inset-top, 0px) -
+				env(safe-area-inset-bottom, 0px)
+		)
+	);
+}
+
+/* Fit - content-driven height, ideal for help modals */
+dialog.base-modal[data-size="fit"] {
+	width: var(--modal-width-fit);
+	max-height: 90vh;
+	max-height: min(
+		90dvh,
+		calc(
+			var(--viewport-height, 100dvh) - 32px - env(safe-area-inset-top, 0px) -
+				env(safe-area-inset-bottom, 0px)
+		)
+	);
+	height: fit-content;
+}
+
+/* Module grid - wide modal for toggle grid */
+dialog.base-modal[data-size="module-grid"] {
+	width: min(95vw, 1200px);
+	height: min(90vh, 700px);
+	height: min(
+		90dvh,
+		700px,
+		calc(
+			var(--viewport-height, 100dvh) - 32px - env(safe-area-inset-top, 0px) -
+				env(safe-area-inset-bottom, 0px)
+		)
+	);
+}
+
+dialog.base-modal[data-position="top"] {
+	margin-top: 10vh;
+	margin-bottom: auto;
+}
+
+/* Pop animation (default) - springy entrance */
+dialog.base-modal[data-animation="pop"] {
+	transition:
+		opacity var(--modal-duration-out) var(--modal-ease-out),
+		transform var(--modal-duration-out) var(--modal-ease-out),
+		overlay var(--modal-duration-out) allow-discrete,
+		display var(--modal-duration-out) allow-discrete;
+}
+
+@starting-style {
+	dialog.base-modal[data-animation="pop"][open] {
+		opacity: 0;
+		transform: scale(0.88) translateY(30px);
+	}
+}
+
+/* Slide animation - for mobile-friendly modals */
+dialog.base-modal[data-animation="slide"] {
+	transform-origin: bottom center;
+}
+
+@starting-style {
+	dialog.base-modal[data-animation="slide"][open] {
+		opacity: 0;
+		transform: translateY(100%);
+	}
+}
+
+/* No animation */
+dialog.base-modal[data-animation="none"] {
+	transition: none;
+	animation: none;
+}
+
+dialog.base-modal::backdrop {
+	background: var(--modal-backdrop-bg);
+	backdrop-filter: blur(var(--modal-backdrop-blur));
+	-webkit-backdrop-filter: blur(var(--modal-backdrop-blur));
+
+	/* Exit transition */
+	transition:
+		opacity var(--modal-duration-out) var(--modal-ease-out),
+		backdrop-filter var(--modal-duration-out),
+		overlay var(--modal-duration-out) allow-discrete;
+}
+
+/* Entry animation for backdrop */
+@starting-style {
+	dialog.base-modal[open]::backdrop {
+		opacity: 0;
+		backdrop-filter: blur(0);
+		-webkit-backdrop-filter: blur(0);
+	}
+}
+
+/* Exit animation for backdrop */
+dialog.base-modal[data-closing="true"]::backdrop {
+	opacity: 0;
+	backdrop-filter: blur(0);
+	-webkit-backdrop-filter: blur(0);
+}
+
+/* Morph: the host's view transition carries the dialog and fades the page
+   behind it, so neither the dialog nor its backdrop moves on its own. */
+dialog.base-modal[data-animation="morph"],
+dialog.base-modal[data-animation="morph"]::backdrop {
+	transition: none;
+	animation: none;
+}
+
+/* Staggered content animations - only when modal has entered */
+dialog.base-modal[data-entered="true"] [data-animate] {
+	animation: modalContentFadeUp var(--modal-duration-content) var(--modal-ease-content) backwards;
+}
+
+dialog.base-modal[data-entered="true"] [data-animate="1"] {
+	animation-delay: calc(var(--modal-stagger-base) * 1);
+}
+dialog.base-modal[data-entered="true"] [data-animate="2"] {
+	animation-delay: calc(var(--modal-stagger-base) * 2);
+}
+dialog.base-modal[data-entered="true"] [data-animate="3"] {
+	animation-delay: calc(var(--modal-stagger-base) * 3);
+}
+dialog.base-modal[data-entered="true"] [data-animate="4"] {
+	animation-delay: calc(var(--modal-stagger-base) * 4);
+}
+dialog.base-modal[data-entered="true"] [data-animate="5"] {
+	animation-delay: calc(var(--modal-stagger-base) * 5);
+}
+dialog.base-modal[data-entered="true"] [data-animate="6"] {
+	animation-delay: calc(var(--modal-stagger-base) * 6);
+}
+
+@keyframes modalContentFadeUp {
+	from {
+		opacity: 0;
+		transform: translateY(12px);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
+}
+
+/* Icon bounce animation */
+dialog.base-modal[data-entered="true"] [data-animate-icon] {
+	animation: modalIconBounce 0.5s var(--modal-ease-spring) backwards;
+	animation-delay: calc(var(--modal-stagger-base) * 1);
+}
+
+@keyframes modalIconBounce {
+	0% {
+		opacity: 0;
+		transform: scale(0) rotate(-15deg);
+	}
+	100% {
+		opacity: 1;
+		transform: scale(1) rotate(0deg);
+	}
+}
+
+/* ===== Mobile Responsive =====
+   Selectors must include [data-size="..."] to match the specificity of the
+   desktop size rules above, otherwise those rules win and mobile fallback
+   never applies. */
+@media (max-width: 520px) {
+	dialog.base-modal[data-size="lg"],
+	dialog.base-modal[data-size="xl"],
+	dialog.base-modal[data-size="full"],
+	dialog.base-modal[data-size="module-grid"] {
+		/* Full-screen on mobile */
+		width: 100%;
+		max-width: none;
+		max-height: 100vh;
+		max-height: 100dvh;
+		max-height: var(--viewport-height, 100dvh);
+		height: 100vh;
+		height: 100dvh;
+		height: var(--viewport-height, 100dvh);
+		border-radius: 0;
+		margin: 0;
+	}
+
+	dialog.base-modal[data-size="sm"],
+	dialog.base-modal[data-size="md"],
+	dialog.base-modal[data-size="fit"] {
+		/* Smaller modals stay as cards on mobile */
+		width: calc(100% - 32px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px));
+		max-width: var(--modal-width-md);
+		height: auto;
+		max-height: 85vh;
+		max-height: min(
+			90dvh,
+			calc(
+				var(--viewport-height, 100dvh) - 32px - env(safe-area-inset-top, 0px) -
+					env(safe-area-inset-bottom, 0px)
+			)
+		);
+		border-radius: var(--modal-border-radius-mobile);
+		margin: auto;
+	}
+
+	dialog.base-modal[data-size="fit"] {
+		/* `auto` stretches a fixed dialog between its block insets. Preserve the
+       fit variant's content-sized contract so short phone dialogs do not grow
+       a large empty tail beneath their content. */
+		height: fit-content;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	dialog.base-modal,
+	dialog.base-modal::backdrop {
+		transition: none;
+	}
+
+	dialog.base-modal[data-entered="true"] [data-animate],
+	dialog.base-modal[data-entered="true"] [data-animate-icon] {
+		animation: none;
+	}
+
+	/* No closing animation */
+	dialog.base-modal[data-closing="true"],
+	dialog.base-modal[data-closing="true"]::backdrop {
+		opacity: 1;
+		transform: none;
+	}
+
+	@starting-style {
+		dialog.base-modal[open],
+		dialog.base-modal[open]::backdrop {
+			/* No starting style - instant appearance */
+			opacity: 1;
+			transform: none;
+		}
+	}
+}
+
+/* ===== Chromeless variant =====
+   The slotted content owns the visible surface (e.g. AuthNudge's card), so the
+   dialog itself is a transparent, content-sized positioning shell - no panel
+   background, border, radius, or shadow. This avoids a "box within a box" when
+   the slotted content is already a styled card. The dimmed/blurred ::backdrop
+   is unaffected. Placed after the size rules so it wins on width. */
+dialog.base-modal.chromeless {
+	background: transparent;
+	box-shadow: none;
+	border-radius: 0;
+	overflow: visible;
+	width: fit-content;
+	max-width: min(420px, calc(100vw - 32px));
+}
+
+@media (max-width: 520px) {
+	dialog.base-modal.chromeless[data-size="fit"] {
+		width: fit-content;
+		max-width: calc(100vw - 32px);
+		border-radius: 0;
+	}
+}
+
+/* ===== Fallback for browsers without @starting-style ===== */
+@supports not (selector(@starting-style {})) {
+	dialog.base-modal[data-entered="true"]:not([data-animation="none"]) {
+		animation: modalFallbackIn var(--modal-duration-in) var(--modal-ease-spring);
+	}
+
+	@keyframes modalFallbackIn {
+		from {
+			opacity: 0;
+			transform: scale(0.92) translateY(24px);
+		}
+		to {
+			opacity: 1;
+			transform: scale(1) translateY(0);
+		}
+	}
+}

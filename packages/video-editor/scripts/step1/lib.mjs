@@ -22,7 +22,19 @@ export const MOVES = process.env.STEP_MOVES ?? "./moves.json";
 export const table = JSON.parse(
 	fs.readFileSync(path.isAbsolute(MOVES) ? MOVES : new URL(MOVES, import.meta.url), "utf8"),
 );
+// A copy is placed in the package like a move but tka keeps the original and its importers, so
+// move.mjs reads this list and rewrite-imports.mjs never does.
+table.copies ??= [];
 export const slash = (p) => p.split(path.sep).join("/");
+
+/** The from -> to map of every move, split and copy of tasks up to `task`, for placeText. */
+export function placedMap(task) {
+	const placed = new Map();
+	for (const entry of [...table.moves, ...table.splits, ...table.copies]) {
+		if (entry.task <= task) placed.set(entry.from, entry.to);
+	}
+	return placed;
+}
 
 export function taskArg() {
 	const i = process.argv.indexOf("--task");

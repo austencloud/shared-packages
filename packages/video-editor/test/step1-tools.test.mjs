@@ -1069,3 +1069,60 @@ test("STEP_MOVES selects the move list", () => {
 	);
 	assert.equal(out.trim(), "1 true");
 });
+
+test("a copies entry is in the placed map move.mjs builds and not in what rewrite-imports rewrites", () => {
+	const UI = "@austencloud/video-editor/ui";
+	const KIT = "$lib/b/kit-util";
+	const VIEW = "$lib/b/KitView.svelte";
+	const moves = {
+		moves: [],
+		splits: [],
+		copies: [
+			{ task: 1, from: KIT, to: "ui/kit/kit-util.ts", entry: UI },
+			{ task: 1, from: VIEW, to: "ui/kit/KitView.svelte", entry: UI },
+		],
+	};
+	// (a) The placed map move.mjs reads (placedMap in lib.mjs) holds a copy from its own task on,
+	// and a list with no copies member reads as an empty one.
+	const dir = fs.mkdtempSync(path.join(os.tmpdir(), "copies-"));
+	roots.push(dir);
+	const withCopies = path.join(dir, "with-copies.json");
+	const without = path.join(dir, "without-copies.json");
+	fs.writeFileSync(withCopies, JSON.stringify(moves));
+	fs.writeFileSync(without, JSON.stringify({ moves: [], splits: [] }));
+	const lib = pathToFileURL(stepScript("lib.mjs")).href;
+	const placed = (list) =>
+		execFileSync(
+			process.execPath,
+			[
+				"--input-type=module",
+				"-e",
+				`const m = await import(${JSON.stringify(lib)}); console.log(m.placedMap(1).has(${JSON.stringify(KIT)}), m.placedMap(0).has(${JSON.stringify(KIT)}), m.placedMap(1).size, m.table.copies.length);`,
+			],
+			{ encoding: "utf8", env: { ...process.env, STEP_MOVES: list } },
+		).trim();
+	assert.equal(placed(withCopies), "true false 2 2");
+	assert.equal(placed(without), "false false 0 0");
+	// (b) rewrite-imports leaves the importers of a copy alone: the copy is not moved, so a named
+	// import of the module and a default import of the component both stay as tka wrote them.
+	const host = lines(`import { size } from "${KIT}";`, "export const used = size;");
+	const view = lines(
+		'<script lang="ts">',
+		`\timport KitView from "${VIEW}";`,
+		"</script>",
+		"<KitView />",
+	);
+	const run = rewriteImports(
+		{
+			"src/lib/b/kit-util.ts": lines("export const size = 1;"),
+			"src/lib/b/KitView.svelte": lines("<p>view</p>"),
+			"src/lib/b/Host.ts": host,
+			"src/lib/b/Host.svelte": view,
+		},
+		{ task: 1, moves },
+	);
+	assert.equal(run.status, 0, run.stderr);
+	assert.equal(run.read("src/lib/b/Host.ts"), host);
+	assert.equal(run.read("src/lib/b/Host.svelte"), view);
+	assert.deepEqual(run.out, ["changed 0 files"]);
+});

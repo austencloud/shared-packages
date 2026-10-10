@@ -419,6 +419,12 @@ importers:
       h264-mp4-encoder:
         specifier: ^1.0.12
         version: 1.0.12
+      realtime-bpm-analyzer:
+        specifier: 5.0.0
+        version: 5.0.0
+      wavesurfer.js:
+        specifier: 7.12.1
+        version: 7.12.1
       zod:
         specifier: ^4.2.1
         version: 4.6.5
@@ -2757,6 +2763,9 @@ packages:
     resolution: {integrity: sha512-9u/XQ1pvrQtYyMpZe7DXKv2p5CNvyVwzUB6uhLAnQwHMSgKMBR62lc7AHljaeteeHXn11XTAaLLUVZYVZyuRBQ==}
     engines: {node: '>= 20.19.0'}
 
+  realtime-bpm-analyzer@5.0.0:
+    resolution: {integrity: sha512-PAYj3oO8S46RXxsyisB7OYUg7CiRrzXR0VSc+cNLyMKhPGkB6PSLD8TvU3imVBWwZ0q6ax5I4UJnhAjttczlnQ==}
+
   require-directory@2.1.1:
     resolution: {integrity: sha512-fGxEI7+wsG9xrvdjsrlmL22OMTTiHRwAMroiEeMgq8gzoLC/PQr7RsRDSTLUg/bZAZtF+TVIkHc6/4RIKrui+Q==}
     engines: {node: '>=0.10.0'}
@@ -3319,6 +3328,9 @@ packages:
   w3c-xmlserializer@5.0.0:
     resolution: {integrity: sha512-o8qghlI8NZHU1lLPrpi2+Uq7abh4GGPpYANlalzWxyWteJOCsr/P+oPBA49TOLu5FTZO4d3F9MnWJfiMo4BkmA==}
     engines: {node: '>=18'}
+
+  wavesurfer.js@7.12.1:
+    resolution: {integrity: sha512-NswPjVHxk0Q1F/VMRemCPUzSojjuHHisQrBqQiRXg7MVbe3f5vQ6r0rTTXA/a/neC/4hnOEC4YpXca4LpH0SUg==}
 
   webgl-sdf-generator@1.1.1:
     resolution: {integrity: sha512-9Z0JcMTFxeE+b2x1LJTdnaT8rT8aEp7MVxkNwoycNmJWwPdzoXzMh0BjJSh/AEFP+KPYZUli814h8bJZFIZ2jA==}
@@ -5918,6 +5930,8 @@ snapshots:
 
   readdirp@5.0.0: {}
 
+  realtime-bpm-analyzer@5.0.0: {}
+
   require-directory@2.1.1: {}
 
   require-from-string@2.0.2: {}
@@ -6468,6 +6482,8 @@ snapshots:
   w3c-xmlserializer@5.0.0:
     dependencies:
       xml-name-validator: 5.0.0
+
+  wavesurfer.js@7.12.1: {}
 
   webgl-sdf-generator@1.1.1: {}
 

@@ -2,7 +2,7 @@ import { getContext, setContext } from "svelte";
 import type { VideoEditorHost } from "../host.js";
 import type { VideoEditorPlugin } from "../plugin.js";
 import type { VideoEditorState } from "../state/video-editor-state.svelte.js";
-import type { EditorServices } from "../host-defaults.js";
+import { resolveServices, type EditorServices } from "../host-defaults.js";
 
 export interface EditorUi<E = unknown> {
 	readonly editor: VideoEditorState<E>;
@@ -22,4 +22,9 @@ export function useEditorUi<E = unknown>(): EditorUi<E> {
 	const ui = getContext<EditorUi<E> | undefined>(EDITOR_UI);
 	if (!ui) throw new Error("useEditorUi() runs inside <VideoEditor>.");
 	return ui;
+}
+
+/** The editor's services, or the package defaults outside an editor (a kit component in a test). */
+export function useEditorServices(): EditorServices {
+	return getContext<EditorUi | undefined>(EDITOR_UI)?.services ?? resolveServices({ ownerId: "" });
 }

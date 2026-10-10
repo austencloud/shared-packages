@@ -1,0 +1,756 @@
+/* Overlay (backdrop) */
+.drawer-overlay {
+	position: fixed;
+	inset: 0;
+	z-index: calc(var(--sheet-z-index, var(--sheet-z-base, 50)) - 1);
+
+	/* Transparent by default to allow glass morphism effect on drawer */
+	background: var(--sheet-backdrop-bg, transparent);
+	pointer-events: var(--sheet-backdrop-pointer-events, auto);
+	transition: opacity var(--duration-dramatic, 350ms) var(--ease-out, cubic-bezier(0.16, 1, 0.3, 1));
+	opacity: 0;
+}
+
+.drawer-overlay[data-state="open"] {
+	opacity: 1;
+}
+
+.drawer-overlay[data-state="closed"] {
+	opacity: 0;
+	pointer-events: none;
+}
+
+/* Edit panel backdrop - completely transparent and non-interactive */
+.drawer-overlay.edit-panel-backdrop {
+	background: transparent !important;
+	backdrop-filter: none !important;
+	pointer-events: none !important;
+}
+
+/* Sequence Actions sheet backdrop - completely transparent and non-interactive to show beats behind */
+.drawer-overlay.actions-sheet-backdrop {
+	background: transparent !important;
+	backdrop-filter: none !important;
+	pointer-events: none !important;
+}
+
+/* Step Editor panel backdrop - transparent and non-interactive to allow clicking other steps */
+.drawer-overlay.step-editor-backdrop {
+	background: transparent !important;
+	backdrop-filter: none !important;
+	pointer-events: none !important;
+}
+
+/* Settings panel backdrop - modern frosted glass with blur */
+/* Override desktop sidebar constraint since settings drawer covers sidebar */
+.drawer-overlay.settings-backdrop,
+:global(.has-desktop-sidebar) .drawer-overlay.settings-backdrop {
+	left: 0;
+	background: var(--sheet-backdrop-bg, var(--backdrop-medium, rgba(0, 0, 0, 0.4)));
+	backdrop-filter: blur(12px) saturate(180%);
+	-webkit-backdrop-filter: blur(12px) saturate(180%);
+	pointer-events: auto;
+}
+
+/* Side-by-side layout: Constrain backdrop to right half of viewport */
+.drawer-overlay.side-by-side-layout {
+	left: var(--create-panel-left, 50%);
+	right: 0;
+	top: var(--create-panel-top, 0);
+	bottom: var(--create-panel-bottom, 0);
+}
+
+/*
+   * Desktop sidebar support: When sidebar is visible, ensure backdrop
+   * doesn't cover it so navigation clicks work. Uses global CSS variable
+   * --desktop-sidebar-width set by MainInterface.svelte
+   */
+:global(.has-desktop-sidebar) .drawer-overlay {
+	left: var(--desktop-sidebar-width, 220px);
+}
+
+/*
+   * Admin preview banner support: When admin toolbar is visible,
+   * offset drawers to not overlap with the banner.
+   * Banner height: 58px desktop, 50px mobile
+   * Class applied to body by MainInterface.svelte effect
+   */
+body.has-preview-banner .drawer-overlay {
+	top: 58px;
+}
+
+body.has-preview-banner .drawer-content[data-placement="right"],
+body.has-preview-banner .drawer-content[data-placement="left"] {
+	top: 58px;
+	height: calc(100vh - 58px);
+	height: calc(100dvh - 58px);
+	max-height: calc(100vh - 58px);
+	max-height: calc(100dvh - 58px);
+}
+
+@media (max-width: 768px) {
+	body.has-preview-banner .drawer-overlay {
+		top: 50px;
+	}
+
+	body.has-preview-banner .drawer-content[data-placement="right"],
+	body.has-preview-banner .drawer-content[data-placement="left"] {
+		top: 50px;
+		height: calc(100vh - 50px);
+		height: calc(100dvh - 50px);
+		max-height: calc(100vh - 50px);
+		max-height: calc(100dvh - 50px);
+	}
+}
+
+/* ============================================
+   * Native <dialog> Element Support (2026)
+   *
+   * Using native <dialog> provides:
+   * - Proper accessibility tree integration
+   * - Native Escape key handling (cancel event)
+   * - Better screen reader announcements
+   *
+   * We use show() not showModal() to keep our custom
+   * backdrop and inert handling working.
+   * ============================================ */
+
+/* Reset default dialog styles - we apply our own */
+dialog.drawer-content {
+	padding: 0;
+	border: none;
+	margin: 0;
+	max-width: none;
+	max-height: none;
+	/* Override dialog UA color (CanvasText/black) - inherit from theme instead */
+	color: var(--ve-theme-text, #ffffff);
+	/* Hide native backdrop - we use our custom overlay */
+	&::backdrop {
+		display: none;
+	}
+}
+
+/* Drawer content container */
+.drawer-content {
+	position: fixed;
+	z-index: var(--sheet-z-index, var(--sheet-z-base, 50));
+	display: flex;
+	flex-direction: column;
+	outline: none;
+	/* Background - solid by default, components can override with --sheet-bg */
+	background: var(--sheet-bg, rgb(15, 15, 20));
+	backdrop-filter: var(--sheet-filter, none);
+	-webkit-backdrop-filter: var(--sheet-filter, none);
+
+	border: var(--sheet-border, var(--sheet-border-subtle, 1px solid var(--ve-theme-stroke)));
+
+	/* Optional drop shadow - none by default; consumers set --sheet-shadow.
+     (Replaces per-consumer `box-shadow: ... !important` skins.) */
+	box-shadow: var(--sheet-shadow, none);
+
+	/* Smooth CSS transitions - using 2026 system tokens.
+     Consumers can override the entire transition via --sheet-transition
+     (e.g. a custom easing) without !important. */
+	transition: var(
+		--sheet-transition,
+		transform var(--duration-dramatic, 350ms) var(--ease-out, cubic-bezier(0.16, 1, 0.3, 1)),
+		opacity var(--duration-dramatic, 350ms) var(--ease-out, cubic-bezier(0.16, 1, 0.3, 1))
+	);
+	will-change: transform;
+
+	/* Prevent pull-to-refresh ONLY on this drawer, not globally */
+	overscroll-behavior-y: contain;
+	/* Allow touch manipulation - default to vertical panning */
+	touch-action: pan-y;
+
+	/* Prevent context menu on long-press (Android) */
+	-webkit-touch-callout: none;
+	-webkit-user-select: none;
+	user-select: none;
+}
+
+/* Side drawers still contain vertical lists. Let the browser scroll them;
+   SwipeToDismiss handles horizontal dismissal without native horizontal pan. */
+.drawer-content[data-placement="right"],
+.drawer-content[data-placement="left"] {
+	touch-action: pan-y;
+	overscroll-behavior-x: contain;
+}
+
+.drawer-content[data-state="closed"] {
+	pointer-events: none;
+}
+
+/* Bottom placement - default (mobile) */
+.drawer-content[data-placement="bottom"]:not(.side-by-side-layout) {
+	bottom: 0;
+	left: 0;
+	right: 0;
+	width: 100%;
+	/* Consumers can cap sheet width via --sheet-max-width. Both edges are
+     pinned and the side margins are auto, so a capped sheet centers.
+     --sheet-margin-inline: 0 auto anchors it to the start edge instead. */
+	max-width: var(--sheet-max-width, 100%);
+	/* Consumers can cap sheet height via --sheet-max-height (replaces
+     per-consumer `max-height: ...vh !important` skins). */
+	max-height: var(--sheet-max-height, 100vh);
+	/* Modern: iPhone browser chrome */
+	max-height: var(--sheet-max-height, 100dvh);
+	/* Prevent bottom sheets from appearing as tiny slivers on mobile.
+     A sheet that sizes to its own content sets --sheet-min-height. */
+	min-height: var(--sheet-min-height, 50vh);
+	min-height: var(--sheet-min-height, 50dvh);
+
+	margin-block: 0;
+	margin-inline: var(--sheet-margin-inline, auto);
+	border-top-left-radius: var(--sheet-border-radius-top-left, var(--sheet-radius-large, 20px));
+	border-top-right-radius: var(--sheet-border-radius-top-right, var(--sheet-radius-large, 20px));
+	border-bottom: none;
+}
+
+/* Extend background below drawer to prevent white flash during animation */
+.drawer-content[data-placement="bottom"]::after {
+	content: "";
+	position: absolute;
+	bottom: -100px; /* Extend 100px below the drawer */
+	left: 0;
+	right: 0;
+	height: 100px;
+	background: inherit;
+	pointer-events: none;
+}
+
+/* Bottom placement with snap points - needs explicit height for transforms to work */
+.drawer-content[data-placement="bottom"].has-snap-points {
+	height: 100vh;
+	height: 100dvh; /* Modern: accounts for browser chrome */
+}
+
+.drawer-content[data-placement="bottom"].height-snap-points {
+	height: auto;
+	transition:
+		height var(--duration-normal, 250ms) var(--ease-out, ease-out),
+		transform var(--duration-dramatic, 350ms) var(--ease-out, ease-out);
+}
+
+.drawer-content[data-placement="bottom"][data-state="closed"] {
+	transform: translate3d(0, 100%, 0);
+}
+
+.drawer-content[data-placement="bottom"][data-state="open"] {
+	transform: translate3d(0, 0, 0);
+}
+
+/* Top placement */
+.drawer-content[data-placement="top"] {
+	top: 0;
+	left: 0;
+	right: 0;
+	width: var(--sheet-width, min(720px, 100%));
+
+	margin: 0 auto;
+	border-bottom-left-radius: var(--sheet-radius-large, 20px);
+	border-bottom-right-radius: var(--sheet-radius-large, 20px);
+	border-top: none;
+}
+
+.drawer-content[data-placement="top"][data-state="closed"] {
+	transform: translate3d(0, -100%, 0);
+}
+
+.drawer-content[data-placement="top"][data-state="open"] {
+	transform: translate3d(0, 0, 0);
+}
+
+/* Right placement */
+.drawer-content[data-placement="right"] {
+	top: 0;
+	right: 0;
+	bottom: 0;
+	left: auto; /* Override dialog UA default left: 0 */
+	height: 100vh;
+	height: 100dvh; /* Modern browsers: accounts for browser chrome */
+	max-height: 100vh;
+	max-height: 100dvh;
+	width: var(--sheet-width, min(600px, 90vw));
+	border-left: var(--sheet-border-strong, 2px solid var(--ve-theme-stroke-strong));
+	border-right: none;
+	border-top-left-radius: var(--sheet-radius-large, 20px);
+	border-bottom-left-radius: var(--sheet-radius-large, 20px);
+}
+
+.drawer-content[data-placement="right"].dragging {
+	user-select: none;
+}
+
+.drawer-content[data-placement="right"][data-state="closed"] {
+	transform: translate3d(100%, 0, 0);
+}
+
+.drawer-content[data-placement="right"][data-state="open"] {
+	transform: translate3d(0, 0, 0);
+}
+
+/* Right placement in side-by-side mode - use tracked width */
+.drawer-content[data-placement="right"].side-by-side-layout {
+	top: var(--create-panel-top, 0);
+	bottom: var(--create-panel-bottom, 0);
+	height: auto;
+	max-height: none;
+	width: var(--create-panel-width, clamp(360px, 32vw, 520px));
+	max-width: 100%;
+}
+
+/* Left placement */
+.drawer-content[data-placement="left"] {
+	top: 0;
+	left: 0;
+	bottom: 0;
+	right: auto; /* Override dialog UA default right: 0 */
+	height: 100vh;
+	height: 100dvh;
+	max-height: 100vh;
+	max-height: 100dvh;
+	width: var(--sheet-width, min(600px, 90vw));
+	border-right: var(--sheet-border-strong, 2px solid var(--ve-theme-stroke-strong));
+	border-left: none;
+	border-top-right-radius: var(--sheet-radius-large, 20px);
+	border-bottom-right-radius: var(--sheet-radius-large, 20px);
+}
+
+.drawer-content[data-placement="left"].dragging {
+	user-select: none;
+}
+
+.drawer-content[data-placement="left"][data-state="closed"] {
+	transform: translate3d(-100%, 0, 0);
+}
+
+.drawer-content[data-placement="left"][data-state="open"] {
+	transform: translate3d(0, 0, 0);
+}
+
+/* Handle - fully self-contained styling */
+/* 
+   * The drawer handle is now fully self-contained within this component.
+   * All styling variations (placement, layout mode) are handled here.
+   * External components should NOT override these styles.
+   * 
+   * Handle adapts automatically to:
+   * - Bottom placement (mobile): horizontal bar at top
+   * - Right placement + side-by-side: vertical bar on left edge
+   * - Left placement: vertical bar on right edge
+   * - Top placement: horizontal bar at bottom
+   */
+/* `--drawer-handle-color` lets a host paint the grab bar in its own surface's
+   accent. Default is the neutral white bar every drawer has always used; a
+   host that sets the variable is stating its surface is tinted enough that a
+   white bar reads as unpainted rather than as neutral. */
+.drawer-handle {
+	position: relative;
+	width: 10px;
+	height: 4px;
+	min-height: 10px;
+	margin: 10px auto 8px;
+	border-radius: 999px;
+	background: var(--drawer-handle-color, rgba(255, 255, 255, 0.45));
+	flex-shrink: 0;
+	cursor: grab;
+}
+
+.drawer-content.dragging .drawer-handle {
+	cursor: grabbing;
+}
+
+/* Handle for right placement - vertical on left (inner) edge.
+   Applies to ALL right placements (not only .side-by-side-layout) so a
+   standalone right drawer no longer falls back to the broken centered
+   horizontal bar. */
+.drawer-content[data-placement="right"] .drawer-handle {
+	position: absolute;
+	top: 50%;
+	left: 18px;
+	width: 4px;
+	height: var(--ve-min-touch-target);
+	margin: 0;
+	border-radius: 999px;
+	transform: translateY(-50%);
+	background: var(--drawer-handle-color, rgba(255, 255, 255, 0.45));
+}
+
+/* Handle for left placement - vertical on right edge */
+.drawer-content[data-placement="left"] .drawer-handle {
+	position: absolute;
+	top: 50%;
+	right: 18px;
+	width: 4px;
+	height: var(--ve-min-touch-target);
+	margin: 0;
+	border-radius: 999px;
+	transform: translateY(-50%);
+	background: var(--drawer-handle-color, rgba(255, 255, 255, 0.45));
+}
+
+/* Handle for top placement - horizontal on bottom edge */
+.drawer-content[data-placement="top"] .drawer-handle {
+	position: relative;
+	width: var(--ve-min-touch-target);
+	height: 4px;
+	min-height: 10px;
+	margin: 8px auto 10px;
+	order: 1; /* Place below content */
+}
+
+/* Handle for bottom placement - stays at top (default) */
+.drawer-content[data-placement="bottom"]:not(.side-by-side-layout) .drawer-handle {
+	position: relative;
+	width: var(--ve-min-touch-target);
+	height: 5px;
+	/* min-height:10px previously forced the bar to 10px - a fat oval. Dragging
+     works on the whole sheet (touch-action: pan-y), so the handle is visual
+     only; keep it thin like an iOS/Material grabber. */
+	min-height: 0;
+	margin: 10px auto 8px;
+}
+
+.drawer-content[data-placement="bottom"].height-snap-points .drawer-handle {
+	width: 100%;
+	height: 32px;
+	min-height: 32px;
+	margin: 0;
+	padding: 0;
+	border: 0;
+	border-radius: 0;
+	background: transparent;
+	touch-action: none;
+	cursor: ns-resize;
+}
+
+.drawer-content.height-snap-points .drawer-handle::before {
+	content: "";
+	display: block;
+	width: 44px;
+	height: 5px;
+	margin: 12px auto;
+	border-radius: 999px;
+	background: var(--drawer-handle-color, rgba(255, 255, 255, 0.45));
+	pointer-events: none;
+}
+
+.drawer-content.height-snap-points .drawer-handle:focus-visible {
+	outline: 2px solid var(--ve-theme-accent, #d4813a);
+	outline-offset: -3px;
+}
+
+/* Side-panel handle gutter: reserve space on the handle edge ONLY when a handle
+   is actually rendered (:has), so the absolutely-positioned vertical bar never
+   overlaps content. Replaces per-panel `.drawer-handle { display: none }` hacks
+   (e.g. the old SequenceActionsPanel override). */
+.drawer-content[data-placement="right"]:has(> .drawer-handle) > .drawer-inner {
+	padding-left: var(--drawer-handle-gutter, 28px);
+}
+.drawer-content[data-placement="left"]:has(> .drawer-handle) > .drawer-inner {
+	padding-right: var(--drawer-handle-gutter, 28px);
+}
+
+/* Inner content container.
+   flex-basis is AUTO, never 0%. A bottom or top sheet with no set height is
+   as tall as its content (the <dialog> UA height is fit-content). WebKit
+   (Safari and every iPhone browser) sizes that height from each child's flex
+   basis, so `flex: 1` (basis 0%) plus `min-height: 0` made this region
+   contribute 0px: the sheet collapsed to its min-height, and a sheet with no
+   floor (the phone navigation menu) opened as a bare grab handle at the bottom
+   of the screen. Blink sized it from content, so it only failed on iOS. With
+   basis auto the region contributes its content height in both engines; under
+   a definite sheet height the result is unchanged, because it is the only
+   growing child and still shrinks (min-height: 0) and scrolls past the cap.
+   Content-sized consumers must keep their own flex chain on basis auto too. */
+.drawer-inner {
+	flex: 1 1 auto;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+	overflow-y: auto;
+
+	/* Contain scroll - don't chain to parent */
+	overscroll-behavior-y: contain;
+}
+
+/* Scrollbar styling */
+.drawer-inner::-webkit-scrollbar {
+	width: 8px;
+}
+
+.drawer-inner::-webkit-scrollbar-track {
+	background: transparent;
+}
+
+.drawer-inner::-webkit-scrollbar-thumb {
+	background: var(--scrollbar-thumb);
+	border-radius: 4px;
+}
+
+.drawer-inner::-webkit-scrollbar-thumb:hover {
+	background: var(--scrollbar-thumb-hover);
+}
+
+/* Mobile adjustments */
+@media (max-width: 480px) {
+	.drawer-content[data-placement="bottom"] {
+		border-top-left-radius: var(--sheet-radius-medium, 16px);
+		border-top-right-radius: var(--sheet-radius-medium, 16px);
+	}
+}
+
+/* High contrast mode */
+@media (prefers-contrast: high) {
+	.drawer-content {
+		background: rgba(0, 0, 0, 0.98);
+		border: 2px solid white;
+	}
+
+	.drawer-handle {
+		background: rgba(255, 255, 255, 0.8);
+	}
+}
+
+/* ============================================
+   * Reduced Motion (WCAG 2.2 / AAA)
+   *
+   * For users with vestibular disorders, motion sensitivity,
+   * or those who simply prefer less animation.
+   *
+   * This completely disables:
+   * - CSS transitions (slide in/out)
+   * - CSS animations (spring bounce)
+   * - @starting-style entry animations
+   * - Backdrop fade effects
+   *
+   * The drawer appears/disappears instantly.
+   * ============================================ */
+@media (prefers-reduced-motion: reduce) {
+	.drawer-content,
+	.drawer-overlay {
+		/* Disable all motion */
+		transition: none !important;
+		animation: none !important;
+		/* Disable discrete transition behavior (prevents @starting-style animations) */
+		transition-behavior: normal !important;
+	}
+
+	/* Disable spring animation class */
+	.drawer-content.spring-animation {
+		animation: none !important;
+	}
+
+	/* Ensure backdrop is immediately visible/hidden */
+	.drawer-overlay[data-state="open"] {
+		opacity: 1;
+	}
+
+	.drawer-overlay[data-state="closed"] {
+		opacity: 0;
+	}
+
+	/* Ensure drawer is immediately in final position */
+	.drawer-content[data-state="open"] {
+		transform: translate3d(0, 0, 0) !important;
+		opacity: 1 !important;
+	}
+
+	/* Background scale effect should also be instant */
+	:global(.drawer-scale-bg) {
+		transition: none !important;
+	}
+}
+
+/* ============================================
+   * @starting-style Entry Animations (2025+)
+   *
+   * Modern CSS feature that defines initial styles for elements
+   * entering the DOM or transitioning from display:none.
+   * Eliminates need for JavaScript RAF timing hacks.
+   *
+   * Browser support: Chrome 117+, Safari 17.5+, Firefox 144+ (Baseline 2025)
+   * https://developer.mozilla.org/en-US/docs/Web/CSS/@starting-style
+   * ============================================ */
+
+/* Enable discrete transitions for display property */
+.drawer-content,
+.drawer-overlay {
+	transition-behavior: allow-discrete;
+}
+
+/* Bottom placement entry animation */
+.drawer-content[data-placement="bottom"][data-state="open"] {
+	@starting-style {
+		transform: translate3d(0, 100%, 0);
+		opacity: 0;
+	}
+}
+
+/* Top placement entry animation */
+.drawer-content[data-placement="top"][data-state="open"] {
+	@starting-style {
+		transform: translate3d(0, -100%, 0);
+		opacity: 0;
+	}
+}
+
+/* Right placement entry animation */
+.drawer-content[data-placement="right"][data-state="open"] {
+	@starting-style {
+		transform: translate3d(100%, 0, 0);
+		opacity: 0;
+	}
+}
+
+/* Left placement entry animation */
+.drawer-content[data-placement="left"][data-state="open"] {
+	@starting-style {
+		transform: translate3d(-100%, 0, 0);
+		opacity: 0;
+	}
+}
+
+/* Overlay fade-in entry animation */
+.drawer-overlay[data-state="open"] {
+	@starting-style {
+		opacity: 0;
+	}
+}
+
+/* Spring timing function - approximates spring physics */
+.drawer-content.spring-animation {
+	transition:
+		transform 400ms cubic-bezier(0.34, 1.56, 0.64, 1),
+		opacity 350ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+/* Spring animation for bottom placement - refined 2026 spring physics */
+.drawer-content.spring-animation[data-placement="bottom"][data-state="open"] {
+	animation: spring-slide-up var(--duration-dramatic)
+		var(--ease-spring, cubic-bezier(0.34, 1.56, 0.64, 1)) forwards;
+}
+
+@keyframes spring-slide-up {
+	0% {
+		transform: translate3d(0, 100%, 0);
+	}
+	65% {
+		transform: translate3d(0, -2%, 0);
+	}
+	85% {
+		transform: translate3d(0, 0.5%, 0);
+	}
+	100% {
+		transform: translate3d(0, 0, 0);
+	}
+}
+
+/* Spring animation for top placement */
+.drawer-content.spring-animation[data-placement="top"][data-state="open"] {
+	animation: spring-slide-down var(--duration-dramatic)
+		var(--ease-spring, cubic-bezier(0.34, 1.56, 0.64, 1)) forwards;
+}
+
+@keyframes spring-slide-down {
+	0% {
+		transform: translate3d(0, -100%, 0);
+	}
+	65% {
+		transform: translate3d(0, 2%, 0);
+	}
+	85% {
+		transform: translate3d(0, -0.5%, 0);
+	}
+	100% {
+		transform: translate3d(0, 0, 0);
+	}
+}
+
+/* Spring animation for right placement */
+.drawer-content.spring-animation[data-placement="right"][data-state="open"] {
+	animation: spring-slide-left var(--duration-dramatic)
+		var(--ease-spring, cubic-bezier(0.34, 1.56, 0.64, 1)) forwards;
+}
+
+@keyframes spring-slide-left {
+	0% {
+		transform: translate3d(100%, 0, 0);
+	}
+	65% {
+		transform: translate3d(-2%, 0, 0);
+	}
+	85% {
+		transform: translate3d(0.5%, 0, 0);
+	}
+	100% {
+		transform: translate3d(0, 0, 0);
+	}
+}
+
+/* Spring animation for left placement */
+.drawer-content.spring-animation[data-placement="left"][data-state="open"] {
+	animation: spring-slide-right var(--duration-dramatic)
+		var(--ease-spring, cubic-bezier(0.34, 1.56, 0.64, 1)) forwards;
+}
+
+@keyframes spring-slide-right {
+	0% {
+		transform: translate3d(-100%, 0, 0);
+	}
+	65% {
+		transform: translate3d(2%, 0, 0);
+	}
+	85% {
+		transform: translate3d(-0.5%, 0, 0);
+	}
+	100% {
+		transform: translate3d(0, 0, 0);
+	}
+}
+
+/* Disable spring animation during drag */
+.drawer-content.spring-animation.dragging {
+	animation: none;
+	transition: none;
+}
+
+/* ============================================
+   * Background Scale Effect
+   * Creates iOS-like depth when drawer opens
+   *
+   * Usage: Add class "drawer-scale-bg" to the element
+   * you want to scale when the drawer opens.
+   *
+   * Example:
+   *   <main class="drawer-scale-bg">...</main>
+   *   <Drawer scaleBackground={true}>...</Drawer>
+   * ============================================ */
+
+:global(.drawer-scale-bg) {
+	transform-origin: center center;
+	transform: scale(var(--drawer-bg-scale, 1));
+	border-radius: var(--drawer-bg-border-radius, 0px);
+	transition:
+		transform 350ms cubic-bezier(0.32, 0.72, 0, 1),
+		border-radius 350ms cubic-bezier(0.32, 0.72, 0, 1);
+	overflow: hidden;
+}
+
+/* Dark mode variant for background dimming */
+:global(.drawer-scale-bg::after) {
+	content: "";
+	position: absolute;
+	inset: 0;
+	background: black;
+	opacity: 0;
+	pointer-events: none;
+	transition: opacity var(--duration-dramatic) cubic-bezier(0.32, 0.72, 0, 1);
+	z-index: 1;
+}
+
+:global(body.drawer-scale-bg-active .drawer-scale-bg::after) {
+	opacity: 0.15;
+}

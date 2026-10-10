@@ -4,8 +4,9 @@ import * as icons from "../src/ui/kit/icons.js";
 describe("icon table", () => {
 	const entries = Object.entries(icons);
 
-	it("holds the 84 icons the editor UI uses", () => {
-		expect(entries).toHaveLength(84);
+	// 84 from the editor UI, plus the kit copies' faCircleInfo, faGift, faTasks and faTrash.
+	it("holds the 88 icons the editor UI and the kit use", () => {
+		expect(entries).toHaveLength(88);
 	});
 
 	it("holds only solid icon definitions", () => {

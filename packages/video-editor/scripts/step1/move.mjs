@@ -2,11 +2,13 @@
 //   node move.mjs --task N [--dry] [--force]
 //   node move.mjs --check
 //
-// Copies each moves and splits entry of task N from tka into the package, rewrites the copy's
-// imports of anything already moved (task at most N) to relative .js paths, and lists every import
-// it could not place as UNRESOLVED. A named import of a package entry (a tka file switched to the
-// package in an earlier task imports "@austencloud/video-editor/core") becomes one import per
-// package file that defines the names, never the entry's index.js. See placeText in lib.mjs.
+// Copies each moves, splits and copies entry of task N from tka into the package, rewrites the
+// copy's imports of anything already placed (task at most N) to relative .js paths, and lists every
+// import it could not place as UNRESOLVED. A copies entry leaves the tka original and its importers
+// alone: rewrite-imports.mjs never reads that list. A named import of a package entry (a tka file
+// switched to the package in an earlier task imports "@austencloud/video-editor/core") becomes one
+// import per package file that defines the names, never the entry's index.js. See placeText in
+// lib.mjs.
 //
 //   --dry    Print the copy list, every rewritten specifier and every UNRESOLVED line, and run the
 //            barrel check on what would be written. Writes nothing.
@@ -17,7 +19,7 @@
 //            package by name.
 import fs from "node:fs";
 import path from "node:path";
-import { PKG, barrelImports, fileOf, placeText, slash, table, taskArg } from "./lib.mjs";
+import { PKG, barrelImports, fileOf, placeText, placedMap, slash, table, taskArg } from "./lib.mjs";
 
 function check(overlay = new Map()) {
 	const found = barrelImports(PKG, overlay);
@@ -31,9 +33,8 @@ if (process.argv.includes("--check")) process.exit(check() ? 0 : 1);
 const task = taskArg();
 const dry = process.argv.includes("--dry");
 const force = process.argv.includes("--force");
-const entries = [...table.moves, ...table.splits];
-const placed = new Map();
-for (const entry of entries) if (entry.task <= task) placed.set(entry.from, entry.to);
+const entries = [...table.moves, ...table.splits, ...table.copies];
+const placed = placedMap(task);
 const current = entries.filter((e) => e.task === task);
 const skip = new Set(current.map((e) => `${PKG}/src/${e.to}`));
 
