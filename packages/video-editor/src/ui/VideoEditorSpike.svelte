@@ -2,7 +2,7 @@
 	Step 0 placeholder for the editor shell. It mounts, asks the preview
 	worker for a timecode and shows the reply, so a host page can prove that
 	the component, the worker and the token CSS all load from the package.
-	The real editor replaces this in step 2.
+	The real editor is `VideoEditor.svelte`; this spike stays until step 4.
 -->
 <script lang="ts">
 	import { onMount } from "svelte";

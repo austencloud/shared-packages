@@ -4,6 +4,7 @@ import { createEmptyPostProject } from "../core/project/schema.js";
 import { createProjectSchema } from "../core/project/schema-factory.js";
 import { subjectKeyOf, subjectOf } from "../core/project/subject.js";
 import type { VideoEditorPlugin } from "../plugin.js";
+import { translatorFor, type Translate } from "../strings/translate.js";
 import { createHistoryStorage } from "./history-storage.js";
 import type { SaveResult, StoreScope, VideoEditorStore } from "./types.js";
 
@@ -44,6 +45,8 @@ export interface DeviceStoreOptions<E = unknown> {
 	/** Test seams. Default: guarded localStorage and sessionStorage. */
 	local?: () => Storage | null;
 	session?: () => Storage | null;
+	/** Says the store's own errors; English when absent. */
+	translate?: Translate;
 }
 
 export interface DeviceStore<E = unknown> extends VideoEditorStore<E> {
@@ -74,6 +77,7 @@ function guardedLocalStorage(): Storage | null {
 export function createDeviceStore<E = unknown>(
 	options: DeviceStoreOptions<E> = {},
 ): DeviceStore<E> {
+	const say = translatorFor(options.translate ? { translate: options.translate } : {});
 	const { plugin, openFallback, parseEffect, volatileFields, session } = options;
 	const keys = options.keys ?? deviceStoreKeys("video-editor:");
 	const storage = options.local ?? guardedLocalStorage;
@@ -147,7 +151,7 @@ export function createDeviceStore<E = unknown>(
 				if (store.getItem(key) !== next) {
 					return {
 						ok: false,
-						error: "The post could not be verified in device storage.",
+						error: say("store_verify_failed"),
 					};
 				}
 				return { ok: true };
@@ -160,7 +164,7 @@ export function createDeviceStore<E = unknown>(
 						"message" in cause &&
 						typeof cause.message === "string"
 							? cause.message
-							: "The post could not be saved on this device.",
+							: say("store_save_failed"),
 				};
 			}
 		},
@@ -168,7 +172,7 @@ export function createDeviceStore<E = unknown>(
 		/** Keep the previous edit recoverable across reloads when importing a draft. */
 		backupBeforeImport(scope: StoreScope, project: PostProject): void {
 			const store = storage();
-			if (!store) throw new Error("Device storage is unavailable. The current post was kept.");
+			if (!store) throw new Error(say("store_unavailable"));
 			store.setItem(keys.beforeImport(scope), JSON.stringify(project));
 		},
 

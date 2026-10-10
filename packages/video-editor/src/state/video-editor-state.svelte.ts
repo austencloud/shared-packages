@@ -219,7 +219,12 @@ export function createVideoEditorState<E = unknown>(
 	options: VideoEditorStateOptions<E>,
 ): VideoEditorState<E> {
 	const now = host.now ?? (() => Date.now());
-	const store = host.store ?? createDeviceStore<E>(plugin ? { plugin } : {});
+	const store =
+		host.store ??
+		createDeviceStore<E>({
+			...(plugin ? { plugin } : {}),
+			...(host.translate ? { translate: host.translate } : {}),
+		});
 	const translate = translatorFor(host);
 	const schema = createProjectSchema(plugin);
 	/** Read at every store call, so an owner getter may follow sign-in. */

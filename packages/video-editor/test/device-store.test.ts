@@ -26,6 +26,11 @@ class MemoryStorage implements Storage {
 	}
 }
 
+/** Accepts every write and keeps nothing, so a save cannot be read back. */
+class ForgetfulStorage extends MemoryStorage {
+	override setItem(): void {}
+}
+
 const scope = { ownerId: "owner-1", subjectId: "seq" };
 const project = () => normalizeProject(createProjectSchema().parse(plain));
 const device = () => {
@@ -98,6 +103,37 @@ describe("device store with no plugin", () => {
 			ok: false,
 			error: "Device storage is unavailable.",
 		});
+	});
+
+	it("says a save it could not read back in English", () => {
+		const forgetful = new ForgetfulStorage();
+		const store = createDeviceStore({ local: () => forgetful, session: () => null });
+		expect(store.saveProject(scope, project())).toEqual({
+			ok: false,
+			error: "The post could not be verified in device storage.",
+		});
+	});
+
+	it("says a save it could not read back in the host's words when it has a translate", () => {
+		const forgetful = new ForgetfulStorage();
+		const store = createDeviceStore({
+			local: () => forgetful,
+			session: () => null,
+			translate: (key) => "x:" + key,
+		});
+		expect(store.saveProject(scope, project())).toEqual({
+			ok: false,
+			error: "x:store_verify_failed",
+		});
+	});
+
+	it("says a missing store in the host's words when it has a translate", () => {
+		const none = createDeviceStore({
+			local: () => null,
+			session: () => null,
+			translate: (key) => "x:" + key,
+		});
+		expect(() => none.backupBeforeImport(scope, project())).toThrow("x:store_unavailable");
 	});
 
 	it("keeps undo history in the session store for the same save only", () => {

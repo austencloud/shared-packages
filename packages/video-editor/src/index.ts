@@ -1,4 +1,4 @@
-export { default as VideoEditor } from "./ui/VideoEditor.svelte";
+export { default as VideoEditorSpike } from "./ui/VideoEditorSpike.svelte";
 export { createSpikeWorker } from "./workers/index.js";
 export type { SpikeWorkerPing, SpikeWorkerPong } from "./workers/messages.js";
 export { runtimeProbe } from "./runtime-probe.js";
@@ -16,6 +16,7 @@ export type {
 } from "./store/types.js";
 export { EN, type StringKey } from "./strings/en.js";
 export { englishString, formatString, translatorFor, type Translate } from "./strings/translate.js";
+export { provideStrings, useStrings } from "./strings/context.js";
 export {
 	createDeviceStore,
 	deviceStoreKeys,

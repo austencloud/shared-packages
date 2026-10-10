@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { EN } from "../src/strings/en.js";
 import { englishString, formatString, translatorFor } from "../src/strings/translate.js";
 
 describe("strings", () => {
@@ -28,5 +29,11 @@ describe("strings", () => {
 	it("uses the host's translate when it has one", () => {
 		const translate = translatorFor({ translate: (key) => `<${key}>` });
 		expect(translate("editor_missing_image", { name: "x" })).toBe("<editor_missing_image>");
+	});
+
+	it("holds the device store texts word for word", () => {
+		expect(EN.store_verify_failed).toBe("The post could not be verified in device storage.");
+		expect(EN.store_save_failed).toBe("The post could not be saved on this device.");
+		expect(EN.store_unavailable).toBe("Device storage is unavailable. The current post was kept.");
 	});
 });

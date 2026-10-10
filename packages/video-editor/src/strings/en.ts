@@ -12,6 +12,9 @@ export const EN = {
 	editor_missing_media: "Missing media: {name}",
 	editor_missing_video: "Missing video: {name}",
 	editor_missing_image: "Missing image: {name}",
+	store_verify_failed: "The post could not be verified in device storage.",
+	store_save_failed: "The post could not be saved on this device.",
+	store_unavailable: "Device storage is unavailable. The current post was kept.",
 } as const;
 
 export type StringKey = keyof typeof EN;
