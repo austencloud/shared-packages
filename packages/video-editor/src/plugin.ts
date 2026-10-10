@@ -176,8 +176,16 @@ export type PluginTool =
 			type: "action";
 			label(t: (key: string) => string): string;
 			icon: IconDefinition;
-			run(editor: VideoEditorState): void;
+			/** False disables the tool's button (tka: Beats needs a clip with footage). Absent: always enabled. */
+			enabled?(editor: VideoEditorState): boolean;
+			run(editor: VideoEditorState, context?: ToolRunContext): void;
 	  };
+
+/** What an action tool's `run` gets when something other than the tool row runs it. */
+export interface ToolRunContext {
+	/** The library take a panel's row ran the tool for (tka: Tap beats on a video row). */
+	takeId?: string;
+}
 
 /** An entry the plugin adds to the add panel. */
 export interface PluginAddItem {
@@ -213,7 +221,8 @@ export interface CanvasOverlayProps {
 /** A screen state the plugin owns (tka: the timing mode). Each slot replaces the edit mode's slot while the mode is active. */
 export interface EditorMode {
 	id: string;
-	dock?: Component<{ editor: VideoEditorState }>;
+	/** The dock's content while the mode is active; the settings drawer it may open also shows the save status. */
+	dock?: Component<{ editor: VideoEditorState; draftStatus: Snippet }>;
 	panel?: Component<{ editor: VideoEditorState }>;
 	stage?: Component<{ editor: VideoEditorState }>;
 	timeline?: Component<{ editor: VideoEditorState }>;
@@ -264,6 +273,23 @@ export interface PluginUi {
 	cropSteps?(editor: VideoEditorState, itemId: string): readonly ClipStep[];
 	/** Two items the timeline draws joined (tka: the animation handing over to the moves square). */
 	timelineJoin?(project: PostProject): TimelineJoin | null;
+	backup?: PluginBackup;
+}
+
+/** The top bar's Backup, Restore and Import entries (tka: its JSON backup and the InShot recovery package). Absent: the workspace shows none of them. */
+export interface PluginBackup {
+	/** What the hidden file picker accepts for Restore and Import. */
+	accept: string;
+	/** The file Backup downloads for the project as it stands. */
+	serialize(editor: VideoEditorState): { blob: Blob; filename: string };
+	/**
+	 * Reads the files the user picked. Resolves with the project and its media to import, or null when the
+	 * files are the open project's own media to relink; rejects with the message to show.
+	 */
+	importFiles(
+		editor: VideoEditorState,
+		files: readonly File[],
+	): Promise<{ project: PostProject; files: Map<string, File> } | null>;
 }
 
 /** A landing mark on the crop screen's clip timeline. */
