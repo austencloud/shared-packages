@@ -512,12 +512,17 @@ export function placeText(args) {
 	return { text, rewrites, unresolved };
 }
 
-/** `import X from "<moved>.svelte"` names the component through the entry instead. */
-export function rewriteDefaultComponentImport(line, from, entry) {
+/**
+ * `import X from "<moved>.svelte"` names the component through the entry instead. With `file`, the
+ * importing tka file, a relative specifier is compared by its `$lib` module id; without it the
+ * specifier must equal `from` as written.
+ */
+export function rewriteDefaultComponentImport(line, from, entry, file) {
 	const match = line.match(
 		/^(\s*)import\s+([A-Za-z_][A-Za-z0-9_]*)\s+from\s+["']([^"']+)["'];?\s*$/,
 	);
-	if (!match || match[3] !== from || !from.endsWith(".svelte")) return line;
+	if (!match || !from.endsWith(".svelte")) return line;
+	if ((file === undefined ? match[3] : moduleIdOf(match[3], file)) !== from) return line;
 	const exported = from.slice(from.lastIndexOf("/") + 1, -".svelte".length);
 	const local = match[2];
 	const name = local === exported ? exported : `${exported} as ${local}`;

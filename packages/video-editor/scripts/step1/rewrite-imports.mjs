@@ -4,7 +4,9 @@
 // any file is written, so a failure partway leaves tka untouched. ERROR lines name what needs a
 // hand edit: a call such as vi.mock on a moved path, a default, namespace or star import of a split
 // module, an import type of a split module, any use of a worker module (workers move but are never
-// routed: their names surface through the entry), and a script that imports a moved module.
+// routed: their names surface through the entry), a default import of a moved component that the
+// line rewrite below could not turn into a named import (a mixed `import X, { y } from`, a
+// multi-line import, `import type X from`), and a script that imports a moved module.
 //
 // A file that moves whole in this task or earlier, and the source of a split in this task only, are
 // left alone: the first leaves tka with its own imports as they are, move.mjs rewrites them where
@@ -54,10 +56,11 @@ const moving = new Set(
 		.map((entry) => fileOf(entry.from))
 		.filter(Boolean),
 );
-const components = table.moves.filter((m) => m.task <= task && m.from.endsWith(".svelte"));
+// A component's `to` ends in .svelte; a .svelte.ts module's does not.
+const components = table.moves.filter((m) => m.task <= task && m.to.endsWith(".svelte"));
 // Maps the lines of a script body through rewriteDefaultComponentImport; each line ending (LF or
-// CRLF) is kept as it is.
-const rewriteDefaultImports = (body) =>
+// CRLF) is kept as it is. `file` is the importing tka file, so a relative specifier resolves.
+const rewriteDefaultImports = (body, file) =>
 	components.length === 0
 		? body
 		: body
@@ -66,7 +69,7 @@ const rewriteDefaultImports = (body) =>
 					i % 2 === 1
 						? part
 						: components.reduce(
-								(line, m) => rewriteDefaultComponentImport(line, m.from, m.entry),
+								(line, m) => rewriteDefaultComponentImport(line, m.from, m.entry, file),
 								part,
 							),
 				)
@@ -103,7 +106,11 @@ function rewriteScript(file, text, offset, whole) {
 			if (!workerUse(node.moduleSpecifier)) {
 				const id = moduleIdOf(node.moduleSpecifier.text, file);
 				const dests = id && routes.get(id);
-				if (dests) edits.push(...planDeclaration(node, dests, file, id));
+				if (dests && id.endsWith(".svelte") && node.importClause?.name)
+					errors.push(
+						`${file}:${lineOf(node)}: default import of moved component ${id} needs a hand edit`,
+					);
+				else if (dests) edits.push(...planDeclaration(node, dests, file, id));
 			}
 		} else if (
 			ts.isImportTypeNode(node) &&
@@ -206,7 +213,7 @@ for (const file of files) {
 		const body = text.slice(start, end);
 		// The default-import rewrite keeps every line break, so the line numbers of later ERROR lines
 		// hold; the text before this block is still the original's.
-		let next = rewriteDefaultImports(body);
+		let next = rewriteDefaultImports(body, file);
 		const edits = rewriteScript(file, next, start, text.slice(0, start) + next).sort(
 			(x, y) => y[0] - x[0],
 		);

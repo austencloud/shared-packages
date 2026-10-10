@@ -236,9 +236,10 @@ const RENDER_ENTRY = "@austencloud/video-editor/render";
 const PLUGIN = "$lib/shared/post-studio-plugin";
 
 // Runs rewrite-imports.mjs (task 4 unless told otherwise) over a fixture tka tree (STEP1_TKA),
-// never over the real one.
-function rewriteImports(files, { dry = false, task = 4 } = {}) {
-	const root = tree(files);
+// never over the real one. `moves` is a move list written into the tree and read through an
+// absolute STEP_MOVES; without it the step 1 list is used.
+function rewriteImports(files, { dry = false, task = 4, moves = null } = {}) {
+	const root = tree(moves ? { ...files, "step-moves.json": JSON.stringify(moves) } : files);
 	const args = [
 		stepScript("rewrite-imports.mjs"),
 		"--task",
@@ -247,7 +248,11 @@ function rewriteImports(files, { dry = false, task = 4 } = {}) {
 	];
 	const run = spawnSync(process.execPath, args, {
 		encoding: "utf8",
-		env: { ...process.env, STEP1_TKA: root, STEP_MOVES: "./moves.json" },
+		env: {
+			...process.env,
+			STEP1_TKA: root,
+			STEP_MOVES: moves ? `${root}/step-moves.json` : "./moves.json",
+		},
 	});
 	return {
 		root,
@@ -425,6 +430,52 @@ test("rewrite-imports keeps CRLF line endings when it merges", () => {
 			"export const used = [A, B];",
 		),
 	);
+});
+
+test("rewrite-imports names a moved component through its entry by any specifier and flags a default import it cannot", () => {
+	const UI = "@austencloud/video-editor/ui";
+	const run = rewriteImports(
+		{
+			"src/lib/a/PostToolRow.svelte": lines("<p>row</p>"),
+			"src/lib/a/Host.svelte": lines(
+				'<script lang="ts">',
+				'\timport PostToolRow from "./PostToolRow.svelte";',
+				'\timport Row from "$lib/a/PostToolRow.svelte";',
+				'\timport PostToolRow2, { type T } from "./PostToolRow.svelte";',
+				"</script>",
+				'<p>import PostToolRow from "./PostToolRow.svelte";</p>',
+			),
+		},
+		{
+			task: 1,
+			moves: {
+				moves: [
+					{
+						task: 1,
+						from: "$lib/a/PostToolRow.svelte",
+						to: "ui/editor/PostToolRow.svelte",
+						entry: UI,
+					},
+				],
+				splits: [],
+			},
+		},
+	);
+	assert.equal(run.status, 1, run.stderr);
+	assert.equal(
+		run.read("src/lib/a/Host.svelte"),
+		lines(
+			'<script lang="ts">',
+			`\timport { PostToolRow, PostToolRow as Row } from "${UI}";`,
+			'\timport PostToolRow2, { type T } from "./PostToolRow.svelte";',
+			"</script>",
+			'<p>import PostToolRow from "./PostToolRow.svelte";</p>',
+		),
+	);
+	assert.deepEqual(run.out, [
+		"changed 1 files",
+		`ERROR ${run.root}/src/lib/a/Host.svelte:4: default import of moved component $lib/a/PostToolRow.svelte needs a hand edit`,
+	]);
 });
 
 test("a merge alone in a script is listed as a change, a dry run counts it, and it raises no ERROR", () => {
