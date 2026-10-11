@@ -258,6 +258,17 @@ export interface PluginBindings {
 	 * reads is tracked. Absent: a hidden editor always pauses.
 	 */
 	stageHeldElsewhere?(): boolean;
+	/**
+	 * A take's status line in the media panel (tka: its beat timing); `id` becomes the badge's class
+	 * suffix. Read inside a `$derived`. Absent or null: the take shows no status line.
+	 */
+	takeStatus?(takeId: string): { id: string; text: string } | null;
+	/**
+	 * Extra steps the export panel lists before export, after a take's missing-file step (tka: map
+	 * or check a take's timing); a step with a `takeId` opens that take's tool. Read inside a
+	 * `$derived`. Absent: none.
+	 */
+	exportTodos?(): readonly { key: string; text: string; takeId: string | null }[];
 	dispose(): void;
 }
 

@@ -89,4 +89,26 @@ describe("plugin UI members", () => {
 		};
 		expect(plain.stageHeldElsewhere?.()).toBeUndefined();
 	});
+
+	it("bindings report a take's status and the export panel's extra steps", () => {
+		const bindings: PluginBindings = {
+			bindingFor: () => null,
+			exportPainters: () => new Map(),
+			takeStatus: (takeId) => (takeId === "a" ? { id: "stale", text: "Sequence changed" } : null),
+			exportTodos: () => [{ key: "a", text: "Check timing for A", takeId: "a" }],
+			dispose: () => {},
+		};
+		expect(bindings.takeStatus?.("a")).toEqual({ id: "stale", text: "Sequence changed" });
+		expect(bindings.takeStatus?.("b")).toBeNull();
+		expect(bindings.exportTodos?.()).toEqual([
+			{ key: "a", text: "Check timing for A", takeId: "a" },
+		]);
+		const plain: PluginBindings = {
+			bindingFor: () => null,
+			exportPainters: () => new Map(),
+			dispose: () => {},
+		};
+		expect(plain.takeStatus?.("a")).toBeUndefined();
+		expect(plain.exportTodos?.()).toBeUndefined();
+	});
 });
