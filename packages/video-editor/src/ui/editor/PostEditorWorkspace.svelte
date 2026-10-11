@@ -1931,7 +1931,8 @@
 {/snippet}
 
 {#snippet headerActions()}
-	<div class="header-actions" inert={sharing || undefined}>
+	<!-- The host draws this in its own header, outside .ve-root; ve-portal carries the tokens there. -->
+	<div class="header-actions ve-portal" inert={sharing || undefined}>
 		<PostDraftStatus
 			saving={draftSaving}
 			error={saveFailure}

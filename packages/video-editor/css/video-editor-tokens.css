@@ -19,8 +19,9 @@
 }
 
 /*
- * Tokens the editor UI reads, mapped where the editor sits: on its root and on
- * the roots it portals to the body. Each takes the host's token of the same
+ * Tokens the editor UI reads, mapped where the editor sits: on its root, on
+ * the roots it portals to the body and on the header actions a host draws in
+ * its own header. Each takes the host's token of the same
  * name when the host defines it. A line without a fallback is one whose sites
  * carry their own fallback or that no site gives one.
  */
