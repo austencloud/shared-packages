@@ -1,7 +1,13 @@
 import type { Component } from "svelte";
 import { describe, expect, it, vi } from "vitest";
 import { faFan } from "../src/ui/kit/icons.js";
-import type { ItemKindUi, PluginUi, ToolPanelProps, VideoEditorPlugin } from "../src/plugin.js";
+import type {
+	ItemKindUi,
+	PluginBindings,
+	PluginUi,
+	ToolPanelProps,
+	VideoEditorPlugin,
+} from "../src/plugin.js";
 
 const Panel = (() => {}) as unknown as Component<ToolPanelProps>;
 
@@ -45,5 +51,23 @@ describe("plugin UI members", () => {
 		expect(restyle?.look({ ...env, underlyingItem: null })).toBeNull();
 		await expect(restyle?.render("blob:qr", "dark")).resolves.toBe("blob:qr#dark");
 		expect(render).toHaveBeenCalledWith("blob:qr", "dark");
+	});
+
+	it("bindings report render readiness and a notice, and ready their sources", async () => {
+		const prepared: string[] = [];
+		const bindings: PluginBindings = {
+			bindingFor: () => null,
+			exportPainters: () => new Map(),
+			renderStatus: () => ({ ready: false, error: "Not prepared" }),
+			prepareRender: async () => {
+				prepared.push("looks");
+			},
+			notice: () => ({ message: "Preparing", alert: false }),
+			dispose: () => {},
+		};
+		expect(bindings.renderStatus?.()).toEqual({ ready: false, error: "Not prepared" });
+		expect(bindings.notice?.()).toEqual({ message: "Preparing", alert: false });
+		await bindings.prepareRender?.();
+		expect(prepared).toEqual(["looks"]);
 	});
 });

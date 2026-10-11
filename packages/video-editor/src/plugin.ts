@@ -236,6 +236,22 @@ export interface EditorMode {
 export interface PluginBindings {
 	bindingFor(role: string): CompositionSourceBinding | null;
 	exportPainters(): ReadonlyMap<string, PostStudioLayerPainter>;
+	/**
+	 * Whether the plugin's sources can render now, and why not when one failed (tka: the changed
+	 * notation and the animation overlay are prepared, and the viewer's panels are still). Read
+	 * inside a `$derived`, so what it reads is tracked. Absent: always ready.
+	 */
+	renderStatus?(): { ready: boolean; error: string | null };
+	/**
+	 * Readies what the plugin redraws before a render, which waits for it and fails with it (tka:
+	 * both looks of every image). Absent: nothing to ready.
+	 */
+	prepareRender?(): Promise<void>;
+	/**
+	 * A notice the top bar shows beside Undo and Redo; `alert` marks a failure (tka: the changed
+	 * notation is being prepared, or could not be). Read inside a `$derived`. Absent: none.
+	 */
+	notice?(): { message: string; alert: boolean } | null;
 	dispose(): void;
 }
 
