@@ -141,8 +141,6 @@ export function toolLabel(
 			return t("post_editor_add");
 		case "canvas":
 			return t("post_editor_tool_canvas");
-		case "look":
-			return "Animation defaults";
 		case "export":
 			return t("post_editor_export");
 		case "trim":
