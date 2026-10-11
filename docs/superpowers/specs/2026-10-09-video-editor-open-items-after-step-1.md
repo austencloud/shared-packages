@@ -9,6 +9,13 @@ left. The 2A record and its gate numbers are in the parent spec under "Step 2A
 as built"; what 2A left over is under "Carried out of step 2A" in the Step 2
 section.
 
+Step 2B update (2026-10-11): the bullets 2B closed are struck the same way, and
+"Step 2A hand-off, by item" in the Step 2 section gives each of the 21
+`HANDOFF_2B` items from the 2A whole-step review its status. What 2B left for
+Ringmaster is under "Left by step 2B" in the Step 3 section. The 2B record is in
+the parent spec under "Step 2B as built". 2B ended at package `30b0741` and tka
+`ea95be4b40`, still before tka main is merged into `codex/video-editor`.
+
 This file condenses the step 1 per-task reviews, the whole-step review and the
 notes carried between tasks. They lived in a session scratchpad under a Temp
 folder, which can be cleaned, so this file is now the record. It describes the
@@ -243,6 +250,10 @@ recovery type exports and stale request, the weight of the render entry in
 `PostShareSheet`, the vitest browser project and component tests, and the
 `alignment` equivalence case with the bound evaluate wrappers.
 
+2B status (2026-10-11): every item in that list is closed except the
+`alignment` equivalence case, which 2B decided against (item 15 below). Each
+bullet names its 2B task and commits.
+
 ### Plugin members to settle before wiring
 
 The spec's "Step 1 as built" says `alignment`, `painters` and `surfaces` are
@@ -272,6 +283,10 @@ typed but unread. Settle each before anything wires it.
     file, its context file, the null branch in `PostStudioMediaLayer` and its
     test. Closed in 2A Task 4 (package `f2699a6`, tka `f00a174c8a`); the slots
     and breakdown modules only it used went too.
+  - Decided in 2B (`HANDOFF_2B` item 15): no UI caller uses the bound
+    wrappers after the move, so they stay as tka's test API, because the frozen
+    parity test imports them. The equivalence case below is therefore not
+    needed; the two sub-bullets after it stand as a record.
   - Before wiring, add an equivalence case to `alignment.test.ts`: the bound
     wrapper with the editor's literal against the package evaluator with the
     provider, deep-equal layers at a few timestamps.
@@ -283,7 +298,9 @@ typed but unread. Settle each before anything wires it.
   - `tkaFrameAlignment(input)` copies optional fields by identity, so its result
     carries `undefined` for absent keys. That is harmless while tka compiles
     with `exactOptionalPropertyTypes: false` and the evaluator only reads them.
-- **`surfaces` factory.** `src/plugin.ts:87` declares `surfaces?` as a static
+- ~~**`surfaces` factory.**~~ Closed in 2B Task 7 (package `42a6db8`, tka
+  `80ce593570`): the member is `createSurfaces?()`, called once per export.
+  `src/plugin.ts:87` declares `surfaces?` as a static
   array on a module-singleton plugin, and nothing reads it. Surfaces hold
   per-export state and the exporter releases them, so wiring it as written would
   share one `PostStudioPictographCapture` across exports and between a preview
@@ -295,7 +312,8 @@ typed but unread. Settle each before anything wires it.
     live (tka `surfaces.ts` imports both); never delete them as dead modules.
   - Whatever moves capture ownership must keep the parity lifecycle (see
     Standing).
-- **Memoized text painter (font flash).** `textPainterFactory`
+- ~~**Memoized text painter (font flash).**~~ Closed in 2B Task 7 (package
+  `42a6db8`, with the positive-path cases in tka `80ce593570`). `textPainterFactory`
   (`src/render/painter-registry.ts:48`) builds a fresh `TextItemPainter` per
   `paintersFor` call, and that painter's `fontReady` starts false, so every
   compile would flash the fallback font in the preview. The workspace today
@@ -319,7 +337,9 @@ typed but unread. Settle each before anything wires it.
     about a role no factory answers, which is undocumented either way; pin it
     with a null-factory case. A duplicate role resolves first-wins and has no
     test.
-- **A painted mode with no painter vanishes silently.** Partly closed in 2A Task 14 (package `dfc3b8f`): a
+- ~~**A painted mode with no painter vanishes silently.**~~ The rest closed in
+  2B Task 6 (package `7e8cedf`): both branches restore in a `finally`.
+  Partly closed in 2A Task 14 (package `dfc3b8f`): a
   painted layer with no painter now throws, and the DOM-surface branch restores
   in a `finally`. Still open: `drawPaintedLayer` and the `sourceGeometry` branch
   restore outside a `finally` (see "Carried out of step 2A"). The registry's
@@ -342,7 +362,9 @@ typed but unread. Settle each before anything wires it.
   calls made inside the package. Add a package test that fails when a moved edit
   path drops the plugin, or route those callers through a plugin-carrying
   context.
-- **One app-wide `IPreviewVideoCache`.** Partly closed in 2A Task 12 (package `f0d959a`, tka
+- ~~**One app-wide `IPreviewVideoCache`.**~~ The rest closed in 2B Task 20
+  (package `6333c64`): the moved workspace reads `services.previewCache` from
+  the host. Partly closed in 2A Task 12 (package `f0d959a`, tka
   `bca6c8474b`): `createVideoPreviews` takes the cache as a required parameter, the
   host contract carries `previewCache`, and tka's workspace passes
   `getPreviewVideoCache()`. The UI that moves in 2B must take the cache from the
@@ -353,23 +375,33 @@ typed but unread. Settle each before anything wires it.
   a dependency, never tka's singleton. The instance owns the one-encode queue
   and the active-bytes budget, so two instances double the budget and run
   encodes in parallel.
-- **Keep the per-update `muted` assignment.** Frame recovery mutes the video
+- ~~**Keep the per-update `muted` assignment.**~~ Kept: the media layer moved
+  in 2B Task 20 (package `6333c64`) and `src/ui/PostStudioMediaLayer.svelte`
+  still assigns `video.muted` on every update. Frame recovery mutes the video
   (`src/render/preview-frame-recovery.ts:207`) and never unmutes it; tka's
   `PostStudioMediaLayer.svelte` (633) re-applies the assignment on every update.
   Keep that when the media layer moves.
-- **Keep one module instance of the package.** tka catches
+- ~~**Keep one module instance of the package.**~~ Held: tka's one-Svelte
+  probe (2B Task 3, tka `644da1f4b9`) passes, and the 2B production builds put
+  the editor context's `video-editor-ui` symbol in exactly one chunk (Task 22
+  and Task 23). The `instanceof` test moved with the audio track to the
+  package's `test/post-audio-track.test.ts`. tka catches
   `AudioDownloadStalledError` with `instanceof`, so the host dedupe must hold
   when the UI moves.
-- **Export the frame recovery types.** `PreviewFrameRecoveryOptions` and
+- ~~**Export the frame recovery types.**~~ Closed in 2B Task 6 (package
+  `7e8cedf`). `PreviewFrameRecoveryOptions` and
   `PreviewFrameState` (`src/render/preview-frame-recovery.ts:1`, `:7`) and
   `PreviewSeekState` (`src/render/video-preview-seek.ts:1`) are not exported;
   export them when the media layer moves and needs them.
-- **Frame recovery stale request.** In `src/render/preview-frame-recovery.ts`
+- ~~**Frame recovery stale request.**~~ Closed in 2B Task 6 (package
+  `7e8cedf`): a stale frame callback clears its request id. In `src/render/preview-frame-recovery.ts`
   (`requestFrame`, about 104-115), a frame callback that fires while
   `isCurrent()` is false leaves its request id set, so `update()` can skip
   restarting playback capture. It is unlikely; review it together with the seek
   listener handling, which lives in tka's media layer.
-- **Weight of the render entry in `PostShareSheet`.** tka
+- ~~**Weight of the render entry in `PostShareSheet`.**~~ Measured in 2B
+  Task 22: the same component chunk is 83,570 bytes against 83,527 (+43
+  bytes, +0.05%), so the UI move pulled nothing new into it. tka
   `PostShareSheet.svelte` imports `hasDecodableAudioTrack` from the whole render
   entry, which pulls dexie and the compositor into that component's graph. Task
   14 measured its chunk at 83,527 bytes, with `sideEffects` keeping the package
@@ -411,7 +443,10 @@ typed but unread. Settle each before anything wires it.
   the package lib is ES2022), `post-video-color-grade.test.ts` 39, 50, 69 and 80
   (a readonly `Rgb` into a mutable tuple) and `text-item-painter.test.ts` 348.
   Add a `tsconfig.test.json`, add it to the `check` script and fix the 8.
-- **Vitest `projects`.** Partly closed in 2A Task 3 (package `89e06d8`): the `unit` (jsdom),
+- ~~**Vitest `projects`.**~~ The rest closed in 2B Task 5 (package `b2e96e8`):
+  a `browser` project in headless Chromium, with the component tests that
+  arrived with their components and the plugin-free editor test (Task 21,
+  package `fc76334`). Partly closed in 2A Task 3 (package `89e06d8`): the `unit` (jsdom),
   `canvas` and `state` (svelte plugin) projects exist. The browser project and
   component tests wait for 2B. Add a jsdom unit project that honors the node docblock
   in `test/render-entry-node.test.ts` (that test must never run in a browser
@@ -460,15 +495,21 @@ typed but unread. Settle each before anything wires it.
 
 ### Carried out of step 2A
 
-For 2B's first tidy; no 2A task is left to own them.
+For 2B's first tidy; no 2A task is left to own them. 2B status: all closed
+except the `POST_STUDIO_SOURCES` read, which moved to the Step 3 list, and the
+`hero-act` note, which stays a record.
 
-- **Task 13 review nits.** tka `post-editor-state.svelte.ts:434`: the dispose
+- ~~**Task 13 review nits.**~~ Closed in 2B Task 1 (package `3e9071a`, tka
+  `7b2c5d3aa4`). tka `post-editor-state.svelte.ts:434`: the dispose
   comment is one 155-character line. tka
   `docs/development/post-studio-manifest-bridge.md:26` omits
   `core/edit/music-edits.ts` for the music ops and names PIP edits that ops never
   call. Package `scripts/step1/check-intersection.mjs` keeps a dead `PNPM_STORE`
   replace.
-- **Task 14 review nits.** The `DOM_SURFACE_MODES` doc comment at
+- ~~**Task 14 review nits.**~~ Closed in 2B: the doc comment and the two
+  `finally` restores in Task 6 (package `7e8cedf`), the registry test in Task 7
+  (package `42a6db8`). The `POST_STUDIO_SOURCES` read is now a Step 3 item
+  (`HANDOFF_2B` item 7, under "Left by step 2B"). The `DOM_SURFACE_MODES` doc comment at
   `src/render/frame-compositor.ts:468` still says every other mode reaches the
   media branch, but a painted mode now throws. The `POST_STUDIO_SOURCES` read at
   `frame-compositor.ts:28` and `481-485` is one more generic place that knows
@@ -478,15 +519,50 @@ For 2B's first tidy; no 2A task is left to own them.
   next frame cannot see it today, because any frame error ends the export and the
   canvas is per export. `painter-registry.test.ts` "builds a fresh painter each
   time" asserts on the fake factory, not the registry.
-- **No package test of `core/edit/music-edits.ts`.** Its only coverage is tka's
+- ~~**No package test of `core/edit/music-edits.ts`.**~~ Closed in 2B Task 1
+  (package `3e9071a`). Its only coverage is tka's
   19-case `post-music-edits.test.ts`, through tka's plugin and fixtures. Add a
   plugin-free case.
-- **The surface test pins names, not signatures** (plan risk R13), and tka's type
+- ~~**The surface test pins names, not signatures**~~ (plan risk R13). Closed
+  in 2B Task 4 (tka `ce611dfc8b`): a type check that tka's wrapper is a package
+  editor state. The test pinned names only, and tka's type
   gate covers `src` only. A member no `src` file uses has no type check.
 - **`hero-act.test.ts` under load.** `src/lib/shared/landing/data/__tests__/`
   failed two "shape-matrix source" cases in one of two full `test:ci` runs at
   Task 15 and passes alone; its `flushUntil` waits 50 timer ticks. Not a video
-  editor file; raise the wait or wait on the mock instead.
+  editor file; raise the wait or wait on the mock instead. Recorded only
+  (`HANDOFF_2B` item 20), together with the five tka worker chunks that carry
+  raw `$state(` calls from pre-existing tka stores. Both are tka issues outside
+  the video editor.
+
+### Step 2A hand-off, by item
+
+The 2A whole-step review handed 2B 21 items (`HANDOFF_2B`). Their status at the
+end of 2B:
+
+| Item | What | Status |
+| --- | --- | --- |
+| 1 | Device store "post" error texts into the strings table (R12) | Closed in Task 3 (package `3739403`) |
+| 2 | `notify` and `shortcuts` on the host; the picker and `mediaLibrary` (R5) | Closed in Task 4 (package `7ae59b3`, tka `ce611dfc8b`); `haptics` was added too |
+| 3 | `createSurfaces`, the memoizing text painter and the render-side items | Closed in Tasks 6, 7, 20 and 22 (bullets above) |
+| 4 | tka's editor strings import the package root; a `./strings` subpath | Closed in Task 3 (package `3739403`, tka `644da1f4b9`) |
+| 5 | `DOM_SURFACE_MODES` doc comment | Closed in Task 6 (package `7e8cedf`) |
+| 6 | Restores outside a `finally` | Closed in Task 6 (package `7e8cedf`) |
+| 7 | `presetRenderMode` reads `POST_STUDIO_SOURCES` | Open, moved to Step 3 ("Left by step 2B") |
+| 8 | The registry test asserts on the fake factory | Closed in Task 7 (package `42a6db8`) |
+| 9 | No package test of `music-edits.ts` | Closed in Task 1 (package `3e9071a`) |
+| 10 | tka's 160-character dispose comment | Closed in Task 1 (tka `7b2c5d3aa4`) |
+| 11 | The bridge doc's music and PIP lines | Closed in Task 1 (tka `7b2c5d3aa4`) |
+| 12 | The dead `PNPM_STORE` replace | Closed in Task 1 (package `3e9071a`) |
+| 13 | The surface test pins names, not signatures (R13) | Closed in Task 4 (tka `ce611dfc8b`) |
+| 14 | The vitest browser project and component tests | Closed in Task 5 (package `b2e96e8`) |
+| 15 | The bound evaluate wrappers | Decided: they stay as tka's test API (see the `alignment` bullet) |
+| 16 | R1: ops, looks, bridge guard and backup modules stayed in tka | Decided in the 2B plan: no moved file imports them, so they stay in tka; the backup download and the InShot import reach the editor as tka panels |
+| 17 | Docs tidy | Closed: the three open-items fixes in the 2A record fixes (package `8d336a0`, `ba3b555`), the `presets.ts` comment in Task 1 (package `3e9071a`) |
+| 18 | Step 1 copy that reads as tka | Open, added to "Copy that reads as tka" in Step 3 |
+| 19 | Two optional tests | Deferred to step 3 ("Left by step 2B") |
+| 20 | `hero-act.test.ts` and the tka worker chunks with raw `$state(` | Recorded only (above) |
+| 21 | The real-sequence browser proof with Austen signed in | Closed in Task 23 Step 3 (2026-10-11) |
 
 ## Step 3 (Ringmaster adopts it)
 
@@ -578,12 +654,23 @@ For 2B's first tidy; no 2A task is left to own them.
   log prefix (`src/render/audio-track.ts:290`); "Post Studio" in
   `src/render/media-audio-inspector.ts:4`; the timing-screen history comment in
   `src/render/video-mirror.ts`; the `I` prefix on `IPreviewVideoCache`.
+  Added from the 2A review (`HANDOFF_2B` item 18), line numbers as of 2A: the
+  `post-project:` preset id prefix (`src/state/video-editor-state.svelte.ts:230`,
+  moved from tka `bound.ts:48`), and step 1 copy at `compiler.ts:866-868`,
+  `music-grid.ts:36` (a tka CLI hint), `audio-track.ts:286`,
+  `frame-compositor.ts:370`, `post-plan.ts:210` and `:219`,
+  `schema-factory.ts:69-70`, `schema.ts:676`, `post-exporter.ts:67` and
+  `plan-compiler.ts:30` and `:426-427`. Unchanged in code by 2B.
 - **`DOM_SURFACE_MODES`.** `src/render/frame-compositor.ts:469` is
   `new Set(["sequence-animation", "choreo-card"])`: tka's render modes inside
   the package, with a doc that states them as package truth. Reword the doc as
   "the modes a host must supply a surface for" and move the set to the plugin or
   the host. A no-surface host works only while its preview never mounts those
-  modes. This ties to the card decision.
+  modes. This ties to the card decision. With it goes `HANDOFF_2B` item 7:
+  `presetRenderMode` (`src/render/frame-compositor.ts`, find
+  `POST_STUDIO_SOURCES`) still reads tka's carousel sources in generic code.
+  Both are the compositor's tka vocabulary; move them out together, now that
+  surfaces are a plugin factory (`createSurfaces`).
 - **Two `PostFraming` shapes.** `src/core/plan/post-plan.ts` (area, fit, zoom,
   pan) and `src/core/project/schema.ts` (zoom, pan, rotation) both declare
   `PostFraming` and `PostFramingSchema`. `src/core/index.ts` re-exports the
@@ -628,6 +715,71 @@ For 2B's first tidy; no 2A task is left to own them.
   says "see `post-project-keyframes.ts`" (now `core/project/keyframes.ts`),
   which can be fixed when that file moves in step 2. That last item went with the
   edit engine in 2A Task 6 (tka `0a242bc1fd`).
+
+### Left by step 2B
+
+From the 2B reviews and the Task 23 browser proof. Package paths as above;
+find each passage by its text.
+
+- **Ringmaster's save place.** `PostSaveButton`'s `LABELS` and
+  `PostDraftStatus`'s texts are English literals, not `EN` keys.
+  `PostEditorWorkspace` passes `disk={!!onSaveDraft}`, so any host's save reads
+  "Saved to this computer", which is wrong for a cloud save (the Task 23
+  real-post proof shows it on a tka account draft too). Give the host a way to
+  name its save place. The Save button and the header draft status live only in
+  the `headerActions` snippet: with no header provider, `VideoEditor` shows no
+  Save button and has no Ctrl+S, so Ringmaster calls `providePostEditorHeader`
+  and renders `header.actions`.
+- **Frozen save-target reads.** The workspace reads its untracked `onSaveDraft`
+  copy in `postActions` and `headerActions`, where tka read the live prop. That
+  is equivalent while every caller keys the editor per post, as all four tka
+  callers do; read the live prop if a host ever swaps it in place.
+- **tka kind names behind widening casts.** `PostItemTool`'s kind switch and
+  the workspace's `"animation"` checks still name tka kinds.
+- **Popover menus against the no-dropdown rule.** The kit's `FilterChip`,
+  `ChipPopoverOption` and `OverflowMenu` open popover menus. Ringmaster's rules
+  forbid dropdowns, and its gear rule names popover selectors too, so decide per
+  menu whether Ringmaster shows visible choices instead before it mounts the
+  editor.
+- **The Ringmaster spike page's import** becomes `VideoEditorSpike` (renamed in
+  2B Task 3, package `3739403`).
+- **Six dead `en.ts` texts.** `share_studio_timing_unmapped`,
+  `share_studio_timing_unchecked`, `share_studio_timing_checked`,
+  `share_studio_sequence_changed`, `share_studio_map_timing_for` and
+  `share_studio_check_timing_for` are used only by tka's binding through tka's
+  own `t`. Remove them from the package table.
+- **Take-status badge CSS.** `PostMediaPanel.svelte` styles tka's take-status
+  ids (`.status-confirmed`, `.status-stale`), which the plugin's bindings
+  supply. Let the plugin style its own ids, or name the statuses generically.
+- **Two copies of the draft autosave.** The workspace uses the package's
+  `createDraftAutosave` and `shouldSubmitDraft`; tka's `post-draft-storage.ts`
+  keeps `createPostDraftAutosave` and `shouldSubmitPostDraft` because its own
+  test and `feature-video-client.test.ts` import them. Point those tests at the
+  package and delete tka's copy.
+- **`inshot-recovery-package.ts` imports the whole `ui` entry** for
+  `loadPostProjectFonts` (moved in 2B Task 18 with its `loadedFonts` map). A
+  server or worker consumer of that tka module would load the editor's
+  components. Give the function a narrower export.
+- **tka tidy.** 11 comment lines still name `PostStudio.svelte` (in
+  `export-options-state.svelte.ts`, `ex-slice.ts`, `ps-slice.ts` and
+  `ps-slice.test.ts`); `docs/architecture/canonical-capabilities.md` (about
+  390-392 and 433-434) and `scripts/component-manifest.json` (31 entries) still
+  list the old tka paths of moved components; the notice text "Preparing the
+  changed animation and cards" in tka's `ui/tka-painters.svelte.ts` keeps a
+  U+2026 ellipsis moved verbatim from the workspace.
+- **Key lane label.** While Trim or Appearance is the open tool, the key lane
+  header names another property ("Crop" with 0 keyframes in the feature-route
+  proof, "Position" with 5 in the real-post proof). Probably as old as tka's
+  editor; compare with tka main before changing it.
+- **Two optional tests** (`HANDOFF_2B` item 19): pin tka's history envelope
+  with `sequenceId` second (no tka test reads `headUpdatedAt`; the package's
+  `test/device-store.test.ts` pins only the plugin-free order), and the
+  feature-video history key (`feature-video-client.ts:21`).
+- **Worktree dev servers lack tka's recovery media.** A tka worktree's static
+  folder has no `word-videos/inshot-recovery/` files, so a saved draft that
+  links them shows "A network error occurred" and 404s for the video, the QR
+  image and the marker font. That is the environment, not the editor; serve the
+  primary checkout's media or pick the video again when a proof needs playback.
 
 ## Step 4 (release and merge)
 
@@ -733,7 +885,25 @@ In the package:
   `1f7f648`; 2A Task 3 made `check` run `tsconfig.test.json`. CI still runs only
   `pnpm check` (`.github/workflows/ci.yml:32`) and the root has no `test` script,
   so package tests do not run in CI; that, and wiring `forbidden-imports.mjs`
-  into a script, stay open for 2B's first tidy or step 4.
+  into a script, stay open for 2B's first tidy or step 4. Status after 2B
+  (plan item 22): unchanged. CI still runs only `pnpm check`
+  (`.github/workflows/ci.yml:32`). Step 4 adds
+  `pnpm --filter @austencloud/video-editor test`, with a Chromium install for
+  the `browser` project, and `node packages/video-editor/scripts/step1/forbidden-imports.mjs`.
+- **tka's contract tests read the package build by absolute path.**
+  `post-music-preview-contract`, `post-save-target-contract` and
+  `prop-color-picker-contract` read package `.svelte` files from
+  `E:/worktrees/shared-packages/video-editor/packages/video-editor/dist`, the
+  root the vitest alias reads (tka `ea95be4b40`). Step 4 swaps that root with
+  the alias, for the installed package's files.
+- **Rollup comment notes on two package components.** tka's production build
+  warns that `PostEditorWorkspace.svelte` (four places) and `PostTimeline.svelte`
+  (one) contain an annotation comment Rollup cannot place, and drops it, with a
+  "Can't resolve original location" sourcemap note for each. tka's own copies
+  did not draw it in the 2A builds; tka files such as `PanelGroup.svelte` draw
+  the same note. The output is unaffected. Find what in the package build's
+  compile of those two files differs (neither source holds an annotation
+  comment), and recheck on the step 4 build against the published package.
 
 ## How to retire an item
 

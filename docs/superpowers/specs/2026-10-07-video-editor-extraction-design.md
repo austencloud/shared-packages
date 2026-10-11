@@ -458,9 +458,12 @@ apps, regenerate Ringmaster's lockfile from a clean install, run both gates.
 | 3 Ringmaster | Store, schema, media library, routes, Spotlight entry, export, old editor removed | Open, trim, keyframe, add music, export a real clip on a worktree server; gate scripts green |
 | 4 Release | Changeset, publish 0.1.0, swap aliases for pins, clean lockfiles, integrate all three repos, rebase `codex/feature-video-captures` | CI green in all three repos; worker-proof PASS on both apps' production builds against the installed published version (the alias loop never exercises the exports map, `files`, `sideEffects` or `optimizeDeps.exclude`); `private` removed and the package description corrected in the changeset commit; captures branch rebased and its tests green |
 
-Each step gets its own plan under `docs/superpowers/plans/` in this repo and
-runs subagent-driven (sonnet implementers, opus review between tasks, haiku
-for mechanical moves and censuses).
+Each step gets its own plan under `docs/superpowers/plans/` in this repo.
+Steps 1 to 2B ran subagent-driven (sonnet implementers, opus review between
+tasks, haiku for mechanical moves and censuses). From step 3 on, Austen's Agent
+Budget applies (2026-10-10, after 2B's token cost): a plan has a handful of
+substantial tasks, the controller executes inline by default, one review per
+feature, no re-review rounds, and the controller verifies review fixes itself.
 
 ### Step 2A as built (2026-10-09)
 
@@ -647,6 +650,9 @@ go-ahead for the one clip move and undo on a post of his choosing, because the
 save would go to his account. It is to be run and recorded here before step 4
 at the latest. Not claimed as passed.
 
+Update (2026-10-11): run on the 2B tip with Austen signed in; the result is
+under "Step 2B as built", "Browser proof".
+
 #### Plan wording slips found during execution
 
 - Task 1 Step 7 names `video-editor-step1/check-baseline.txt` as the step 1
@@ -792,6 +798,164 @@ warning naming `video-editor-state`, `video-previews`, `$state` or `$derived` fr
 the package, and the client chunk holding the package code (it contains the tab
 sync channel prefix `tka:post-studio:tabs`) has no uncompiled `$state(` call. tka
 needed no `optimizeDeps.exclude` change for it.
+
+### Step 2B as built (2026-10-11)
+
+2B moved the editor UI. The plan is
+`docs/superpowers/plans/2026-10-10-video-editor-step-2b-ui.md`. Each monolith
+was split along the plugin seam while it still lived in tka, so tka's own tests
+proved the split changed nothing, and then the generic remainder moved into
+`src/ui/` with the step 1 move tools. tka's `PostModule` now renders the
+package's `VideoEditor` inside `TkaEditorScope`, and `PostStudio.svelte` is
+gone. The 21 hand-off items from 2A are tracked by number in
+`2026-10-09-video-editor-open-items-after-step-1.md` ("Step 2A hand-off, by
+item"), and what 2B leaves for Ringmaster is under "Left by step 2B" there.
+
+Decisions and changes against the sections above:
+
+- **`laneRenderer` is replaced by `ui.parts` and `ui.icon`.** The edit
+  timeline has no TKA lane: every item, TKA kinds included, draws as a generic
+  block, and the only TKA-specific drawing is the animation's tunnel (a joined
+  block the plugin supplies through `ItemKindDefinition.ui.parts`) and the
+  kind icon (`ui.icon`, with `iconFor` for a mode's own icon). The one TKA
+  lane, take timing, belongs to the timing mode and arrives through
+  `ui.modes[].timeline`. The plugin's UI members are Svelte component values
+  or plain functions, never string names: on a kind `ui.toolPanel`, `ui.parts`
+  and `ui.icon`; on the plugin `ui.toolPanel`, `ui.tools`, `ui.toolRow`,
+  `ui.addItems`, `ui.mediaSublayer`, `ui.modes`, `ui.canvasOverlays` and
+  `ui.panels`.
+- **Looks and presets stay in tka.** `post-project-looks.ts` stays in tka and
+  no `looks` or `presets` member joins the plugin contract. Its only UI caller
+  is the video "layout" tool (the Dual, Breakdown and Full looks), which is
+  part of tka's `ui.toolPanel` and imports the looks module directly.
+  `applyTutorial` and `applyTemplate` have no UI caller; their callers are
+  tka's ops, the dev bridge and the wrapper. A package member with no package
+  consumer would be an untested contract.
+- **The host gained `notify`, `shortcuts` and `haptics`**, each optional with a
+  default from `resolveServices(host)` (`src/host-defaults.ts`): `notify` writes
+  to the console only when `host.dev` is set, `shortcuts` is one window
+  `keydown` listener that ignores typing in fields, and `haptics` is a no-op.
+  `haptics` was not in the spec's host contract; the kit's drawer header and
+  confirm dialog called tka's haptics service and now call the host.
+- **The `mediaLibrary` decision.** The picker drives the async
+  `host.mediaLibrary`: the media panel's library list and the add panel's saved
+  videos come from `listTakes()`, reloaded when the library's optional
+  `onChange` fires, so a video uploaded elsewhere appears without reopening.
+  `LibraryTake` gained `detail?`. `options.libraryTake` stays for the
+  synchronous lookups while loading and relinking, because making them async
+  would change load order, which parity guards.
+- **`createSurfaces()` replaces `surfaces`.** The plugin member is a factory the
+  workspace calls once per export, so exports never share a capture surface.
+  `createTextPainters(getCompiled)` keeps one text painter per item id for the
+  editor's lifetime, reading the item's words from the latest compile, so a
+  recompile no longer flashes the fallback font.
+- **Three new subpaths.** `./ui` (`VideoEditor`, `PostEditorWorkspace`, the
+  editor and header contexts, `Popover` and the editor's helper modules),
+  `./strings` (the strings table, `provideStrings` and
+  `useStrings`, light enough for tka's editor strings to import without the
+  UI) and `./icons` (inline SVG icons built from Font Awesome solid data; the
+  package draws no `fa-` classes, which `forbidden-imports.mjs` now checks).
+- **Tokens are scoped.** The `--ve-*` tokens sit on `.ve-root` and
+  `.ve-portal` (`css/video-editor-tokens.css`). `.ve-root` is
+  `display: contents`. Anything the editor draws outside its root carries
+  `ve-portal`: the kit's portalled roots, and the header actions a host draws
+  in its own header.
+- **The UI kit is copied without bits-ui.** `Popover` is plain Svelte, and the
+  confirm dialog is a fixed overlay with `role="dialog"`, `aria-modal` and the
+  kit's focus trap, which is what bits-ui rendered.
+
+Two fixes came out of the Task 16 to 22 review and the browser proof, both on
+the package after Task 22:
+
+- `f3b85c3`: the timeline zoom popover lines up with its button's start edge
+  (`align="start"`), stacks at `var(--ve-z-dropdown, 300)` and focuses its
+  first control on open, as tka's bits-ui panel did.
+- `30b0741`: tka draws the editor's header actions (Save, the draft status,
+  More and Export) in its own header, outside `.ve-root`, so they lost their
+  token values and Export lost its accent fill. The actions' wrapper now
+  carries `ve-portal`. The feature-route proof caught it.
+
+tka's `ea95be4b40` binds the sequence to a `{@const}` before the account save
+reads it (the snippet lost the branch's narrowing) and points the three contract
+tests that read package source at the package build the vitest alias reads.
+
+Commit ranges (nothing is merged to `main` or pushed):
+
+- Package, branch `video-editor`: `ba3b555` (exclusive) to this record. Plan
+  `2c4430f`; the last code commit is `30b0741`.
+- tka-platform, branch `codex/video-editor`: `32f1ee5675` (exclusive) to
+  `ea95be4b40`. Each tka commit that needs a package commit names it in a
+  `Package: video-editor@<hash>` line.
+
+#### Browser proof (Task 23)
+
+The dev server was the tka worktree's `tka-video-editor-worktree` entry on port
+5221, from tka `ea95be4b40` with the package built from `30b0741`. Proof files
+are in the gate folder `C:/Users/Austen/AppData/Local/Temp/claude/video-editor-step2b/`.
+
+Accessibility snapshot before the proof edited anything: the crop and timing
+screens match the 2A baseline exactly. The edit screen differs only by one new
+row, a second take of `generate-phone` that the captures work added to the
+feature video library on 2026-10-10; no control changed role, name or state.
+
+Feature route (`/post?feature=generate-vertical`, guest, private headless
+Chrome): the 2A script's eleven checks plus seven new ones, all 18 PASS on the
+final run (`task23-proof-branch/`). The new checks: the trim panel opens with
+its In and Out readouts; the timeline draws one block per item; a keyframe is
+added at the playhead and undone, with the disk back to clean; the music tool
+opens read-only on `promo-1-0-rough`; the export sheet opens and closes without
+exporting; a text clip drags 120 px right through CDP mouse events and its saved
+`start` grows; Ctrl+Z from the keyboard undoes the drag, and a second one
+removes the text with the disk back to its starting items. Each 2A screenshot
+matches its 2B counterpart apart from text, the clock and the animated
+background. The console shows the same two guest errors as 2A. One side
+effect: the first run saved a default timing entry for that second
+`generate-phone` take, which is what the editor does for any take with no
+timing; the project otherwise ends equal to its backup.
+
+Real sequence (`/post`, Austen signed in, in-app browser): the saved post for
+`DCKΨ-` opened in the editor with Save and Export in tka's header in their
+colours. The "Watch hands closely" text clip dragged from 0:44.1 to 0:48.9 (its
+end snapped to the next clip at 0:55.5); undo put it back at 0:44.1 to 0:50.8
+and left the undo history empty, so the draft ended as it started (two local
+draft writes, the move and the undo). The `beats` tool on the video clip opened
+the timing mode (Export is locked there by design, as in tka). Back in editing,
+the animation item's `appearance` tool opened its panel with the Props,
+Effects, Efforts and Display tabs. Screenshots are `01-open` to
+`05-appearance` in `task23-proof-real/`. The draft's video showed "A network
+error occurred": the worktree's static folder lacks tka's
+`word-videos/inshot-recovery/` media, so the video, its QR image and a font
+404. That is the environment, not the editor.
+
+#### Exit criteria on the final commits
+
+Run on 2026-10-11 with tka at `ea95be4b40` and the package at `30b0741`, the
+package rebuilt first. Numbers follow the plan's exit table. Output files are in
+the gate folder named above; the numbers are repeated here because that folder
+is a Temp folder.
+
+| # | Criterion | Result |
+| --- | --- | --- |
+| 1 | Parity | `Tests 4 passed \| 1 skipped (5)` now and in every task report; `PARITY_WRITE` never set |
+| 2 | Package build, check, test | build exit 0; `svelte-check found 0 errors and 0 warnings` twice; node tests 46 pass, 0 fail; vitest 60 files, 601 tests passed (`final-pkg-*.txt`) |
+| 3 | Plugin-free editor | `--project browser test/browser/video-editor.svelte.test.ts` 3 passed |
+| 4 | No tka in the package | `forbidden imports: 0`, `fa- classes: 0`; the `$lib` and `post-studio-plugin` grep prints nothing |
+| 5 | Relative imports | `move.mjs --check` exit 0 |
+| 6 | Moved tests in the package | `unit` 48 files, 515 tests; `browser` 8 files, 58 tests; `canvas` 2 files, 19 tests; all passed |
+| 7 | tka types | `baseline 625, after 615, new 0` (`check:fast` exits 1 on the remaining baseline errors; `check-final.txt`) |
+| 8 | tka tests | `test:ci` exit 0: 2585 files passed with 3 skipped, 22591 tests passed with 10 skipped and 1 todo; no `Errors` line, no rerun needed (`test-final.txt`) |
+| 9 | Production build | exit 0, two `built in` lines (2m 49s, 3m 40s), no error and no rune warning. Not clean by the letter: Rollup's "annotation that Rollup cannot interpret" note, with its "Error when using sourcemap" line, names two package components (`PostEditorWorkspace.svelte` four times, `PostTimeline.svelte` once). It is the same note tka's own components get in this build (`PanelGroup.svelte` and others); the comment is dropped and the output is unaffected. Recorded for step 4 in the open-items file (`final-build.txt`) |
+| 10 | One package instance | one chunk holds `video-editor-ui`; the components run of `PUI/single-svelte.svelte.test.ts` 1 passed |
+| 11 | Plugin closure | the grep prints nothing; `video-editor-bound-only.test.ts` 6 passed |
+| 12 | Trace script | `No saved post for .` (a thrown error, so exit 1, as in 2A) |
+| 13 | Ringmaster readiness | `--project state test/video-editor-state.svelte.test.ts` 8 passed |
+| 14 | `PostStudio.svelte` gone | the file is gone; `PostModule.svelte` names `VideoEditor` twice |
+| 15 | Browser proof, feature route | 18 of 18 PASS, see above |
+| 16 | Browser proof, real sequence | open, move, undo, timing mode and the appearance panel, each screenshotted, see above |
+| 17 | ASCII in the package | the scan prints nothing |
+| 18 | Records | this commit |
+| 19 | Accessibility | crop and timing identical; edit differs by the one new take row, explained above |
+| 20 | Runes in the package build | `$state(` appears 7 times in `dist/state/video-editor-state.svelte.js` |
 
 ## Worktrees and branches
 
