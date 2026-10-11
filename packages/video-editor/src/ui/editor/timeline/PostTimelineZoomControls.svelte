@@ -75,7 +75,7 @@
 			<Icon icon={faMagnifyingGlass} />
 			<Icon icon={faChevronDown} />
 		</button>
-		<Popover bind:open {anchor} label={t("post_editor_zoom")} placement="top" offset={8}>
+		<Popover bind:open {anchor} label={t("post_editor_zoom")} placement="top" align="start" offset={8}>
 			<div class="zoom-popover">
 				<div class="post-timeline-zoom">
 					{@render controls()}

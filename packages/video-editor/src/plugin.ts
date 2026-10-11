@@ -158,7 +158,7 @@ export interface ItemPart {
 }
 
 export interface ItemKindUi {
-	/** Icon on timeline blocks, the add panel and the tool row; `iconFor` lets a mode pick its own (tka: a mandala). */
+	/** Icon on the item's timeline block; `iconFor` lets a mode pick its own. */
 	icon: IconDefinition;
 	iconFor?(item: PostItem): IconDefinition;
 	/** The translated kind name; without it the editor shows the definition's `label`. */
