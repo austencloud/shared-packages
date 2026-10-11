@@ -184,6 +184,62 @@ test("placeText rewrites only the script blocks of a component and keeps .svelte
 	assert.match(result.text, /<p class="a">import x from "[$]lib[/]not[/]a[/]script";<[/]p>/);
 });
 
+test("a named import of a component re-export becomes a default import of the component", () => {
+	const out = placeText({
+		text: lines(
+			'<script lang="ts">',
+			'  import { Icon, faXmark } from "@austencloud/video-editor/icons";',
+			"</script>",
+		),
+		source: "E:/tka/src/lib/shared/share/components/post-studio/editor/PostToolRow.svelte",
+		to: "ui/editor/PostToolRow.svelte",
+	}).text;
+	assert.match(out, /import Icon from "[.][.][/]kit[/]Icon[.]svelte";/);
+	assert.match(out, /import [{] faXmark [}] from "[.][.][/]kit[/]icons[.]js";/);
+});
+
+test("a component, an alias, a svelte type and a star-reached name each resolve to their file", () => {
+	const root = tree({
+		"src/ui/index.ts": lines(
+			'export { default as Popover } from "./kit/Popover.svelte";',
+			'export { default as PostRatioPicker } from "./editor/PostRatioPicker.svelte";',
+			'export type { RatioOption } from "./editor/PostRatioPicker.svelte";',
+			'export * from "./kit/icons.js";',
+			"export const VERSION = 1;",
+		),
+		"src/ui/kit/Popover.svelte": lines('<script lang="ts">', "</script>"),
+		"src/ui/kit/icons.ts": 'export { faXmark } from "@fortawesome/free-solid-svg-icons";',
+		"src/ui/editor/PostRatioPicker.svelte": lines(
+			'<script module lang="ts">',
+			"  export type RatioOption = { id: string };",
+			"</script>",
+		),
+	});
+	const result = placeText({
+		text: lines(
+			'<script lang="ts">',
+			'  import { PostRatioPicker, Popover as Pop, type RatioOption, faXmark } from "@austencloud/video-editor/ui";',
+			'  import { VERSION } from "@austencloud/video-editor/ui";',
+			"</script>",
+		),
+		source: "E:/tka/src/lib/shared/share/components/post-studio/editor/PostEditorTopBar.svelte",
+		to: "ui/editor/PostEditorTopBar.svelte",
+		root,
+		entries: { "@austencloud/video-editor/ui": `${root}/src/ui/index.ts` },
+	});
+	assert.match(result.text, /import PostRatioPicker from "[.][/]PostRatioPicker[.]svelte";/);
+	assert.match(result.text, /import Pop from "[.][.][/]kit[/]Popover[.]svelte";/);
+	assert.match(
+		result.text,
+		/import type [{] RatioOption [}] from "[.][/]PostRatioPicker[.]svelte";/,
+	);
+	assert.match(result.text, /import [{] faXmark [}] from "[.][.][/]kit[/]icons[.]js";/);
+	// a name the entry declares itself stays on the entry, with an UNRESOLVED line
+	assert.match(result.text, /import [{] VERSION [}] from "@austencloud[/]video-editor[/]ui";/);
+	assert.equal(result.unresolved.length, 1);
+	assert.match(result.unresolved[0], /VERSION is exported by no package file/);
+});
+
 test("ENTRIES names the ui, strings and icons subpaths", () => {
 	for (const sub of ["ui", "strings", "icons"]) {
 		assert.ok(ENTRIES[`@austencloud/video-editor/${sub}`].endsWith(`/src/${sub}/index.ts`));

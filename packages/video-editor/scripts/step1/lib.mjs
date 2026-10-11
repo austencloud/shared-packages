@@ -306,6 +306,74 @@ export function definersIn(dir, skip = new Set()) {
 	return (name) => declared.get(name) ?? reexported.get(name) ?? [];
 }
 
+/**
+ * What an entry's index.ts reaches that `definersIn` cannot see in the entry's own folder:
+ *
+ * - `components`: name to the .svelte file of `export { default as Name } from "<file>.svelte"`.
+ *   An import of one of these names becomes a default import of the file.
+ * - `svelteNames`: name to the .svelte file of `export { Name } from "<file>.svelte"` (a type or
+ *   a `<script module>` export, such as `RatioOption`).
+ * - `starLookup`: name to the files behind the entry's `export * from` lines, at any depth, for
+ *   names the entry's own folder does not define (the icons entry re-exports `ui/kit/icons.ts`).
+ *
+ * The entry's own declarations are never returned; the files in `skip` are left out.
+ */
+export function entryReach(barrel, skip = new Set()) {
+	const dir = path.posix.dirname(barrel);
+	const components = new Map();
+	const svelteNames = new Map();
+	for (const statement of parse(barrel).statements) {
+		if (
+			!ts.isExportDeclaration(statement) ||
+			!statement.moduleSpecifier ||
+			!ts.isStringLiteral(statement.moduleSpecifier) ||
+			!statement.moduleSpecifier.text.endsWith(".svelte") ||
+			!statement.exportClause ||
+			!ts.isNamedExports(statement.exportClause)
+		) {
+			continue;
+		}
+		const file = path.posix.join(dir, statement.moduleSpecifier.text);
+		for (const element of statement.exportClause.elements) {
+			const isDefault = element.propertyName?.text === "default";
+			if (isDefault && !statement.isTypeOnly && !element.isTypeOnly) {
+				components.set(element.name.text, file);
+			} else if (!isDefault) {
+				svelteNames.set(element.name.text, file);
+			}
+		}
+	}
+	const starTargets = (file, seen) => {
+		const found = [];
+		for (const from of exportTableOf(file).stars) {
+			if (!from.startsWith(".")) continue;
+			const base = path.posix.join(path.posix.dirname(file), from).replace(/[.]js$/, "");
+			const target = [`${base}.ts`, `${base}/index.ts`].find((candidate) =>
+				fs.existsSync(candidate),
+			);
+			if (target && !seen.has(target)) {
+				seen.add(target);
+				found.push(target);
+			}
+		}
+		return found;
+	};
+	const starLookup = (name) => {
+		const seen = new Set([barrel]);
+		const queue = starTargets(barrel, seen);
+		const hits = [];
+		while (queue.length > 0) {
+			const file = queue.shift();
+			if (skip.has(file)) continue;
+			const { local, reexports } = exportTableOf(file);
+			if (local.has(name) || reexports.has(name)) hits.push(file);
+			else queue.push(...starTargets(file, seen));
+		}
+		return hits;
+	};
+	return { components, svelteNames, starLookup };
+}
+
 const MODULE_CALLS = new Set([
 	"mock",
 	"doMock",
@@ -399,6 +467,14 @@ export function placeScript({
 		}
 		return lookups.get(spec);
 	};
+	const reaches = new Map();
+	const reachFor = (spec) => {
+		if (!reaches.has(spec)) {
+			const barrel = entries[spec];
+			reaches.set(spec, entryReach(barrel, new Set([...skip, barrel])));
+		}
+		return reaches.get(spec);
+	};
 	const edits = [];
 	const rewrites = [];
 	const unresolved = [];
@@ -420,11 +496,24 @@ export function placeScript({
 			return;
 		}
 		const lookup = lookupFor(spec);
+		const reach = reachFor(spec);
+		const declarationTypeOnly = isImport ? clause.isTypeOnly : node.isTypeOnly;
 		const groups = new Map();
+		const defaults = [];
 		const missing = [];
 		for (const element of named.elements) {
 			const name = (element.propertyName ?? element.name).text;
-			const files = lookup(name);
+			// A component the entry re-exports as `export { default as Name } from "<file>.svelte"`
+			// is a default import of that file.
+			if (isImport && !declarationTypeOnly && !element.isTypeOnly && reach.components.has(name)) {
+				const rel = relTo(path.posix.relative(root, reach.components.get(name)));
+				defaults.push(`import ${element.name.text} from "${rel}";`);
+				rewrites.push(`${spec} { ${element.getText()} } -> ${rel} (default import)`);
+				continue;
+			}
+			let files = lookup(name);
+			if (files.length === 0 && reach.svelteNames.has(name)) files = [reach.svelteNames.get(name)];
+			if (files.length === 0) files = reach.starLookup(name);
 			if (files.length !== 1) {
 				const where = files.map((f) => path.posix.relative(root, f)).join(", ");
 				missing.push(
@@ -444,8 +533,7 @@ export function placeScript({
 			return;
 		}
 		const keyword = isImport ? "import" : "export";
-		const declarationTypeOnly = isImport ? clause.isTypeOnly : node.isTypeOnly;
-		const lines = [];
+		const lines = [...defaults];
 		for (const [rel, elements] of groups) {
 			// A group left with only inline `type` elements is written as `import type` (or
 			// `export type`): under verbatimModuleSyntax `import { type X } from` still emits a
