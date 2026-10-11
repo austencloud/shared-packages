@@ -38,13 +38,13 @@
 	function titleFor(id: PostToolId): string {
 		switch (id) {
 			case "back":
-				return `${toolLabel(t, id)} (Esc)`;
+				return `${toolLabel(t, id, pluginTools)} (Esc)`;
 			case "split":
 				return t("post_editor_split_hint");
 			case "beats":
 				return t("post_editor_beats_hint");
 			default:
-				return toolLabel(t, id);
+				return toolLabel(t, id, pluginTools);
 		}
 	}
 </script>
@@ -63,7 +63,7 @@
 			onclick={() => onpick(id)}
 		>
 			{#if icon}<Icon {icon} />{/if}
-			<span class="label">{toolLabel(t, id)}</span>
+			<span class="label">{toolLabel(t, id, pluginTools)}</span>
 		</button>
 	{/each}
 </div>

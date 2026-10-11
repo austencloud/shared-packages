@@ -71,10 +71,11 @@ describe("panels", () => {
 		expect(panels(CLIP)).not.toContain("export");
 	});
 
-	it("offers Transition for core visuals and for plugin kinds marked as visual", () => {
+	it("offers Transition for core visuals and for any kind marked as visual", () => {
 		expect(panels(CLIP)).toContain("transition");
 		expect(panels(TEXT)).not.toContain("transition");
-		expect(availablePanels({ kind: "grid", transitionVisual: true }, [])).toContain("transition");
+		// A plugin marks its own kinds; the mark wins over the core default.
+		expect(availablePanels({ kind: "text", transitionVisual: true }, [])).toContain("transition");
 		expect(availablePanels({ kind: "video", transitionVisual: false }, [])).not.toContain("transition");
 	});
 

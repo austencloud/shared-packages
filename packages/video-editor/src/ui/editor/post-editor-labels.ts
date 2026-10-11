@@ -122,11 +122,14 @@ export function toolIcon(
 	return core[id] ?? pluginTools.find((tool) => tool.id === id)?.icon ?? null;
 }
 
-/** The short name under a tool's icon, also its panel's title. */
+/**
+ * The short name under a tool's icon, also its panel's title: a core tool's,
+ * else the one the plugin's tool of that id gives.
+ */
 export function toolLabel(
 	t: Translate,
 	id: PostToolId,
-	plugin: VideoEditorPlugin | null = null,
+	pluginTools: readonly PluginTool[] = [],
 ): string {
 	switch (id) {
 		case "transition":
@@ -188,7 +191,7 @@ export function toolLabel(
 		case "delete":
 			return t("post_editor_delete");
 		default:
-			return plugin?.ui?.tools?.find((tool) => tool.id === id)?.label(translateKey(t)) ?? id;
+			return pluginTools.find((tool) => tool.id === id)?.label(translateKey(t)) ?? id;
 	}
 }
 

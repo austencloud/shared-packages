@@ -61,7 +61,7 @@
 	<header class="head" class:sr-only={bare}>
 		{#if icon}<Icon {icon} class="icon" />{/if}
 		<div class="titles">
-			<h3 id="{id}-title" class="title">{toolLabel(t, tool)}</h3>
+			<h3 id="{id}-title" class="title">{toolLabel(t, tool, pluginTools)}</h3>
 			{#if subject}
 				<p class="subject">{subject}</p>
 			{/if}
