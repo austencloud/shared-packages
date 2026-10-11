@@ -2118,7 +2118,7 @@
 		</div>
 	{:else if Object.hasOwn(plugin?.ui?.panels ?? {}, tool)}
 		{#each Object.entries(plugin?.ui?.panels ?? {}) as [id, Panel] (id)}
-			{#if tool === id}<Panel {editor} />{/if}
+			{#if tool === id}<Panel {editor} appearanceFill={placement === "side"} />{/if}
 		{/each}
 	{:else if tool === "export"}
 		<PostExportPanel

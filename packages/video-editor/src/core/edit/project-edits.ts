@@ -1792,8 +1792,8 @@ function placeOnOrAbove(
 	return withNewTrackOnTop(project, item, nextId);
 }
 
-/** A fresh clip of a take at speed 1 with its span cut to the take. */
-function newVideoFields(
+/** A fresh clip of a take at speed 1 with its span cut to the take (tka: a walkthrough's clips). */
+export function newVideoFields(
 	take: PostTake,
 	sourceIn: number,
 	sourceOut: number,

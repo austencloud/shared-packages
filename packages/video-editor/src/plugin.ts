@@ -437,8 +437,13 @@ export interface PluginUi {
 	layerContextMenu?(event: MouseEvent, editor: VideoEditorState): void;
 	canvasOverlays?: readonly Component<CanvasOverlayProps>[];
 	modes?: readonly EditorMode[];
-	/** Whole panels keyed by a plugin tool id (tka: the "look" animation panel). */
-	panels?: Readonly<Record<string, Component<{ editor: VideoEditorState }>>>;
+	/**
+	 * Whole panels keyed by a plugin tool id (tka: the "look" animation panel). `appearanceFill`
+	 * is true where the panel fills a side column, as for `ToolPanelProps`.
+	 */
+	panels?: Readonly<
+		Record<string, Component<{ editor: VideoEditorState; appearanceFill?: boolean }>>
+	>;
 	/**
 	 * Made once per editor during the workspace's initialisation, so it may call getContext. `previewUrl` is the
 	 * workspace's preview resolver: the URL a take plays from (its preview copy when ready, else `url`).
