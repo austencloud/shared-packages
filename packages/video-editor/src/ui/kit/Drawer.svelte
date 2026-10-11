@@ -561,7 +561,7 @@
 				} else {
 					// Keep in DOM during closing animation (350ms), then remove
 					// Store the timeout ID so it can be cancelled if drawer reopens quickly
-					closeTimeoutId = setTimeout(completeClose, 400); // var(--duration-dramatic) transition + 50ms buffer
+					closeTimeoutId = setTimeout(completeClose, 400); // var(--ve-duration-dramatic) transition + 50ms buffer
 				}
 			}
 

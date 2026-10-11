@@ -189,9 +189,9 @@
 		color: var(--ve-theme-text-dim, rgba(255, 255, 255, 0.6));
 		cursor: pointer;
 		transition:
-			color var(--transition-normal),
-			background-color var(--transition-normal),
-			border-color var(--transition-normal),
+			color var(--ve-transition-normal),
+			background-color var(--ve-transition-normal),
+			border-color var(--ve-transition-normal),
 			transform var(--ve-transition-fast);
 		flex-shrink: 0;
 	}

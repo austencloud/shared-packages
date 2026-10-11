@@ -17,3 +17,53 @@
 	--ve-radius: 12px;
 	--ve-font: var(--theme-font, system-ui, sans-serif);
 }
+
+/*
+ * Tokens the editor UI reads, mapped where the editor sits: on its root and on
+ * the roots it portals to the body. Each takes the host's token of the same
+ * name when the host defines it. A line without a fallback is one whose sites
+ * carry their own fallback or that no site gives one.
+ */
+.ve-root,
+.ve-portal {
+	--ve-duration-dramatic: var(--duration-dramatic, 350ms);
+	--ve-duration-fast: var(--duration-fast, 150ms);
+	--ve-duration-normal: var(--duration-normal, 200ms);
+	--ve-font-size-2xl: var(--font-size-2xl);
+	--ve-font-size-base: var(--font-size-base);
+	--ve-font-size-compact: var(--font-size-compact, 0.75rem);
+	--ve-font-size-lg: var(--font-size-lg, 1.125rem);
+	--ve-font-size-min: var(--font-size-min, 14px);
+	--ve-font-size-sm: var(--font-size-sm, 0.875rem);
+	--ve-font-size-xl: var(--font-size-xl, 1.25rem);
+	--ve-min-touch-target: var(--min-touch-target, 44px);
+	--ve-semantic-danger: var(--semantic-danger, #ff5d5d);
+	--ve-semantic-error: var(--semantic-error);
+	--ve-semantic-info: var(--semantic-info);
+	--ve-semantic-success: var(--semantic-success, #4ade80);
+	--ve-semantic-warning: var(--semantic-warning);
+	--ve-text-color: var(--text-color, #ffffff);
+	--ve-theme-accent: var(--theme-accent, #d4813a);
+	--ve-theme-accent-strong: var(--theme-accent-strong);
+	--ve-theme-background: var(--theme-background, #161616);
+	--ve-theme-bg: var(--theme-bg, #101018);
+	--ve-theme-bg-deep: var(--theme-bg-deep, #08080c);
+	--ve-theme-card-bg: var(--theme-card-bg, #1c1c26);
+	--ve-theme-card-hover-bg: var(--theme-card-hover-bg, rgba(255, 255, 255, 0.08));
+	--ve-theme-panel-bg: var(--theme-panel-bg, rgba(10, 12, 18, 0.92));
+	--ve-theme-panel-elevated-bg: var(--theme-panel-elevated-bg, #1c1c26);
+	--ve-theme-primary: var(--theme-primary, #d4813a);
+	--ve-theme-shadow: var(--theme-shadow, 0 20px 60px rgba(0, 0, 0, 0.5));
+	--ve-theme-stroke: var(--theme-stroke, #484755);
+	--ve-theme-stroke-strong: var(--theme-stroke-strong, #6b6a7a);
+	--ve-theme-success: var(--theme-success, #86efac);
+	--ve-theme-text: var(--theme-text, #fff);
+	--ve-theme-text-dim: var(--theme-text-dim, #bbb);
+	--ve-theme-text-muted: var(--theme-text-muted, #b7b7c2);
+	--ve-theme-text-on-accent: var(--theme-text-on-accent, #fff);
+	--ve-theme-text-secondary: var(--theme-text-secondary, #aaa);
+	--ve-transition-fast: var(--transition-fast);
+	--ve-transition-normal: var(--transition-normal, 200ms cubic-bezier(0.16, 1, 0.3, 1));
+	--ve-z-dropdown: var(--z-dropdown, 300);
+	--ve-z-modal: var(--z-modal, 600);
+}

@@ -7,7 +7,8 @@
 	/* Transparent by default to allow glass morphism effect on drawer */
 	background: var(--sheet-backdrop-bg, transparent);
 	pointer-events: var(--sheet-backdrop-pointer-events, auto);
-	transition: opacity var(--duration-dramatic, 350ms) var(--ease-out, cubic-bezier(0.16, 1, 0.3, 1));
+	transition: opacity var(--ve-duration-dramatic, 350ms)
+		var(--ease-out, cubic-bezier(0.16, 1, 0.3, 1));
 	opacity: 0;
 }
 
@@ -153,8 +154,8 @@ dialog.drawer-content {
      (e.g. a custom easing) without !important. */
 	transition: var(
 		--sheet-transition,
-		transform var(--duration-dramatic, 350ms) var(--ease-out, cubic-bezier(0.16, 1, 0.3, 1)),
-		opacity var(--duration-dramatic, 350ms) var(--ease-out, cubic-bezier(0.16, 1, 0.3, 1))
+		transform var(--ve-duration-dramatic, 350ms) var(--ease-out, cubic-bezier(0.16, 1, 0.3, 1)),
+		opacity var(--ve-duration-dramatic, 350ms) var(--ease-out, cubic-bezier(0.16, 1, 0.3, 1))
 	);
 	will-change: transform;
 
@@ -229,8 +230,8 @@ dialog.drawer-content {
 .drawer-content[data-placement="bottom"].height-snap-points {
 	height: auto;
 	transition:
-		height var(--duration-normal, 250ms) var(--ease-out, ease-out),
-		transform var(--duration-dramatic, 350ms) var(--ease-out, ease-out);
+		height var(--ve-duration-normal, 250ms) var(--ease-out, ease-out),
+		transform var(--ve-duration-dramatic, 350ms) var(--ease-out, ease-out);
 }
 
 .drawer-content[data-placement="bottom"][data-state="closed"] {
@@ -629,7 +630,7 @@ dialog.drawer-content {
 
 /* Spring animation for bottom placement - refined 2026 spring physics */
 .drawer-content.spring-animation[data-placement="bottom"][data-state="open"] {
-	animation: spring-slide-up var(--duration-dramatic)
+	animation: spring-slide-up var(--ve-duration-dramatic)
 		var(--ease-spring, cubic-bezier(0.34, 1.56, 0.64, 1)) forwards;
 }
 
@@ -650,7 +651,7 @@ dialog.drawer-content {
 
 /* Spring animation for top placement */
 .drawer-content.spring-animation[data-placement="top"][data-state="open"] {
-	animation: spring-slide-down var(--duration-dramatic)
+	animation: spring-slide-down var(--ve-duration-dramatic)
 		var(--ease-spring, cubic-bezier(0.34, 1.56, 0.64, 1)) forwards;
 }
 
@@ -671,7 +672,7 @@ dialog.drawer-content {
 
 /* Spring animation for right placement */
 .drawer-content.spring-animation[data-placement="right"][data-state="open"] {
-	animation: spring-slide-left var(--duration-dramatic)
+	animation: spring-slide-left var(--ve-duration-dramatic)
 		var(--ease-spring, cubic-bezier(0.34, 1.56, 0.64, 1)) forwards;
 }
 
@@ -692,7 +693,7 @@ dialog.drawer-content {
 
 /* Spring animation for left placement */
 .drawer-content.spring-animation[data-placement="left"][data-state="open"] {
-	animation: spring-slide-right var(--duration-dramatic)
+	animation: spring-slide-right var(--ve-duration-dramatic)
 		var(--ease-spring, cubic-bezier(0.34, 1.56, 0.64, 1)) forwards;
 }
 
@@ -747,7 +748,7 @@ dialog.drawer-content {
 	background: black;
 	opacity: 0;
 	pointer-events: none;
-	transition: opacity var(--duration-dramatic) cubic-bezier(0.32, 0.72, 0, 1);
+	transition: opacity var(--ve-duration-dramatic) cubic-bezier(0.32, 0.72, 0, 1);
 	z-index: 1;
 }
 

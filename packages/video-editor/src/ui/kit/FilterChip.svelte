@@ -512,7 +512,7 @@ Popover uses fixed positioning to escape overflow:hidden containers.
 
 	.chip-popover {
 		position: fixed;
-		z-index: var(--z-dropdown);
+		z-index: var(--ve-z-dropdown);
 		/* Its own width, not what is left between its left edge and the screen's
        right edge. place() reads this width to slide a menu that would run
        off that edge back in; a width the browser had already shrunk to the

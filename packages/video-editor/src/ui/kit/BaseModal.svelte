@@ -466,7 +466,7 @@
 		inset-inline: 0;
 		inset-block-start: var(--viewport-offset-top, 0px);
 		inset-block-end: var(--viewport-offset-bottom, 0px);
-		z-index: var(--z-modal, 600);
+		z-index: var(--ve-z-modal, 600);
 		background: var(--modal-backdrop-bg);
 		backdrop-filter: blur(var(--modal-backdrop-blur));
 		-webkit-backdrop-filter: blur(var(--modal-backdrop-blur));
@@ -491,7 +491,7 @@
 	}
 
 	:global(dialog.base-modal[data-external-overlays="true"]) {
-		z-index: calc(var(--z-modal, 600) + 1);
+		z-index: calc(var(--ve-z-modal, 600) + 1);
 	}
 
 	/* Managed mode focuses the dialog shell first so opening the modal does not

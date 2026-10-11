@@ -116,8 +116,8 @@
 		text-decoration: none;
 		cursor: pointer;
 		transition:
-			background-color var(--transition-normal),
-			border-color var(--transition-normal);
+			background-color var(--ve-transition-normal),
+			border-color var(--ve-transition-normal);
 		min-height: var(--ve-min-touch-target);
 	}
 
