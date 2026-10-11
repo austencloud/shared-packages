@@ -39,4 +39,6 @@ export interface VideoEditorProps<E = unknown> {
 	/** The project's opening audio choice when it has none yet. */
 	audioSeed?: "takes" | "silent" | null;
 	onAudioChange?: (audio: "takes" | "silent", chosen: boolean) => void;
+	/** A device video to import as the editor opens, as Add video would (a post made from footage). */
+	initialFootage?: File | null;
 }

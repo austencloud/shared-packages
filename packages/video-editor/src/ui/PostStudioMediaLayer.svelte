@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { releaseMediaDownload } from "../render/media-download-release.js";
 	import type { CompositionSourceBinding } from "../state/source-binding.js";
 	import type { VideoEditorPlugin } from "../plugin.js";
 	import type { VideoEditorState } from "../state/video-editor-state.svelte.js";
@@ -29,6 +30,8 @@
 		sourceTimeSeconds: number;
 		playing: boolean;
 		exporting?: boolean;
+		/** The pixel size this layer fills in the exported file, while exporting. */
+		exportSize?: { width: number; height: number } | null;
 		/** The editor plugin; its sublayer draws the render modes it names. */
 		plugin: VideoEditorPlugin | null;
 		editor: VideoEditorState;
@@ -60,6 +63,7 @@
 		sourceTimeSeconds,
 		playing,
 		exporting = false,
+		exportSize = null,
 		plugin,
 		editor,
 		layer,
@@ -621,6 +625,13 @@
 		if (element.networkState !== HTMLMediaElement.NETWORK_EMPTY) element.load();
 	});
 
+	$effect(() => {
+		const element = video;
+		if (!element) return;
+		// A remounted editor would otherwise wait behind the old footage's download.
+		return () => releaseMediaDownload(element);
+	});
+
 	onDestroy(() => {
 		cancelPausedFrame();
 		cancelPlayingFrame();
@@ -660,6 +671,7 @@
 			{underlyingItem}
 			{playing}
 			{exporting}
+			{exportSize}
 		/>
 	{:else if binding.previewType === "video" || binding.kind === "video"}
 		<!-- svelte-ignore a11y_media_has_caption -->

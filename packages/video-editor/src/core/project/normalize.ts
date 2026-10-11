@@ -1,7 +1,6 @@
 import {
 	MAIN_TRACK_ID,
 	MAIN_TRACK_INDEX,
-	MAIN_TRACK_KINDS,
 	POST_KEYFRAME_MERGE_SECONDS,
 	POST_MIN_ITEM_SECONDS,
 	POST_TIME_EPSILON,
@@ -20,7 +19,7 @@ import {
 } from "./keyframes.js";
 import type { PostTake } from "../plan/post-plan.js";
 import type { VideoEditorPlugin } from "../../plugin.js";
-import { kindDefinition } from "./kind-lookup.js";
+import { isMainTrackKind, kindDefinition, pluginSourceLength, type SourcedSpan } from "./kind-lookup.js";
 
 /**
  * The timeline's rules, applied after every edit so the stored project is
@@ -34,8 +33,8 @@ import { kindDefinition } from "./kind-lookup.js";
  *    stays where it stands and follows the clip now under it.
  * 3. Items on one overlay track never overlap: the later one moves up to the
  *    next track with room, or a new one. Empty overlay tracks go.
- * 4. Anything on the main track that is not a clip or a card moves to an
- *    overlay track.
+ * 4. Anything on the main track that is not a clip or a card, or a plugin
+ *    kind that may sit there, moves to an overlay track.
  *
  * Unchanged items and tracks keep their identity, so a drag that moves one
  * item re-renders only that item.
@@ -64,11 +63,11 @@ function normalizeLayout(project: PostProject, plugin: VideoEditorPlugin | undef
 	let cursor = 0;
 	let outgoingOverlap = 0;
 	for (const [index, item] of main.items.entries()) {
-		if (!MAIN_TRACK_KINDS.includes(item.kind)) {
+		if (!isMainTrackKind(plugin, item.kind)) {
 			displaced.push(item);
 			continue;
 		}
-		const sized = sizeItem(item, takes);
+		const sized = sizeItem(item, takes, plugin);
 		const earliest = cursor - Math.min(outgoingOverlap, sized.duration - POST_TIME_EPSILON);
 		const start = sized.pinnedStart ? Math.max(earliest, sized.start) : earliest;
 		const laid = withChanges(sized, { start, anchor: null, fill: false });
@@ -91,7 +90,7 @@ function normalizeLayout(project: PostProject, plugin: VideoEditorPlugin | undef
 		) ?? null;
 
 	const place = (item: PostItem): PostItem => {
-		const sized = sizeItem(item, takes);
+		const sized = sizeItem(item, takes, plugin);
 		const anchored = sized.anchor ? mainById.get(sized.anchor.itemId) : null;
 
 		// A plugin kind may carry an intro before its `start` (tka: an
@@ -102,7 +101,7 @@ function normalizeLayout(project: PostProject, plugin: VideoEditorPlugin | undef
 		const intro = placed?.intro ?? 0;
 		const lead = placed?.lead ?? intro;
 
-		if (sized.fill && sized.kind !== "video") {
+		if (sized.fill && sized.kind !== "video" && pluginSourceLength(plugin, sized) === null) {
 			const target = anchored ?? mainAt(sized.start + intro);
 			if (!target) return withChanges(sized, { fill: false, anchor: null });
 			const start = Math.max(0, target.start - lead);
@@ -213,7 +212,11 @@ function normalizeLayout(project: PostProject, plugin: VideoEditorPlugin | undef
 }
 
 /** Durations that follow from the item's own fields, and fades that fit. */
-function sizeItem(item: PostItem, takes: ReadonlyMap<string, PostTake>): PostItem {
+function sizeItem(
+	item: PostItem,
+	takes: ReadonlyMap<string, PostTake>,
+	plugin: VideoEditorPlugin | undefined,
+): PostItem {
 	const canonical = canonicalizeItemKeyframes(item);
 	if (canonical.kind === "video") {
 		const limit = takes.get(canonical.takeId)?.durationSeconds ?? Infinity;
@@ -226,6 +229,24 @@ function sizeItem(item: PostItem, takes: ReadonlyMap<string, PostTake>): PostIte
 		const duration = (sourceOut - sourceIn) / canonical.speed;
 		const fades = fittedFades(canonical.fadeIn, canonical.fadeOut, duration);
 		return withChanges(canonical, {
+			sourceIn,
+			sourceOut,
+			duration,
+			fadeIn: fades.fadeIn,
+			fadeOut: fades.fadeOut,
+		});
+	}
+	const limit = pluginSourceLength(plugin, canonical);
+	if (limit !== null) {
+		// A plugin kind that plays its own source (tka: an arrangement): its
+		// span stays inside the source, at least the shortest item long.
+		const clip = canonical as PostItem & SourcedSpan;
+		const minSpan = Math.min(limit, POST_MIN_ITEM_SECONDS * clip.speed);
+		const sourceOut = Math.min(limit, Math.max(minSpan, clip.sourceOut));
+		const sourceIn = Math.min(clip.sourceIn, sourceOut - minSpan);
+		const duration = (sourceOut - sourceIn) / clip.speed;
+		const fades = fittedFades(clip.fadeIn, clip.fadeOut, duration);
+		return withChanges(clip, {
 			sourceIn,
 			sourceOut,
 			duration,

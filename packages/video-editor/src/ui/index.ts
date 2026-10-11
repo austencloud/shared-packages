@@ -13,6 +13,7 @@ export {
 	BOX_SIDES,
 	BOX_SNAP_THRESHOLD,
 	boxContains,
+	boxLocalPoint,
 	type BoxField,
 	type BoxGuides,
 	type BoxHandle,

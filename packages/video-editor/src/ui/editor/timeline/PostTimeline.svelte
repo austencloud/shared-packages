@@ -143,6 +143,8 @@
 		onMoveDownbeat?: (downbeatSeconds: number) => void;
 		/** The plugin whose timeline join draws two items as one block. */
 		plugin?: VideoEditorPlugin | null;
+		/** The empty main track's text in place of the editor's own. */
+		emptyHint?: string | null;
 	}
 
 	let {
@@ -182,6 +184,7 @@
 		onTrimMusic,
 		onMoveDownbeat,
 		plugin = null,
+		emptyHint = null,
 	}: Props = $props();
 
 	// Items sit 3px inside a row with a 1px border, so an overlay stays 44px tall.
@@ -1414,7 +1417,7 @@
 						>
 							{#if row.isMain && mainItemsList.length === 0}
 								<div class="empty-hint">
-									<span>{t("post_timeline_empty_hint")}</span>
+									<span>{emptyHint ?? t("post_timeline_empty_hint")}</span>
 									{#if onAddVideo}
 										<button type="button" class="add-video-btn" onclick={onAddVideo}>
 											<Icon icon={faPlus} />

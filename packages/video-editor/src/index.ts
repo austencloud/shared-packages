@@ -8,6 +8,8 @@ export { VIDEO_EDITOR_VERSION, formatTimecode } from "./core/index.js";
 export type * from "./plugin.js";
 export type { CompositionSourceBinding, CompositionSourceStatus } from "./state/source-binding.js";
 export type {
+	EditorConfirmations,
+	EditorConfirmKey,
 	EditorHaptic,
 	EditorNotify,
 	EditorShortcuts,
@@ -23,6 +25,12 @@ export {
 	resolveServices,
 	type EditorServices,
 } from "./host-defaults.js";
+export {
+	createLocalFootageVault,
+	FOOTAGE_VAULT_MAX_BYTES,
+	type FootageVaultStorage,
+	type PostFootageVault,
+} from "./state/local-footage-vault.js";
 export type {
 	EditorHistory,
 	HistoryEntry,

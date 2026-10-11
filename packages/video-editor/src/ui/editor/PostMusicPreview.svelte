@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { releaseMediaDownload } from "../../render/media-download-release.js";
 	import { untrack } from "svelte";
 	import type { PreviewVideoController } from "../../render/preview-clock.js";
 	import { planMusicAudio, segmentGainAt } from "../../core/music/audio-plan.js";
@@ -150,13 +151,7 @@
 	$effect(() => {
 		const element = audio;
 		if (!element) return;
-		return () => {
-			// A removed element keeps playing, and keeps its download open until
-			// its source goes.
-			element.pause();
-			element.removeAttribute("src");
-			element.load();
-		};
+		return () => releaseMediaDownload(element);
 	});
 </script>
 

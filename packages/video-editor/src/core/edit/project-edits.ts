@@ -20,6 +20,7 @@ import {
 	shiftKeyframes,
 	writeChannelValue,
 } from "../project/keyframes.js";
+import { pluginSourceLength, type SourcedSpan } from "../project/kind-lookup.js";
 import { normalizeProject } from "../project/normalize.js";
 import {
 	CORE_PROJECT_SHAPE,
@@ -46,6 +47,7 @@ import {
 	mainItemAt,
 	overlaysAnchoredTo,
 	trackHasRoom,
+	videoPostSeconds,
 	wrapDegrees,
 	type PostAnchor,
 	type PostAutoAdjust,
@@ -432,7 +434,7 @@ export function splitItemAt(
 	}
 
 	const nextId = createIdAllocator(project);
-	const [first, second] = splitPieces(item, cut, nextId(item.kind));
+	const [first, second] = splitPieces(item, cut, nextId(item.kind), ctx.plugin);
 	const isMain = trackIndex === MAIN_TRACK_INDEX;
 	const firstPiece = isMain ? first : withOverlaySplitAnchor(first, item, 0);
 	const secondPiece = isMain ? second : withOverlaySplitAnchor(second, item, cut);
@@ -1049,32 +1051,35 @@ export function trimItem(
 	const delta = seconds - item.start;
 	let trimmed: PostItem;
 
-	if (item.kind === "video") {
-		const minSpan = POST_MIN_ITEM_SECONDS * item.speed;
-		const limit = takeLength(project, item.takeId);
+	// A clip, or a plugin kind playing its own source, trims its span inside that source.
+	const limit =
+		item.kind === "video" ? takeLength(project, item.takeId) : pluginSourceLength(ctx.plugin, item);
+	if (limit !== null) {
+		const clip = item as PostItem & SourcedSpan;
+		const minSpan = POST_MIN_ITEM_SECONDS * clip.speed;
 		if (edge === "end") {
 			trimmed = {
-				...item,
+				...clip,
 				sourceOut: clamp(
-					item.sourceIn + delta * item.speed,
-					item.sourceIn + minSpan,
-					Math.max(item.sourceIn + minSpan, limit),
+					clip.sourceIn + delta * clip.speed,
+					clip.sourceIn + minSpan,
+					Math.max(clip.sourceIn + minSpan, limit),
 				),
-			};
+			} as PostItem;
 		} else {
 			// The head can move back to the take's first frame, or up to just
 			// before the clip's last one; an overlay's start moves with it.
 			let shift = clamp(
-				delta * item.speed,
-				-item.sourceIn,
-				item.sourceOut - minSpan - item.sourceIn,
+				delta * clip.speed,
+				-clip.sourceIn,
+				clip.sourceOut - minSpan - clip.sourceIn,
 			);
-			if (!isMain) shift = Math.max(shift, -item.start * item.speed);
+			if (!isMain) shift = Math.max(shift, -clip.start * clip.speed);
 			trimmed = {
-				...item,
-				sourceIn: item.sourceIn + shift,
-				start: isMain ? item.start : item.start + shift / item.speed,
-			};
+				...clip,
+				sourceIn: clip.sourceIn + shift,
+				start: isMain ? clip.start : clip.start + shift / clip.speed,
+			} as PostItem;
 		}
 	} else if (edge === "end") {
 		trimmed = { ...item, duration: Math.max(POST_MIN_ITEM_SECONDS, delta) };
@@ -1099,8 +1104,8 @@ export function trimItem(
 	if (trimmed.transitionOut?.sourceTypeCode === EDITOR_CROSSFADE_SOURCE) {
 		const oldAdded = trimmed.transitionOut.editorAddedSeconds ?? trimmed.transitionOut.duration;
 		const nextDuration =
-			trimmed.kind === "video"
-				? (trimmed.sourceOut - trimmed.sourceIn) / trimmed.speed
+			limit !== null
+				? videoPostSeconds(trimmed as PostItem & SourcedSpan)
 				: trimmed.duration;
 		const removed = edge === "end" ? Math.max(0, item.duration - nextDuration) : 0;
 		const becameIndependent = edge === "start" && nextDuration <= oldAdded + POST_TIME_EPSILON;
@@ -1746,7 +1751,8 @@ function anchorAt(project: PostProject, start: number): PostAnchor | null {
 	return under ? { itemId: under.id, offset: start - under.start } : null;
 }
 
-function appendToMain(project: PostProject, item: PostItem): PostProject {
+/** The item at the end of the main track. */
+export function appendToMain(project: PostProject, item: PostItem): PostProject {
 	const main = project.tracks[MAIN_TRACK_INDEX]!;
 	const last = main.items[main.items.length - 1];
 	return withTrackItems(project, MAIN_TRACK_INDEX, [
@@ -1755,7 +1761,8 @@ function appendToMain(project: PostProject, item: PostItem): PostProject {
 	]);
 }
 
-function withNewTrackOnTop(
+/** The item alone on a new overlay track above the others. */
+export function withNewTrackOnTop(
 	project: PostProject,
 	item: PostItem,
 	nextId: (prefix: string) => string,
@@ -1819,7 +1826,12 @@ function newVideoFields(
 }
 
 /** The two pieces of a cut `cut` seconds into an item; no fade at the cut. */
-function splitPieces(item: PostItem, cut: number, secondId: string): [PostItem, PostItem] {
+function splitPieces(
+	item: PostItem,
+	cut: number,
+	secondId: string,
+	plugin: VideoEditorPlugin | undefined,
+): [PostItem, PostItem] {
 	const transition = item.transitionOut;
 	const added =
 		transition?.sourceTypeCode === EDITOR_CROSSFADE_SOURCE
@@ -1835,25 +1847,26 @@ function splitPieces(item: PostItem, cut: number, secondId: string): [PostItem, 
 					editorAddedSeconds: 0,
 				}
 			: transition;
-	if (item.kind === "video") {
-		const at = item.sourceIn + cut * item.speed;
+	if (item.kind === "video" || pluginSourceLength(plugin, item) !== null) {
+		const clip = item as PostItem & SourcedSpan;
+		const at = clip.sourceIn + cut * clip.speed;
 		return [
 			{
-				...item,
+				...clip,
 				sourceOut: at,
 				duration: cut,
 				fadeOut: 0,
 				transitionOut: undefined,
-			},
+			} as PostItem,
 			{
-				...item,
+				...clip,
 				id: secondId,
 				sourceIn: at,
 				start: item.start + cut,
 				duration: item.duration - cut,
 				fadeIn: 0,
 				transitionOut: secondTransition,
-			},
+			} as PostItem,
 		];
 	}
 	const second = shiftKeyframes(

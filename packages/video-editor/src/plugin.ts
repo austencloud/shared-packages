@@ -30,6 +30,15 @@ export interface ItemKindDefinition {
 	defaultBox(): PostBox;
 	/** Normalize treats an item of this kind as a visual that a transition can join. */
 	transitionVisual?: boolean;
+	/** Items of this kind may sit on the main track, where they follow one another like clips. */
+	mainTrack?: boolean;
+	/**
+	 * The kind plays a span of a source of its own, as a clip plays its take: its items carry
+	 * `sourceIn`, `sourceOut` and `speed`, and their duration follows from them. Returns that
+	 * source's length in seconds (tka: an arrangement's total). Normalize, trim and split treat the
+	 * item as a clip of that length, and an overlay of the kind never fills.
+	 */
+	sourceLength?(item: PostItem): number;
 	/**
 	 * The seconds of intro and of lead-in an item carries before its `start`, or null for none;
 	 * normalize places the item with them.
@@ -166,6 +175,50 @@ export interface ItemKindUi {
 	/** The kind's own tool panels; renders nothing for a tool it does not own. */
 	toolPanel?: Component<ToolPanelProps>;
 	parts?: readonly ItemPart[];
+	/** The tool panel's title for a selected item of the kind (tka: an arrangement's selected cell). Absent or null: the kind's label. */
+	panelTitle?(item: PostItem, editor: VideoEditorState, t: (key: string) => string): string | null;
+	/**
+	 * Drawn inside a selected item's box, above the box's own handles (tka: an arrangement's cell
+	 * grips). The canvas hands each press on the frame or the box, each move and release, and each
+	 * right click on an item of the kind to its exports first.
+	 */
+	selectionLayer?: Component<SelectionLayerProps, SelectionLayerHandle>;
+}
+
+/** What a kind's selection layer gets. */
+export interface SelectionLayerProps {
+	editor: VideoEditorState;
+	/** The selected item, as the canvas shows it at the playhead. */
+	item: PostItem;
+	/** The item's track is locked; the layer takes no presses. */
+	locked: boolean;
+	/** The box's turn in degrees; a pointer's movement inside the box is turned back by it. */
+	turn: number;
+	canvas: SelectionCanvas;
+}
+
+/** The canvas's geometry, for a selection layer. */
+export interface SelectionCanvas {
+	/**
+	 * The pointer in an item's box as shown at the playhead, 0 to 1 across and down; null while the
+	 * stage has no size. `clamp` keeps it inside the box.
+	 */
+	pointInBox(item: PostItem, event: MouseEvent, clamp: boolean): { u: number; v: number } | null;
+	/** The item on top under the pointer at the playhead. */
+	itemAt(event: MouseEvent): PostItem | null;
+	/** Ends the canvas's own drag of a box, putting it back. */
+	cancelBoxDrag(): void;
+	/** A press that moves less than this many pixels is a tap. */
+	tapPixels: number;
+}
+
+/** A selection layer's exports. Each returns true when the layer took the event. */
+export interface SelectionLayerHandle {
+	press(event: PointerEvent): boolean;
+	move(event: PointerEvent): boolean;
+	release(event: PointerEvent, keep: boolean): boolean;
+	/** A right click on an item of the kind, which the canvas has selected first. */
+	contextMenu(event: MouseEvent): boolean;
 }
 
 /** A tool a plugin adds to the tool row. A panel tool opens its panel; an action tool runs. */
@@ -210,6 +263,8 @@ export interface MediaSublayerProps {
 	underlyingItem: PostItem | null;
 	playing: boolean;
 	exporting: boolean;
+	/** The pixel size the layer fills in the exported file, while exporting. */
+	exportSize: { width: number; height: number } | null;
 }
 
 export interface CanvasOverlayProps {
@@ -230,6 +285,11 @@ export interface EditorMode {
 	toolbar?: Component<{ editor: VideoEditorState; draftStatus: Snippet }>;
 	/** Keys while the mode is active; return true when handled. */
 	keydown?(event: KeyboardEvent, editor: VideoEditorState): boolean;
+	/**
+	 * Covers the whole workspace while the mode is active (tka: the arrangement editor). The editor's
+	 * keys and its undo history wait until the mode ends.
+	 */
+	cover?: Component<{ editor: VideoEditorState }>;
 }
 
 /** Source bindings and painters for the plugin's roles, made once per editor. */
@@ -282,7 +342,10 @@ export interface PluginUi {
 		coreRow: readonly string[],
 		editor: VideoEditorState,
 	): readonly string[];
-	addItems?(coreItems: readonly string[]): readonly (string | PluginAddItem)[];
+	addItems?(
+		coreItems: readonly string[],
+		editor: VideoEditorState,
+	): readonly (string | PluginAddItem)[];
 	mediaSublayer?: { renderModes: readonly string[]; component: Component<MediaSublayerProps> };
 	/**
 	 * Redraws a generic image layer's picture in a look of the plugin's (tka: a QR image in its own
@@ -325,6 +388,20 @@ export interface PluginUi {
 	subjectName?(editor: VideoEditorState): string | null;
 	/** The export file's stem (tka: the simplified word). Absent: the subject name, else "video". */
 	exportFileStem?(editor: VideoEditorState): string | null;
+	/**
+	 * The text an empty preview or timeline shows (tka: a project with no sequence asks for
+	 * footage). Absent or null: the editor's own text.
+	 */
+	emptyHint?(
+		editor: VideoEditorState,
+		where: "preview" | "timeline",
+		t: (key: string) => string,
+	): string | null;
+	/**
+	 * Back in the tool row, before the editor's own: return true when the plugin stepped back
+	 * itself (tka: from an arrangement's cell to the arrangement).
+	 */
+	back?(editor: VideoEditorState): boolean;
 }
 
 /** The top bar's Backup, Restore and Import entries (tka: its JSON backup and the InShot recovery package). Absent: the workspace shows none of them. */

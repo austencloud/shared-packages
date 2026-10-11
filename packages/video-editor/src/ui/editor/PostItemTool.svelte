@@ -50,6 +50,7 @@
 	} from "../../core/edit/project-edits.js";
 	import type { PostEdit, VideoEditorState } from "../../state/video-editor-state.svelte.js";
 	import type { VideoEditorPlugin } from "../../plugin.js";
+	import { pluginSourceLength } from "../../core/project/kind-lookup.js";
 	import PanelButton from "../kit/PanelButton.svelte";
 	import FilterChipBase from "../kit/FilterChip.svelte";
 	import SegmentedControl from "../kit/SegmentedControl.svelte";
@@ -668,7 +669,8 @@
 			{playheadInside}
 		/>
 	{:else if tool === "timing"}
-		{#if !onMain}
+		<!-- A kind that plays a source of its own runs for that source's length; it never fills. -->
+		{#if !onMain && pluginSourceLength(plugin, item) === null}
 			<SegmentedControl
 				color="accent"
 				options={[

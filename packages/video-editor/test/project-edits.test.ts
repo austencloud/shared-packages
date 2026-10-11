@@ -6,8 +6,11 @@ import {
 	newItemOfKind,
 	relinkTake,
 	replaceTakeMedia,
+	splitItemAt,
+	trimItem,
 	updateItem,
 } from "../src/core/edit/project-edits.js";
+import type { PostProject } from "../src/core/project/item-kinds.js";
 import type { ItemKindDefinition, VideoEditorPlugin } from "../src/plugin.js";
 import plain from "./fixtures/plain.project.json";
 
@@ -124,5 +127,75 @@ describe("edit hooks", () => {
 		expect(isCrossfadeVisual({ kind: "still" } as never, p)).toBe(true);
 		expect(isCrossfadeVisual({ kind: "label" } as never, p)).toBe(false);
 		expect(isCrossfadeVisual({ kind: "card" } as never, undefined)).toBe(true);
+	});
+});
+
+describe("a plugin kind that plays a source of its own", () => {
+	// A reel plays a span of its own `length` seconds, as a clip plays its take.
+	const reel = {
+		kind: "reel",
+		mainTrack: true,
+		sourceLength: (item: { length: number }) => item.length,
+	} as unknown as ItemKindDefinition;
+	const p = plugin({ itemKinds: [reel] });
+	const withReel = (fields: object, track = 0) => {
+		const base = project();
+		const card = base.tracks[0]!.items.find((item) => item.kind === "card")!;
+		const item = {
+			...card,
+			id: "r1",
+			kind: "reel",
+			start: 20,
+			length: 6,
+			sourceIn: 0,
+			sourceOut: 6,
+			speed: 1,
+			...fields,
+		};
+		const tracks = base.tracks.map((entry, index) =>
+			index === track ? { ...entry, items: [...entry.items, item] } : entry,
+		);
+		return normalizeProject({ ...base, tracks } as PostProject, p);
+	};
+	const reelOf = (next: PostProject) =>
+		next.tracks.flatMap((track) => track.items).find((item) => item.id === "r1") as unknown as {
+			start: number;
+			duration: number;
+			sourceIn: number;
+			sourceOut: number;
+			fill?: boolean;
+		};
+
+	it("sizes the item from its span and speed, inside the source", () => {
+		const reelItem = reelOf(withReel({ sourceIn: 1, sourceOut: 9, speed: 2 }));
+		expect(reelItem).toMatchObject({ sourceIn: 1, sourceOut: 6 });
+		expect(reelItem.duration).toBeCloseTo(2.5);
+	});
+
+	it("never fills as an overlay", () => {
+		expect(reelOf(withReel({ fill: true }, 1)).duration).toBeCloseTo(6);
+	});
+
+	it("trims into its source and no further than its end", () => {
+		const start = withReel({});
+		const end = reelOf(start).start + reelOf(start).duration;
+		const longer = reelOf(trimItem(start, "r1", "end", end + 5, { now: 2, plugin: p }));
+		expect(longer).toMatchObject({ sourceOut: 6 });
+		expect(longer.duration).toBeCloseTo(6);
+		const shorter = reelOf(trimItem(start, "r1", "start", reelOf(start).start + 2, { now: 2, plugin: p }));
+		expect(shorter).toMatchObject({ sourceIn: 2, sourceOut: 6 });
+		expect(shorter.duration).toBeCloseTo(4);
+	});
+
+	it("splits into two spans of the same source", () => {
+		const start = withReel({});
+		const split = splitItemAt(start, "r1", reelOf(start).start + 2, { now: 2, plugin: p })!;
+		const pieces = split.project.tracks
+			.flatMap((track) => track.items)
+			.filter((item) => (item.kind as string) === "reel") as unknown as { sourceIn: number; sourceOut: number }[];
+		expect(pieces.map((piece) => [piece.sourceIn, piece.sourceOut])).toEqual([
+			[0, 2],
+			[2, 6],
+		]);
 	});
 });

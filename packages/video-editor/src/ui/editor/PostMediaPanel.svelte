@@ -131,13 +131,16 @@
 					{/if}
 					<div class="row">
 						{#if loaded}
-							<PanelButton
-								variant={status?.id === "confirmed" ? "secondary" : "primary"}
-								onclick={() => onTapBeats(take.id)}
-							>
-								<Icon icon={faDrum} />
-								{t("post_editor_tap_beats")}
-							</PanelButton>
+							<!-- Beats belong to the plugin's timing, which a take with no status has none of. -->
+							{#if status}
+								<PanelButton
+									variant={status.id === "confirmed" ? "secondary" : "primary"}
+									onclick={() => onTapBeats(take.id)}
+								>
+									<Icon icon={faDrum} />
+									{t("post_editor_tap_beats")}
+								</PanelButton>
+							{/if}
 							<PanelButton
 								onclick={() => editor.appendTakeClip(take.id)}
 								ariaLabel={t("post_editor_add_clip_of", { take: name })}

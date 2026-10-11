@@ -6,7 +6,12 @@
 	import { LAYOUT_MOTION_EASING } from "../kit/layout-flip.js";
 	import { useEditorUi } from "../editor-context.js";
 	import type { CompositionSourceBinding } from "../../state/source-binding.js";
-	import type { ItemKindUi, VideoEditorPlugin } from "../../plugin.js";
+	import type {
+		ItemKindUi,
+		SelectionCanvas,
+		SelectionLayerHandle,
+		VideoEditorPlugin,
+	} from "../../plugin.js";
 	import type { VideoEditorState } from "../../state/video-editor-state.svelte.js";
 	import {
 		resolvePresetTimePoint,
@@ -44,6 +49,7 @@
 	import PostStudioPaintedLayer from "../PostStudioPaintedLayer.svelte";
 	import PostMusicPreview from "./PostMusicPreview.svelte";
 	import { dragSourceCrop, type SourceCropHandle } from "./post-source-crop.js";
+	import { translateKey } from "./post-editor-labels.js";
 	import {
 		BOX_CORNERS,
 		BOX_NUDGE,
@@ -51,6 +57,7 @@
 		NO_GUIDES,
 		TURN_HANDLE_GAP,
 		boxContains,
+		boxLocalPoint,
 		boxTurn,
 		dragBox,
 		handleCursor,
@@ -552,7 +559,7 @@
 	/** A press this small is a tap, not a move. */
 	const TAP_PIXELS = 4;
 
-	function hitTest(event: PointerEvent): PostItem | null {
+	function hitTest(event: MouseEvent): PostItem | null {
 		if (!root) return null;
 		const rect = root.getBoundingClientRect();
 		const x = (event.clientX - rect.left) / rect.width;
@@ -697,6 +704,46 @@
 		if (hit && part) editor.selectPart(hit.id, part.id);
 		else editor.selectedItemId = hit?.id ?? null;
 		if (hit && !trackLocked(hit.id)) startDrag(event, hit, "move");
+	}
+
+	// ---- A kind's own layer in its selected box ------------------------------
+
+	/** The mounted selection layer's exports; the layer handlers ask it first. */
+	let selectionHandle = $state.raw<SelectionLayerHandle | null>(null);
+
+	const selectionCanvas: SelectionCanvas = {
+		pointInBox(item, event, clamp) {
+			if (!root) return null;
+			const rect = root.getBoundingClientRect();
+			if (rect.width <= 0 || rect.height <= 0) return null;
+			const point = boxLocalPoint(
+				shownItemBox(item, editor.previewSeconds),
+				(event.clientX - rect.left) / rect.width,
+				(event.clientY - rect.top) / rect.height,
+				rect.width / rect.height,
+			);
+			if (!clamp) return point;
+			return {
+				u: Math.min(1 - 1e-6, Math.max(0, point.u)),
+				v: Math.min(1 - 1e-6, Math.max(0, point.v)),
+			};
+		},
+		itemAt: (event) => hitTest(event),
+		cancelBoxDrag: () => releaseDrag(true),
+		tapPixels: TAP_PIXELS,
+	};
+
+	/** A right click on an item whose kind has a selection layer selects it, then asks the layer. */
+	async function onLayerContextMenu(event: MouseEvent): Promise<void> {
+		if (!interactive || cropping) return;
+		const hit = hitTest(event);
+		if (!hit || !kindUi(hit)?.selectionLayer || trackLocked(hit.id)) return;
+		event.preventDefault();
+		if (editor.selectedItemId !== hit.id) {
+			editor.selectedItemId = hit.id;
+			await tick();
+		}
+		selectionHandle?.contextMenu(event);
 	}
 
 	function trackLocked(itemId: string): boolean {
@@ -1966,10 +2013,11 @@
 		if (pinch || cropPinch) return;
 		if (sourceCropping) return;
 		if (cropping) pressCropStage(event);
-		else pressFrame(event);
+		else if (!selectionHandle?.press(event)) pressFrame(event);
 	}
 
 	function onLayerPointerMove(event: PointerEvent): void {
+		if (selectionHandle?.move(event)) return;
 		if (cropPinch) {
 			stepCropPinch(event);
 			return;
@@ -1992,6 +2040,7 @@
 	}
 
 	function onLayerPointerUp(event: PointerEvent): void {
+		if (selectionHandle?.release(event, true)) return;
 		if (cropPinch) {
 			if (isPinchPointer(cropPinch, event)) releaseCropPinch(true);
 			return;
@@ -2014,6 +2063,7 @@
 	}
 
 	function onLayerPointerCancel(event: PointerEvent): void {
+		if (selectionHandle?.release(event, false)) return;
 		if (cropPinch) {
 			if (isPinchPointer(cropPinch, event)) releaseCropPinch(false);
 			return;
@@ -2116,6 +2166,12 @@
 									sourceTimeSeconds={layer.sourceTimeSeconds}
 									playing={editor.isPlaying && entry.live}
 									{exporting}
+									exportSize={exporting
+										? {
+												width: rect.width * outputSize.width,
+												height: rect.height * outputSize.height,
+											}
+										: null}
 									{plugin}
 									{editor}
 									{layer}
@@ -2160,7 +2216,7 @@
 	{:else}
 		<div class="empty">
 			<Icon icon={faFilm} />
-			<span>{t("post_editor_empty_preview")}</span>
+			<span>{plugin?.ui?.emptyHint?.(editor, "preview", translateKey(t)) ?? t("post_editor_empty_preview")}</span>
 		</div>
 	{/if}
 
@@ -2192,6 +2248,7 @@
 			onpointermove={onLayerPointerMove}
 			onpointerup={onLayerPointerUp}
 			onpointercancel={onLayerPointerCancel}
+			oncontextmenu={onLayerContextMenu}
 		>
 			{#if cropping && cropItem}
 				{#if sourceCropping && sourceFrame}
@@ -2334,8 +2391,22 @@
 						aria-label={labelFor(selected)}
 						aria-describedby={hintId}
 						onkeydown={nudge}
-						onpointerdown={(event) => (locked ? undefined : startDrag(event, selected, "move"))}
+						onpointerdown={(event) => {
+							if (selectionHandle?.press(event) || locked) return;
+							startDrag(event, selected, "move");
+						}}
 					>
+						{#if kindUi(selected)?.selectionLayer}
+							{@const SelectionLayer = kindUi(selected)!.selectionLayer!}
+							<SelectionLayer
+								bind:this={selectionHandle}
+								{editor}
+								item={selected}
+								{locked}
+								{turn}
+								canvas={selectionCanvas}
+							/>
+						{/if}
 						{#if !locked && !editor.isPlaying}
 							{#each BOX_CORNERS as corner (corner)}
 								<span

@@ -97,7 +97,7 @@
 					run: addCard,
 				};
 	const ITEMS = $derived(
-		(plugin?.ui?.addItems?.(CORE_ITEMS) ?? CORE_ITEMS).flatMap((entry): AddEntry[] =>
+		(plugin?.ui?.addItems?.(CORE_ITEMS, editor) ?? CORE_ITEMS).flatMap((entry): AddEntry[] =>
 			typeof entry === "string"
 				? [coreItem(entry)]
 				: entry.available(editor)

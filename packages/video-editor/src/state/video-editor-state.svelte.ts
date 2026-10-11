@@ -283,6 +283,9 @@ export function createVideoEditorState<E = unknown>(
 	} | null>(null);
 
 	let media = $state.raw<Record<string, TakeMedia>>({});
+	/** Device takes whose kept copy is being read. */
+	const restoring = new Set<string>();
+	let disposed = false;
 	let imageMedia = $state.raw<Record<string, TakeMedia>>({});
 	let saveError = $state<string | null>(null);
 	let saveRevision = $state(0);
@@ -705,6 +708,7 @@ export function createVideoEditorState<E = unknown>(
 				attach(take, take.ref.url, false, source);
 			} else {
 				extension?.takeWithoutMedia?.(take, source);
+				restoreLocalTake(take);
 			}
 		}
 		for (const image of source.images ?? []) {
@@ -715,6 +719,23 @@ export function createVideoEditorState<E = unknown>(
 				};
 			}
 		}
+	}
+
+	/** Brings back a device take from this device's kept copy, if it has one. */
+	function restoreLocalTake(take: PostTake): void {
+		const footage = host.footage;
+		if (!footage || media[take.id] || restoring.has(take.id)) return;
+		restoring.add(take.id);
+		void footage
+			.open(take)
+			.then((file) => {
+				// The project may have moved on while the copy was read.
+				const current = project.takes.find((candidate) => candidate.id === take.id);
+				if (disposed || !file || media[take.id]) return;
+				if (!current || current.takeKey !== take.takeKey) return;
+				attach(current, URL.createObjectURL(file), true);
+			})
+			.finally(() => restoring.delete(take.id));
 	}
 
 	/** The incoming project moved to this editor's subject, as an import is. */
@@ -743,6 +764,7 @@ export function createVideoEditorState<E = unknown>(
 				const file = files.get(take.ref.name);
 				if (!file) throw new Error(translate("editor_missing_video", { name: take.ref.name }));
 				attach(take, URL.createObjectURL(file), true, parsed);
+				void host.footage?.keep(take, file);
 			} else extension?.takeWithoutMedia?.(take, parsed);
 		}
 		const nextImages = { ...imageMedia };
@@ -871,6 +893,7 @@ export function createVideoEditorState<E = unknown>(
 			durationSeconds,
 		};
 		attach(take, URL.createObjectURL(file), true);
+		void host.footage?.keep(take, file);
 		return placeTake(take);
 	}
 
@@ -899,6 +922,7 @@ export function createVideoEditorState<E = unknown>(
 		)
 			return false;
 		attach(take, URL.createObjectURL(file), true);
+		void host.footage?.keep(take, file);
 		return true;
 	}
 
@@ -916,6 +940,7 @@ export function createVideoEditorState<E = unknown>(
 			const file = matches(take.ref);
 			if (file) {
 				attach(take, URL.createObjectURL(file), true);
+				void host.footage?.keep(take, file);
 				linked++;
 			}
 		}
@@ -1080,6 +1105,7 @@ export function createVideoEditorState<E = unknown>(
 	}
 
 	function dispose(): void {
+		disposed = true;
 		keepHistory();
 		if (typeof window !== "undefined") window.removeEventListener("pagehide", keepHistory);
 		for (const held of Object.values(media)) {

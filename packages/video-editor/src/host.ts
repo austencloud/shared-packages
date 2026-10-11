@@ -1,4 +1,5 @@
 import type { IPreviewVideoCache } from "./render/preview-cache/preview-video-cache-contract.js";
+import type { PostFootageVault } from "./state/local-footage-vault.js";
 import type { VideoEditorState } from "./state/video-editor-state.svelte.js";
 import type { VideoEditorStore } from "./store/types.js";
 import type { Translate } from "./strings/translate.js";
@@ -30,7 +31,28 @@ export interface VideoEditorHost<E = unknown> {
 	shortcuts?: EditorShortcuts;
 	/** Vibration on a phone. Default: none. */
 	haptics?: EditorHaptic;
+	/**
+	 * This device's kept copies of picked videos, for whoever is editing, so a reload brings device
+	 * footage back without picking it again (createLocalFootageVault). Default: none.
+	 */
+	footage?: PostFootageVault;
+	/**
+	 * Confirmations a person may turn off (tka: its settings' "don't ask again"). Absent: the editor
+	 * always asks and offers no way to stop.
+	 */
+	confirmations?: EditorConfirmations;
 }
+
+/** A confirmation the person can turn off, keyed by the editor's name for it. */
+export interface EditorConfirmations {
+	/** Whether to ask before this action. */
+	shouldAsk(key: EditorConfirmKey): boolean;
+	/** The person ticked "don't ask again". */
+	stopAsking(key: EditorConfirmKey): void;
+}
+
+/** The editor's confirmations a host may let a person turn off. */
+export type EditorConfirmKey = "clear-post-keyframes";
 
 export interface EditorNotify {
 	success(message: string): void;

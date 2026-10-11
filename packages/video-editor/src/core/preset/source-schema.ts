@@ -15,6 +15,7 @@ export const MediaSourceKindSchema = z.enum([
 	"beat-carousel",
 	"image",
 	"audio",
+	"arrangement",
 ]);
 
 /**

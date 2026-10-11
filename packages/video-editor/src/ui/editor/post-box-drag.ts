@@ -412,6 +412,28 @@ export function boxContains(box: PostBox, x: number, y: number, aspect = 1): boo
 	return Math.abs(alongWidth) <= (box.width * wide) / 2 && Math.abs(alongHeight) <= box.height / 2;
 }
 
+/**
+ * A frame point as fractions of a box from its top left, read in the box's own axes when it is
+ * turned (the inverse of `boxContains`). `aspect` is the frame's width over its height.
+ */
+export function boxLocalPoint(
+	box: PostBox,
+	x: number,
+	y: number,
+	aspect = 1,
+): { u: number; v: number } {
+	const wide = aspect > 0 && Number.isFinite(aspect) ? aspect : 1;
+	const [alongWidth, alongHeight] = intoTurnedBox(
+		(x - box.x - box.width / 2) * wide,
+		y - box.y - box.height / 2,
+		boxTurn(box),
+	);
+	return {
+		u: box.width > 0 ? alongWidth / (box.width * wide) + 0.5 : 0,
+		v: box.height > 0 ? alongHeight / box.height + 0.5 : 0,
+	};
+}
+
 /** Each handle's direction out of the box, in degrees clockwise from east. */
 const HANDLE_ANGLE: Record<Exclude<BoxHandle, "move">, number> = {
 	e: 0,

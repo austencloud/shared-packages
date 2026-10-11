@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createProjectSchema, normalizeProject, updateItem } from "../src/core/index.js";
 import type { VideoEditorHost } from "../src/host.js";
 import {
@@ -7,6 +7,8 @@ import {
 } from "../src/state/video-editor-state.svelte.js";
 import { createDeviceStore } from "../src/store/device-store.js";
 import type { PostProject } from "../src/core/project/item-kinds.js";
+import type { PostTake } from "../src/core/plan/post-plan.js";
+import type { PostFootageVault } from "../src/state/local-footage-vault.js";
 import plain from "./fixtures/plain.project.json";
 
 class MemoryStorage implements Storage {
@@ -173,5 +175,92 @@ describe("state extension", () => {
 
 		state.dispose();
 		expect(hooks.dispose).toHaveBeenCalledOnce();
+	});
+});
+
+describe("device footage across a reload", () => {
+	function memoryVault() {
+		const kept = new Map<string, File>();
+		const vault: PostFootageVault = {
+			keep: vi.fn(async (take: PostTake, file: File) => {
+				kept.set(take.takeKey, file);
+			}),
+			open: vi.fn(async (take: PostTake) => kept.get(take.takeKey) ?? null),
+		};
+		return { vault, kept };
+	}
+	const open = (local: MemoryStorage, footage: PostFootageVault) =>
+		createVideoEditorState(hostWith(local, { footage }), undefined, { subjectId: "seq" });
+
+	let urls = 0;
+	beforeEach(() => {
+		urls = 0;
+		vi.stubGlobal("URL", {
+			...URL,
+			createObjectURL: vi.fn(() => `blob:footage-${++urls}`),
+			revokeObjectURL: vi.fn(),
+		});
+	});
+	afterEach(() => vi.unstubAllGlobals());
+
+	it("keeps a picked video and reopens the project with it attached", async () => {
+		const local = new MemoryStorage();
+		const { vault } = memoryVault();
+		const editor = open(local, vault);
+		const file = new File(["footage"], "fire.mp4", { type: "video/mp4", lastModified: 7 });
+		editor.addLocalVideo(file, 8);
+		const take = editor.project.takes[0]!;
+		expect(vault.keep).toHaveBeenCalledWith(take, file);
+		editor.dispose();
+
+		const reopened = open(local, vault);
+		expect(reopened.mediaUrl(take.id)).toBeNull();
+		await vi.waitFor(() => expect(reopened.mediaUrl(take.id)).toMatch(/^blob:/));
+		expect(vault.open).toHaveBeenCalledWith(take);
+		reopened.dispose();
+	});
+
+	it("leaves the take waiting to be picked when this device kept no copy", async () => {
+		const local = new MemoryStorage();
+		const { vault, kept } = memoryVault();
+		const editor = open(local, vault);
+		editor.addLocalVideo(new File(["footage"], "fire.mp4"), 8);
+		const take = editor.project.takes[0]!;
+		editor.dispose();
+		kept.clear();
+
+		const reopened = open(local, vault);
+		await vi.waitFor(() => expect(vault.open).toHaveBeenCalled());
+		await Promise.resolve();
+		expect(reopened.mediaUrl(take.id)).toBeNull();
+		reopened.dispose();
+	});
+
+	it("attaches nothing once the editor is gone", async () => {
+		const local = new MemoryStorage();
+		const { vault } = memoryVault();
+		const editor = open(local, vault);
+		editor.addLocalVideo(new File(["footage"], "fire.mp4"), 8);
+		const take = editor.project.takes[0]!;
+		editor.dispose();
+
+		const reopened = open(local, vault);
+		reopened.dispose();
+		await vi.waitFor(() => expect(vault.open).toHaveBeenCalled());
+		await Promise.resolve();
+		expect(reopened.mediaUrl(take.id)).toBeNull();
+	});
+
+	it("keeps a re-picked video so the next reload needs no picking", () => {
+		const { vault } = memoryVault();
+		const editor = open(new MemoryStorage(), vault);
+		const file = new File(["footage"], "fire.mp4", { lastModified: 7 });
+		editor.addLocalVideo(file, 8);
+		const take = editor.project.takes[0]!;
+		vi.mocked(vault.keep).mockClear();
+
+		expect(editor.relinkLocalTake(take.id, file)).toBe(true);
+		expect(vault.keep).toHaveBeenCalledWith(take, file);
+		editor.dispose();
 	});
 });

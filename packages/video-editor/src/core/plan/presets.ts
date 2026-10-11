@@ -47,6 +47,8 @@ export type PostStudioRoleKey = (typeof POST_STUDIO_ROLE)[keyof typeof POST_STUD
 /** How a layer element is built and how the compositor reads a frame from it. */
 export type PostStudioRenderMode =
 	| "external-media"
+	/** A plugin's grid of live cells (tka: an arrangement), drawn by the plugin's sublayer and surface. */
+	| "arrangement"
 	| "sequence-animation"
 	| "choreo-card"
 	| "tunnel"
