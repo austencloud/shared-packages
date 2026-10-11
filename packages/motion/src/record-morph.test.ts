@@ -38,6 +38,7 @@ const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
 afterEach(() => {
 	document.body.innerHTML = '';
 	document.documentElement.className = '';
+	document.documentElement.style.removeProperty('--route-content-shift');
 });
 
 describe('record morph names', () => {
@@ -90,6 +91,30 @@ describe('record morph names', () => {
 		release();
 		await firstUpdate;
 		expect(header.style.viewTransitionName).toBe('');
+	});
+});
+
+describe('page area offset', () => {
+	it('holds the old page where it was on screen while the new page starts at its own scroll', async () => {
+		const { finishRunning } = fakeViewTransitions();
+		document.body.innerHTML = '<div data-route-content></div>';
+		const content = document.querySelector<HTMLElement>('[data-route-content]')!;
+		const root = document.documentElement;
+		// Scrolled 1500px down the old page; the new page opens at the top.
+		let top = -1500;
+		content.getBoundingClientRect = () => ({ top }) as DOMRect;
+		let arrive!: () => void;
+		const complete = new Promise<void>((resolve) => (arrive = resolve));
+
+		await runRouteTransition(complete, null);
+		top = 0;
+		arrive();
+		await flush();
+		expect(root.style.getPropertyValue('--route-content-shift')).toBe('-1500px');
+
+		finishRunning();
+		await flush();
+		expect(root.style.getPropertyValue('--route-content-shift')).toBe('');
 	});
 });
 

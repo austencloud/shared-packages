@@ -136,22 +136,74 @@ describe('routeMotionHandler', () => {
 		expect(nameOf(header)).toBe('');
 	});
 
-	it('morphs the page header back into its box when going back', async () => {
+	it('morphs the page header back into its box when returning to the page that opened it', async () => {
 		document.body.innerHTML =
-			'<header data-record-target="act:a1"><img data-record-photo></header><a data-record="act:a1"></a>';
+			'<a data-record="act:a1"></a><header data-record-target="act:a1"><img data-record-photo></header>';
+		const box = document.querySelector('a')!;
 		const header = document.querySelector('header')!;
+		stopTracking = trackRecordClicks(document);
+		const handle = routeMotionHandler(routes);
+
+		box.click();
+		const opening = stubViewTransition(() => null);
+		await handle(nav('/acts', '/acts', '/acts/[id]', '/acts/a1', { to: { id: 'a1' } }));
+		opening.finish();
+		await tick();
+
 		const { finish, started } = stubViewTransition(() => ({
 			morph: root.classList.contains('route-morph'),
 			headerName: nameOf(header),
 			photoName: nameOf(header.querySelector('img'))
 		}));
-		const handle = routeMotionHandler(routes);
 		await handle(nav('/acts/[id]', '/acts/a1', '/acts', '/acts', { from: { id: 'a1' } }));
 
 		expect(started).toEqual([{ morph: true, headerName: 'record-box', photoName: 'record-photo' }]);
 		finish();
 		await tick();
 		expect(root.classList.contains('route-morph')).toBe(false);
+	});
+
+	it('fades when a record page links somewhere that holds none of its boxes', async () => {
+		document.body.innerHTML =
+			'<a data-record="act:a1"></a><header data-record-target="act:a1"><img data-record-photo></header>';
+		const box = document.querySelector('a')!;
+		const header = document.querySelector('header')!;
+		stopTracking = trackRecordClicks(document);
+		const handle = routeMotionHandler(routes);
+
+		box.click();
+		const opening = stubViewTransition(() => null);
+		await handle(nav('/acts', '/acts', '/acts/[id]', '/acts/a1', { to: { id: 'a1' } }));
+		opening.finish();
+		await tick();
+
+		// A call to action on the record page opens a form: no box waits there,
+		// so naming the header would lift its photo above its own headline.
+		const { finish, started } = stubViewTransition(() => ({
+			morph: root.classList.contains('route-morph'),
+			headerName: nameOf(header),
+			photoName: nameOf(header.querySelector('img'))
+		}));
+		await handle(nav('/acts/[id]', '/acts/a1', '/inquire', '/inquire', { from: { id: 'a1' } }));
+
+		expect(started).toEqual([{ morph: false, headerName: '', photoName: '' }]);
+		finish();
+		await tick();
+	});
+
+	it('fades when leaving a record page that was not opened from a box', async () => {
+		document.body.innerHTML = '<header data-record-target="act:a1"><img data-record-photo></header><a data-record="act:a1"></a>';
+		const header = document.querySelector('header')!;
+		const { finish, started } = stubViewTransition(() => ({
+			morph: root.classList.contains('route-morph'),
+			headerName: nameOf(header)
+		}));
+		const handle = routeMotionHandler(routes);
+		await handle(nav('/acts/[id]', '/acts/a1', '/acts', '/acts', { from: { id: 'a1' } }));
+
+		expect(started).toEqual([{ morph: false, headerName: '' }]);
+		finish();
+		await tick();
 	});
 
 	it('names a record by every param, joined with a slash', async () => {

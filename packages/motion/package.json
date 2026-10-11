@@ -1,6 +1,6 @@
 {
   "name": "@austencloud/motion",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "One motion clock for AustenCloud apps: duration tokens, reduced-motion-aware Svelte transitions, Crossfade, followHeight, view-transition page changes with record morphs, and a coverage scanner that keeps raw motion out.",
   "type": "module",
   "svelte": "./dist/index.js",
@@ -18,8 +18,14 @@
     },
     "./css/*": "./css/*"
   },
-  "files": ["dist", "css", "!dist/**/*.test.*"],
-  "sideEffects": ["**/*.css"],
+  "files": [
+    "dist",
+    "css",
+    "!dist/**/*.test.*"
+  ],
+  "sideEffects": [
+    "**/*.css"
+  ],
   "scripts": {
     "build": "svelte-package -i src -o dist",
     "check": "svelte-check --tsconfig ./tsconfig.json",
@@ -39,7 +45,13 @@
     "typescript": "^5.0.0",
     "vitest": "^2.1.0"
   },
-  "keywords": ["svelte", "motion", "transitions", "view-transitions", "austencloud"],
+  "keywords": [
+    "svelte",
+    "motion",
+    "transitions",
+    "view-transitions",
+    "austencloud"
+  ],
   "author": "Austen Cloud <austencloud@gmail.com>",
   "license": "MIT",
   "repository": {
@@ -47,5 +59,7 @@
     "url": "git+https://github.com/austencloud/shared-packages.git",
     "directory": "packages/motion"
   },
-  "publishConfig": { "access": "public" }
+  "publishConfig": {
+    "access": "public"
+  }
 }

@@ -3,7 +3,8 @@
  * capture, so the sidebar and top bar stay live and only the main column
  * moves. When the reader clicked a record box (`data-record="kind:id"`), that
  * box and its photo morph into the new page's header (`data-record-target`).
- * Going back reverses it: the header morphs into the matching box.
+ * Going back reverses it: the header morphs into the matching box. The
+ * leaving page fades where it was on screen, whatever the new page's scroll.
  *
  * Only two names are ever used, `record-box` and `record-photo`, stamped on
  * one element per side for the length of one transition, so a list of thirty
@@ -14,6 +15,12 @@ import { PAGE_READY_CAP_MS, waitForPageReady } from './page-ready';
 const CLICK_WINDOW_MS = 1500;
 const BOX = 'record-box';
 const PHOTO = 'record-photo';
+/** How far the old page area's top sits from the new one's, read by the page fade. */
+const SHIFT = '--route-content-shift';
+
+function contentTop(): number | null {
+	return document.querySelector('[data-route-content]')?.getBoundingClientRect().top ?? null;
+}
 
 let lastClick: { element: Element; at: number } | null = null;
 let generation = 0;
@@ -108,6 +115,7 @@ export function runRouteTransition(
 	root.classList.toggle('route-morph', !!morph);
 	let clearSource = morph ? stamp(morph.source, mine) : () => {};
 	let clearDestination = () => {};
+	const oldTop = contentTop();
 
 	return new Promise((resolve) => {
 		const transition = document.startViewTransition(async () => {
@@ -118,6 +126,12 @@ export function runRouteTransition(
 			await waitForPageReady(PAGE_READY_CAP_MS);
 			// A newer page change has taken over; leave its DOM alone.
 			if (generation !== mine) return;
+			// A link opens the new page at the top and Back restores its saved
+			// scroll, so the page area's top moves. The old picture is held at
+			// the spot it had on screen (css/route-transitions.css) instead of
+			// sliding there.
+			const newTop = contentTop();
+			if (oldTop !== null && newTop !== null) root.style.setProperty(SHIFT, `${oldTop - newTop}px`);
 			const destination = morph?.destination();
 			if (destination) clearDestination = stamp(destination, mine);
 		});
@@ -132,6 +146,7 @@ export function runRouteTransition(
 				clearDestination();
 				if (generation !== mine) return;
 				root.classList.remove('route-transition', 'route-morph');
+				root.style.removeProperty(SHIFT);
 			});
 	});
 }

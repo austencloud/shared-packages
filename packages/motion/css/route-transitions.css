@@ -26,7 +26,18 @@ html.route-transition [data-route-hold='nav'] {
 	z-index: 1;
 }
 
+/* The page area does not travel between its old and new spots. A link opens
+   the new page at the top and Back restores a saved scroll, so the area's top
+   moves by the scroll offset; the group would slide the leaving page by that
+   much while it fades. The group sits where the new page is, and the old
+   picture is moved back to where it was on screen (--route-content-shift is
+   set by src/record-morph.ts). */
+::view-transition-group(page-content) {
+	animation: none;
+}
+
 ::view-transition-old(page-content) {
+	translate: 0 var(--route-content-shift, 0px);
 	animation: route-fade-out var(--duration-normal) var(--ease-standard) both;
 }
 
