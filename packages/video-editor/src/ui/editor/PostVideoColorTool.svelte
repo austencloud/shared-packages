@@ -9,7 +9,7 @@
 	const DEGREE = String.fromCharCode(176);
 
 	interface Props {
-		grade?: PostVideoColorGrade;
+		grade?: PostVideoColorGrade | undefined;
 		locked: boolean;
 		grading: boolean;
 		error: string;

@@ -49,7 +49,12 @@
 		{ "task": 19, "from": "$lib/shared/share/components/post-studio/editor/timeline/PostTimelineKeyLaneHeader.svelte", "to": "ui/editor/timeline/PostTimelineKeyLaneHeader.svelte", "entry": "@austencloud/video-editor/ui" },
 		{ "task": 19, "from": "$lib/shared/share/components/post-studio/editor/timeline/PostTimelineMusicLane.svelte", "to": "ui/editor/timeline/PostTimelineMusicLane.svelte", "entry": "@austencloud/video-editor/ui" },
 		{ "task": 19, "from": "$lib/shared/share/components/post-studio/editor/timeline/PostTimelineTrackHeader.svelte", "to": "ui/editor/timeline/PostTimelineTrackHeader.svelte", "entry": "@austencloud/video-editor/ui" },
-		{ "task": 19, "from": "$lib/shared/share/components/post-studio/editor/timeline/PostTimelineZoomControls.svelte", "to": "ui/editor/timeline/PostTimelineZoomControls.svelte", "entry": "@austencloud/video-editor/ui" }
+		{ "task": 19, "from": "$lib/shared/share/components/post-studio/editor/timeline/PostTimelineZoomControls.svelte", "to": "ui/editor/timeline/PostTimelineZoomControls.svelte", "entry": "@austencloud/video-editor/ui" },
+		{ "task": 20, "from": "$lib/shared/share/components/post-studio/editor/PostEditorWorkspace.svelte", "to": "ui/editor/PostEditorWorkspace.svelte", "entry": "@austencloud/video-editor/ui" },
+		{ "task": 20, "from": "$lib/shared/share/components/post-studio/editor/PostEditorCanvas.svelte", "to": "ui/editor/PostEditorCanvas.svelte", "entry": "@austencloud/video-editor/ui" },
+		{ "task": 20, "from": "$lib/shared/share/components/post-studio/editor/PostItemTool.svelte", "to": "ui/editor/PostItemTool.svelte", "entry": "@austencloud/video-editor/ui" },
+		{ "task": 20, "from": "$lib/shared/share/components/post-studio/editor/timeline/PostTimeline.svelte", "to": "ui/editor/timeline/PostTimeline.svelte", "entry": "@austencloud/video-editor/ui" },
+		{ "task": 20, "from": "$lib/shared/share/components/post-studio/PostStudioMediaLayer.svelte", "to": "ui/PostStudioMediaLayer.svelte", "entry": "@austencloud/video-editor/ui" }
 	],
 	"splits": [],
 	"copies": [

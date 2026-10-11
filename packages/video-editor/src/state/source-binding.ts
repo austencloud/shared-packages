@@ -16,8 +16,8 @@ export interface CompositionSourceBinding {
 	painter?: PostStudioLayerPainter;
 	durationSeconds?: number;
 	/** Original dimensions remain authoritative when a smaller playback copy is used. */
-	sourceWidth?: number;
-	sourceHeight?: number;
+	sourceWidth?: number | undefined;
+	sourceHeight?: number | undefined;
 	onPreviewError?: () => void;
 	hasAudio?: boolean;
 	status: CompositionSourceStatus;

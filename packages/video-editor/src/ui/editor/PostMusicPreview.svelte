@@ -3,7 +3,6 @@
 	import type { PreviewVideoController } from "../../render/preview-clock.js";
 	import { planMusicAudio, segmentGainAt } from "../../core/music/audio-plan.js";
 	import type { PostMusic } from "../../core/music/post-music.js";
-	import type { MusicPlacement } from "../../core/music/music-grid.js";
 	import {
 		musicPreviewTarget,
 		musicSoundsAt,
@@ -27,7 +26,7 @@
 		playing: boolean;
 		onController: (controller: PreviewVideoController | null) => void;
 		/** True while the music's file can't be loaded, false when that ends. */
-		onMissing?: (missing: boolean) => void;
+		onMissing?: ((missing: boolean) => void) | undefined;
 	}
 
 	let { music, postSeconds, postDurationSeconds, playing, onController, onMissing }: Props =
@@ -44,7 +43,7 @@
 	let failedSource = $state<string | null>(null);
 
 	const failed = $derived(failedSource === music.url);
-	const target = $derived(musicPreviewTarget(music as MusicPlacement, postSeconds));
+	const target = $derived(musicPreviewTarget(music, postSeconds));
 	const segment = $derived(planMusicAudio(music, postDurationSeconds)[0] ?? null);
 	// A file that failed to load sounds nothing.
 	const sounding = $derived(!failed && musicSoundsAt(segment, postSeconds));

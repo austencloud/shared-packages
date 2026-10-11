@@ -99,7 +99,7 @@
 	let drag: MusicDrag | null = null;
 	let waveEl = $state<HTMLDivElement | null>(null);
 
-	const span = $derived(musicSpan(music as MusicPlacement));
+	const span = $derived(musicSpan(music));
 	const leftPx = $derived(span.start * pixelsPerSecond);
 	const widthPx = $derived((span.end - span.start) * pixelsPerSecond);
 	const wavePixelsPerSecond = $derived(Math.min(pixelsPerSecond, WAVE_MAX_PIXELS_PER_SECOND));
@@ -107,7 +107,7 @@
 	// changes every line's post time but none of their places in the grid, so
 	// the same elements stay through it.
 	const lines = $derived.by(() => {
-		const gridded = music as PostMusic & MusicPlacement;
+		const gridded = music;
 		if (!hasGrid(gridded)) return [];
 		const beats = beatSeconds(gridded.grid) * pixelsPerSecond >= BEAT_LINE_MIN_PX;
 		// Only the bars the ruler numbers stand out; the rest draw as beats.
@@ -142,10 +142,9 @@
 
 	/** Bar 1 on the post's clock, or null when the music doesn't sound it. */
 	function barOneAt(placed: PostMusic): number | null {
-		const gridded = placed as PostMusic & MusicPlacement;
-		if (!hasGrid(gridded)) return null;
-		const seconds = postSecondsAtBar(gridded, 1);
-		const { start, end } = musicSpan(gridded);
+		if (!hasGrid(placed)) return null;
+		const seconds = postSecondsAtBar(placed, 1);
+		const { start, end } = musicSpan(placed);
 		return seconds >= start - POST_TIME_EPSILON && seconds <= end + POST_TIME_EPSILON
 			? seconds
 			: null;
@@ -158,7 +157,7 @@
 			startSeconds: placed.startSeconds - placed.sourceInSeconds,
 			sourceInSeconds: 0,
 			sourceOutSeconds: placed.durationSeconds,
-		} as MusicPlacement;
+		};
 	}
 
 	$effect(() => {
@@ -234,7 +233,7 @@
 
 	function place(state: MusicDrag, raw: number): { seconds: number; guide: number | null } {
 		const placed = state.music;
-		const { start, end } = musicSpan(placed as MusicPlacement);
+		const { start, end } = musicSpan(placed);
 		if (state.kind === "move") {
 			const anchors = [0, end - start];
 			const barOne = barOneAt(placed);
@@ -263,8 +262,7 @@
 
 	function emit(state: MusicDrag): void {
 		if (state.kind === "move") onMove(state.to);
-		else if (state.kind === "downbeat")
-			onMoveDownbeat(trackSecondsAt(state.music as MusicPlacement, state.to));
+		else if (state.kind === "downbeat") onMoveDownbeat(trackSecondsAt(state.music, state.to));
 		else onTrim(state.kind, state.to);
 	}
 

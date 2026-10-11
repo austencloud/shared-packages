@@ -1,3 +1,5 @@
+export { default as VideoEditor } from "./VideoEditor.svelte";
+export type { VideoEditorProps } from "./types.js";
 export { default as VideoEditorSpike } from "./VideoEditorSpike.svelte";
 export { provideEditorUi, useEditorUi, type EditorUi } from "./editor-context.js";
 export { default as Popover } from "./kit/Popover.svelte";
@@ -192,6 +194,7 @@ export { default as PostDraftStatus } from "./editor/PostDraftStatus.svelte";
 export { default as PostEditorActions } from "./editor/PostEditorActions.svelte";
 export { default as PostEditorTopBar } from "./editor/PostEditorTopBar.svelte";
 export { default as PostEditorTransport } from "./editor/PostEditorTransport.svelte";
+export { default as PostEditorWorkspace } from "./editor/PostEditorWorkspace.svelte";
 export { default as PostExportPanel } from "./editor/PostExportPanel.svelte";
 export { default as PostKeyframeControls } from "./editor/PostKeyframeControls.svelte";
 export { default as PostMediaPanel } from "./editor/PostMediaPanel.svelte";
@@ -213,4 +216,5 @@ export { default as PostTimelineMusicLane } from "./editor/timeline/PostTimeline
 export { default as PostTimelineTrackHeader } from "./editor/timeline/PostTimelineTrackHeader.svelte";
 export { default as PostTimelineZoomControls } from "./editor/timeline/PostTimelineZoomControls.svelte";
 export { default as PostStudioBackdrop } from "./PostStudioBackdrop.svelte";
+export { default as PostStudioMediaLayer } from "./PostStudioMediaLayer.svelte";
 export { default as PostStudioPaintedLayer } from "./PostStudioPaintedLayer.svelte";

@@ -27,17 +27,17 @@
 	interface Props {
 		exporting: boolean;
 		onExport: () => void;
-		onImport?: () => void;
-		onImportDifferences?: () => void;
+		onImport?: (() => void) | undefined;
+		onImportDifferences?: (() => void) | undefined;
 		onMirror?: () => void;
 		mirrored?: boolean;
-		onBackup?: () => void;
-		onRestore?: () => void;
+		onBackup?: (() => void) | undefined;
+		onRestore?: (() => void) | undefined;
 		onClearPostKeyframes?: () => void;
 		clearableKeyframes?: number;
 		onRetry?: () => void;
 		canRetry?: boolean;
-		trailing?: Snippet;
+		trailing?: Snippet | undefined;
 		/** Another screen, such as timing, has the editor; nothing here acts. */
 		locked?: boolean;
 	}

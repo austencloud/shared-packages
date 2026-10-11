@@ -18,6 +18,11 @@ export function provideEditorUi<E>(ui: EditorUi<E>): EditorUi<E> {
 	return ui;
 }
 
+/** True when an ancestor (<VideoEditor>) already provided the editor context. */
+export function hasEditorUi(): boolean {
+	return getContext<EditorUi | undefined>(EDITOR_UI) !== undefined;
+}
+
 export function useEditorUi<E = unknown>(): EditorUi<E> {
 	const ui = getContext<EditorUi<E> | undefined>(EDITOR_UI);
 	if (!ui) throw new Error("useEditorUi() runs inside <VideoEditor>.");

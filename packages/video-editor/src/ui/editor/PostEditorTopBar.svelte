@@ -15,8 +15,8 @@
 	interface Props {
 		editor: VideoEditorState;
 		exporting: boolean;
-		actions?: Snippet;
-		draftStatus?: Snippet;
+		actions?: Snippet | undefined;
+		draftStatus?: Snippet | undefined;
 	}
 
 	let { editor, exporting, actions, draftStatus }: Props = $props();

@@ -3,12 +3,7 @@
 	import PanelButton from "../kit/PanelButton.svelte";
 	import TypeableValue from "../kit/TypeableValue.svelte";
 	import ValueSlider from "../kit/ValueSlider.svelte";
-	import {
-		downbeatFromTaps,
-		musicSpan,
-		trackSecondsAt,
-		type MusicPlacement,
-	} from "../../core/music/music-grid.js";
+	import { downbeatFromTaps, musicSpan, trackSecondsAt } from "../../core/music/music-grid.js";
 	import {
 		POST_MUSIC_MAX_BEATS_PER_BAR,
 		POST_MUSIC_MAX_GAIN,
@@ -84,7 +79,7 @@
 	const shownNote = $derived(suggestedFor === music.url ? suggestNote : "");
 
 	const playingSeconds = $derived(music.sourceOutSeconds - music.sourceInSeconds);
-	const span = $derived(musicSpan(music as MusicPlacement));
+	const span = $derived(musicSpan(music));
 	/** Far enough inside the music that an edge moved to the playhead leaves a piece. */
 	const playheadInside = $derived.by(() => {
 		const at = playheadSeconds();
@@ -103,7 +98,7 @@
 		const at = performance.now();
 		if (at - lastTapAt > TAP_RESET_MS) taps = [];
 		lastTapAt = at;
-		taps = [...taps, trackSecondsAt(music as MusicPlacement, playheadSeconds())];
+		taps = [...taps, trackSecondsAt(music, playheadSeconds())];
 		tapCount = taps.length;
 		const downbeat = downbeatFromTaps(taps, grid.bpm, grid.downbeatSeconds);
 		if (downbeat !== null) onChange("downbeat", { downbeatSeconds: downbeat });

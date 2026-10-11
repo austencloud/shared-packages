@@ -1,3 +1,5 @@
+export { default as VideoEditor } from "./ui/VideoEditor.svelte";
+export type { VideoEditorProps } from "./ui/types.js";
 export { default as VideoEditorSpike } from "./ui/VideoEditorSpike.svelte";
 export { createSpikeWorker } from "./workers/index.js";
 export type { SpikeWorkerPing, SpikeWorkerPong } from "./workers/messages.js";

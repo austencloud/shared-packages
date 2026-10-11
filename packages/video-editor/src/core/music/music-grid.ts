@@ -12,7 +12,7 @@ import type { PostMusic, PostMusicGrid } from "./post-music.js";
 export type MusicPlacement = Pick<
 	PostMusic,
 	"startSeconds" | "sourceInSeconds" | "sourceOutSeconds"
-> & { grid?: PostMusicGrid };
+> & { grid?: PostMusicGrid | undefined };
 export type GriddedMusic = MusicPlacement & { grid: PostMusicGrid };
 
 /** One grid line on the post's clock. A downbeat is a bar's first beat. */

@@ -8,7 +8,7 @@
 
 	interface Props {
 		style: PostTextStyle;
-		animation?: PostTextAnimation;
+		animation?: PostTextAnimation | undefined;
 		locked: boolean;
 		onStyle: (style: PostTextStyle, field: string) => void;
 		onAnimation: (animation: PostTextAnimation | null, field: string) => void;

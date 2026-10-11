@@ -28,7 +28,7 @@ export const POST_EDGE_COLOR_HEX: Record<PostEdgeColor, string> = {
 export const POST_DEFAULT_EDGE_BORDER = 6 / 1080;
 
 /** The clip's edges, plain when it stores none. */
-export function edgeOf(item: { edge?: PostClipEdge }): PostClipEdge {
+export function edgeOf(item: { edge?: PostClipEdge | undefined }): PostClipEdge {
 	return item.edge ?? POST_PLAIN_EDGE;
 }
 

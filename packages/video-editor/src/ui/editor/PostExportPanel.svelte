@@ -24,7 +24,7 @@
 		onRender: () => void;
 		onCancel: () => void;
 		onTapBeats: (takeId: string) => void;
-		onSharePost?: () => void;
+		onSharePost?: (() => void) | undefined;
 		/** A feature video's render, once it is in the project's exports/ folder. */
 		savedTo?: string | null;
 		/** Why a feature video's render did not reach exports/. */

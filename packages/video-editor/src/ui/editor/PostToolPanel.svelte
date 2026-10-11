@@ -20,9 +20,9 @@
 		/** The plugin's tools, which bring their own icons. */
 		pluginTools?: readonly PluginTool[];
 		/** The selected item's name; nothing for the post's own tools. */
-		subject?: string;
+		subject?: string | undefined;
 		/** Given on a phone, where Done returns to the tool row. */
-		onDone?: () => void;
+		onDone?: (() => void) | undefined;
 		/** `side` fills a sized column and scrolls inside it. */
 		placement: "dock" | "side";
 		/**
