@@ -36,4 +36,16 @@ describe("strings", () => {
 		expect(EN.store_save_failed).toBe("The post could not be saved on this device.");
 		expect(EN.store_unavailable).toBe("Device storage is unavailable. The current post was kept.");
 	});
+
+	it("every English text uses only lowercase placeholders", () => {
+		for (const [key, text] of Object.entries(EN)) {
+			const holes = text.match(/[{][^}]*[}]/g) ?? [];
+			for (const hole of holes) expect(hole, key).toMatch(/^[{][a-z_]+[}]$/);
+		}
+	});
+
+	it("holds the post editor's keys", () => {
+		expect(EN.post_editor_set_to_playhead).toBeTypeOf("string");
+		expect(EN.post_editor_text_placeholder).toBeTypeOf("string");
+	});
 });
