@@ -23,3 +23,4 @@ export * from "./audio-track.js";
 export * from "./music-preview-sync.js";
 export * from "./video-mirror.js";
 export * from "./media-audio-inspector.js";
+export * from "./media-download-release.js";

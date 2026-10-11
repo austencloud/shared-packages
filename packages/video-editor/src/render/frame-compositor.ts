@@ -472,7 +472,11 @@ export async function renderPostStudioFrame(input: RenderPostStudioFrameInput): 
  * names are tka's (sequence animation, choreo card); step 3 moves them out of
  * the compositor together with the role table presetRenderMode reads.
  */
-const DOM_SURFACE_MODES: ReadonlySet<string> = new Set(["sequence-animation", "choreo-card"]);
+const DOM_SURFACE_MODES: ReadonlySet<string> = new Set([
+	"sequence-animation",
+	"choreo-card",
+	"arrangement",
+]);
 
 /**
  * A painted layer is drawn by a painter and by nothing else; with none for its

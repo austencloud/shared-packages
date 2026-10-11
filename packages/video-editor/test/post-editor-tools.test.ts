@@ -71,6 +71,13 @@ describe("panels", () => {
 		expect(panels(CLIP)).not.toContain("export");
 	});
 
+	it("offers Transition for core visuals and for plugin kinds marked as visual", () => {
+		expect(panels(CLIP)).toContain("transition");
+		expect(panels(TEXT)).not.toContain("transition");
+		expect(availablePanels({ kind: "grid", transitionVisual: true }, [])).toContain("transition");
+		expect(availablePanels({ kind: "video", transitionVisual: false }, [])).not.toContain("transition");
+	});
+
 	it("defaults to the row's first panel tool", () => {
 		expect(firstPanel(POST)).toBe("videos");
 		expect(firstPanel(CLIP)).toBe("trim");

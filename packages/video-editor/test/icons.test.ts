@@ -5,8 +5,8 @@ describe("icon table", () => {
 	const entries = Object.entries(icons);
 
 	// 84 from the editor UI, plus the kit copies' faCircleInfo, faGift, faTasks and faTrash.
-	it("holds the 88 icons the editor UI and the kit use", () => {
-		expect(entries).toHaveLength(88);
+	it("holds the 92 icons the editor UI and the kit use", () => {
+		expect(entries).toHaveLength(92);
 	});
 
 	it("holds only solid icon definitions", () => {

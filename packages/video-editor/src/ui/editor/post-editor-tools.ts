@@ -49,6 +49,11 @@ export interface PostToolSelection {
 	kind: PostItemKind | null;
 	/** The music under the post is selected; it is no item, so `kind` is null. */
 	music?: boolean;
+	/**
+	 * The selected item takes a transition: a core clip, image or card, or a plugin kind marked
+	 * `transitionVisual`. Absent: read from the core kinds alone.
+	 */
+	transitionVisual?: boolean;
 }
 
 const ACTION_TOOLS = new Set<string>(["back", "split", "duplicate", "delete"]);
@@ -109,9 +114,9 @@ export function availablePanels(
 	const panels = row.filter((id) => isPanelTool(id, tools));
 	if (selection.music) return panels;
 	if (selection.kind === null) return [...panels, "export"];
-	return ["video", "image", "card", "animation", "moves", "carousel"].includes(selection.kind)
-		? [...panels, "transition"]
-		: panels;
+	const transition =
+		selection.transitionVisual ?? ["video", "image", "card"].includes(selection.kind);
+	return transition ? [...panels, "transition"] : panels;
 }
 
 /** The first panel tool in the row, which a wide screen shows by default. */

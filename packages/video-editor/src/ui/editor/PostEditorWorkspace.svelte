@@ -23,6 +23,7 @@
 		PostVideoItem,
 	} from "../../core/project/item-kinds.js";
 	import { postCanvasOf, postOutputSize, ratioValue } from "../../core/project/canvas.js";
+	import { kindDefinition } from "../../core/project/kind-lookup.js";
 	import {
 		channelsOf,
 		keyframeCount,
@@ -686,7 +687,14 @@
 	const selection = $derived.by((): PostToolSelection => {
 		const item = editor.selectedItem;
 		// The music counts only with no item selected, as before.
-		return { kind: item?.kind ?? null, music: !item && musicSelected };
+		return {
+			kind: item?.kind ?? null,
+			music: !item && musicSelected,
+			transitionVisual:
+				item !== null &&
+				(["video", "image", "card"].includes(item.kind) ||
+					kindDefinition(plugin, item.kind)?.transitionVisual === true),
+		};
 	});
 	const tools = $derived(toolRow(selection, editor.selectedItem ?? null, plugin, editor));
 	const rowKey = $derived(`row:${tools.join(" ")}`);
@@ -2263,6 +2271,7 @@
 									keepSourceCropRatio={cropSourceShape !== "free"}
 									onSourceSize={noteSourceSize}
 									onMusicMissing={(missing) => (musicMissing = missing)}
+									onOpenTool={pickTool}
 									bind:root={canvasRoot}
 								/>
 							</div>

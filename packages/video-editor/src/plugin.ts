@@ -210,6 +210,8 @@ export interface SelectionCanvas {
 	cancelBoxDrag(): void;
 	/** A press that moves less than this many pixels is a tap. */
 	tapPixels: number;
+	/** Opens a tool of the selection's row, as picking it in the row does (tka: an empty cell opens Sequence). */
+	openTool(id: string): void;
 }
 
 /** A selection layer's exports. Each returns true when the layer took the event. */

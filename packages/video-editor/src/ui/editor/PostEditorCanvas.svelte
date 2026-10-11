@@ -142,6 +142,8 @@
 		 * changed or the preview went away (false). The preview runs without it.
 		 */
 		onMusicMissing?: (missing: boolean) => void;
+		/** A selection layer asks for a tool of the row. */
+		onOpenTool?: (id: string) => void;
 		root?: HTMLElement | null;
 		/**
 		 * The editor plugin: the media layers draw its sublayer, a press selects
@@ -161,6 +163,7 @@
 		keepSourceCropRatio = true,
 		onSourceSize,
 		onMusicMissing,
+		onOpenTool,
 		root = $bindable(null),
 		plugin,
 	}: Props = $props();
@@ -731,6 +734,7 @@
 		itemAt: (event) => hitTest(event),
 		cancelBoxDrag: () => releaseDrag(true),
 		tapPixels: TAP_PIXELS,
+		openTool: (id) => onOpenTool?.(id),
 	};
 
 	/** A right click on an item whose kind has a selection layer selects it, then asks the layer. */
