@@ -70,4 +70,23 @@ describe("plugin UI members", () => {
 		await bindings.prepareRender?.();
 		expect(prepared).toEqual(["looks"]);
 	});
+
+	it("bindings say when the stage plays elsewhere", () => {
+		let held = false;
+		const bindings: PluginBindings = {
+			bindingFor: () => null,
+			exportPainters: () => new Map(),
+			stageHeldElsewhere: () => held,
+			dispose: () => {},
+		};
+		expect(bindings.stageHeldElsewhere?.()).toBe(false);
+		held = true;
+		expect(bindings.stageHeldElsewhere?.()).toBe(true);
+		const plain: PluginBindings = {
+			bindingFor: () => null,
+			exportPainters: () => new Map(),
+			dispose: () => {},
+		};
+		expect(plain.stageHeldElsewhere?.()).toBeUndefined();
+	});
 });

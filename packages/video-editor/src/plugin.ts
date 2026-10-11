@@ -252,6 +252,12 @@ export interface PluginBindings {
 	 * notation is being prepared, or could not be). Read inside a `$derived`. Absent: none.
 	 */
 	notice?(): { message: string; alert: boolean } | null;
+	/**
+	 * True while the host shows the editor's stage elsewhere, so a hidden editor keeps playing
+	 * (tka: the sequence viewer holds the shared surfaces). Read inside an `$effect`, so what it
+	 * reads is tracked. Absent: a hidden editor always pauses.
+	 */
+	stageHeldElsewhere?(): boolean;
 	dispose(): void;
 }
 
