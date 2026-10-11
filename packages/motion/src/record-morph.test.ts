@@ -94,6 +94,46 @@ describe('record morph names', () => {
 	});
 });
 
+describe('banner photos', () => {
+	it('keeps the box above the photo while either side holds a backdrop photo', async () => {
+		const { finishRunning } = fakeViewTransitions();
+		document.body.innerHTML = `
+			<a data-record="service:a"><span data-record-photo></span></a>
+			<section data-record-target="service:a"><div data-record-photo="backdrop"></div><h1>A</h1></section>`;
+		const card = document.querySelector<HTMLElement>('[data-record]')!;
+		const banner = document.querySelector<HTMLElement>('section')!;
+		const root = document.documentElement;
+
+		// Forward: the card's photo is plain, the page's banner is a backdrop.
+		await runRouteTransition(Promise.resolve(), { source: card, destination: () => banner });
+		expect(root.classList.contains('route-photo-backdrop')).toBe(false);
+		await flush();
+		expect(root.classList.contains('route-photo-backdrop')).toBe(true);
+		finishRunning();
+		await flush();
+		expect(root.classList.contains('route-photo-backdrop')).toBe(false);
+
+		// Back: the banner is the source, so the class is on from the capture.
+		await runRouteTransition(Promise.resolve(), { source: banner, destination: () => card });
+		expect(root.classList.contains('route-photo-backdrop')).toBe(true);
+		finishRunning();
+		await flush();
+		expect(root.classList.contains('route-photo-backdrop')).toBe(false);
+	});
+
+	it('leaves the photo on top for a plain header', async () => {
+		fakeViewTransitions();
+		document.body.innerHTML = `
+			<a data-record="performer:a"><span data-record-photo></span></a>
+			<header data-record-target="performer:a"><span data-record-photo></span></header>`;
+		const card = document.querySelector<HTMLElement>('[data-record]')!;
+		const header = document.querySelector<HTMLElement>('header')!;
+		await runRouteTransition(Promise.resolve(), { source: card, destination: () => header });
+		await flush();
+		expect(document.documentElement.classList.contains('route-photo-backdrop')).toBe(false);
+	});
+});
+
 describe('page area offset', () => {
 	it('holds the old page where it was on screen while the new page starts at its own scroll', async () => {
 		const { finishRunning } = fakeViewTransitions();

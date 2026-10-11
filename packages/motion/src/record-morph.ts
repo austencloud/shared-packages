@@ -9,6 +9,11 @@
  * Only two names are ever used, `record-box` and `record-photo`, stamped on
  * one element per side for the length of one transition, so a list of thirty
  * cards never claims thirty names.
+ *
+ * A photo is drawn above its box unless either side marks it
+ * `data-record-photo="backdrop"`: a banner with a scrim and a headline on it.
+ * Then the box's layer stays on top, so the headline never disappears under
+ * the moving photo.
  */
 import { PAGE_READY_CAP_MS, waitForPageReady } from './page-ready';
 
@@ -17,6 +22,12 @@ const BOX = 'record-box';
 const PHOTO = 'record-photo';
 /** How far the old page area's top sits from the new one's, read by the page fade. */
 const SHIFT = '--route-content-shift';
+/** On the root while a morphing photo sits under its box's content. */
+const BACKDROP = 'route-photo-backdrop';
+
+function hasBackdrop(element: Element): boolean {
+	return element.querySelector('[data-record-photo]')?.getAttribute('data-record-photo') === 'backdrop';
+}
 
 function contentTop(): number | null {
 	return document.querySelector('[data-route-content]')?.getBoundingClientRect().top ?? null;
@@ -113,6 +124,7 @@ export function runRouteTransition(
 	const mine = ++generation;
 	root.classList.add('route-transition');
 	root.classList.toggle('route-morph', !!morph);
+	root.classList.toggle(BACKDROP, !!morph && hasBackdrop(morph.source));
 	let clearSource = morph ? stamp(morph.source, mine) : () => {};
 	let clearDestination = () => {};
 	const oldTop = contentTop();
@@ -133,7 +145,10 @@ export function runRouteTransition(
 			const newTop = contentTop();
 			if (oldTop !== null && newTop !== null) root.style.setProperty(SHIFT, `${oldTop - newTop}px`);
 			const destination = morph?.destination();
-			if (destination) clearDestination = stamp(destination, mine);
+			if (destination) {
+				clearDestination = stamp(destination, mine);
+				if (hasBackdrop(destination)) root.classList.add(BACKDROP);
+			}
 		});
 		// A second click or a back press skips a running transition. That is
 		// expected, so its rejections are not errors.
@@ -145,7 +160,7 @@ export function runRouteTransition(
 				clearSource();
 				clearDestination();
 				if (generation !== mine) return;
-				root.classList.remove('route-transition', 'route-morph');
+				root.classList.remove('route-transition', 'route-morph', BACKDROP);
 				root.style.removeProperty(SHIFT);
 			});
 	});

@@ -57,7 +57,7 @@ Mark up the page with these attributes:
 - `data-route-hold` on chrome that overlaps the page area (a fixed header, a phone bottom bar), so it keeps its own layer above the page. It takes exactly two values, `header` and `nav`; any other value does nothing.
 - `data-record="kind:id"` on the box that opens a record. Several route params are joined with `/`, so the service page above is `service:fire/fire-show`.
 - `data-record-target="kind:id"` on the header of the page that shows that record.
-- `data-record-photo` on a photo that should travel with the box.
+- `data-record-photo` on a photo that should travel with the box. It draws above the box. Write `data-record-photo="backdrop"` on a banner photo that has a scrim and a headline on it: the box's layer then stays above the photo on the way in and back, the photo is cropped to its moving box, and the header must leave its background clear behind the photo so the photo shows through.
 - `holdPageReady()` in a page that is still loading when navigation ends. It returns a release function; call it once the header exists.
 
 A clicked box morphs into its record page. Going back to the page that box was on morphs the header back into it; any other page change from a record page, such as a booking link to a form, fades, because a header with no box to land in would lift its photo above its own headline. The leaving page fades where it was on screen, even when the new page opens at a different scroll. A query-only change on the same page is that page's own motion and gets none here. Reduced motion and browsers without view transitions get the plain swap.

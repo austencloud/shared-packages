@@ -23,7 +23,7 @@ html.route-transition [data-route-hold='nav'] {
 ::view-transition-group(route-hold-header),
 ::view-transition-group(route-hold-nav) {
 	animation: none;
-	z-index: 1;
+	z-index: 2;
 }
 
 /* The page area does not travel between its old and new spots. A link opens
@@ -75,6 +75,19 @@ html.route-morph::view-transition-new(page-content) {
 
 ::view-transition-new(record-box) {
 	animation: route-fade-in var(--duration-normal) var(--ease-standard) var(--duration-instant) both;
+}
+
+/* A banner photo (data-record-photo="backdrop", set by src/record-morph.ts)
+   travels under its box, so the box's scrim and headline stay readable over
+   it the whole way. The box still passes under the held header. */
+html.route-photo-backdrop::view-transition-group(record-box) {
+	z-index: 1;
+}
+
+/* The card's photo is cropped to the moving banner. Covering a much wider box
+   it would otherwise spill above and below it while it fades. */
+html.route-photo-backdrop::view-transition-group(record-photo) {
+	overflow: clip;
 }
 
 ::view-transition-old(record-photo),
