@@ -1,5 +1,25 @@
 {
-	"moves": [],
+	"moves": [
+		{ "task": 18, "from": "$lib/shared/share/components/post-studio/editor/post-box-drag", "to": "ui/editor/post-box-drag.ts", "entry": "@austencloud/video-editor/ui" },
+		{ "task": 18, "from": "$lib/shared/share/components/post-studio/editor/post-crop-geometry", "to": "ui/editor/post-crop-geometry.ts", "entry": "@austencloud/video-editor/ui" },
+		{ "task": 18, "from": "$lib/shared/share/components/post-studio/editor/post-crop-glide", "to": "ui/editor/post-crop-glide.ts", "entry": "@austencloud/video-editor/ui" },
+		{ "task": 18, "from": "$lib/shared/share/components/post-studio/editor/post-crop-session.svelte", "to": "ui/editor/post-crop-session.svelte.ts", "entry": "@austencloud/video-editor/ui" },
+		{ "task": 18, "from": "$lib/shared/share/components/post-studio/editor/post-crop-steps", "to": "ui/editor/post-crop-steps.ts", "entry": "@austencloud/video-editor/ui" },
+		{ "task": 18, "from": "$lib/shared/share/components/post-studio/editor/post-curve-plot", "to": "ui/editor/post-curve-plot.ts", "entry": "@austencloud/video-editor/ui" },
+		{ "task": 18, "from": "$lib/shared/share/components/post-studio/editor/post-editor-add", "to": "ui/editor/post-editor-add.ts", "entry": "@austencloud/video-editor/ui" },
+		{ "task": 18, "from": "$lib/shared/share/components/post-studio/editor/post-editor-files", "to": "ui/editor/post-editor-files.ts", "entry": "@austencloud/video-editor/ui" },
+		{ "task": 18, "from": "$lib/shared/share/components/post-studio/editor/post-editor-header.svelte", "to": "ui/editor/post-editor-header.svelte.ts", "entry": "@austencloud/video-editor/ui" },
+		{ "task": 18, "from": "$lib/shared/share/components/post-studio/editor/post-editor-labels", "to": "ui/editor/post-editor-labels.ts", "entry": "@austencloud/video-editor/ui" },
+		{ "task": 18, "from": "$lib/shared/share/components/post-studio/editor/post-editor-tools", "to": "ui/editor/post-editor-tools.ts", "entry": "@austencloud/video-editor/ui" },
+		{ "task": 18, "from": "$lib/shared/share/components/post-studio/editor/post-format", "to": "ui/editor/post-format.ts", "entry": "@austencloud/video-editor/ui" },
+		{ "task": 18, "from": "$lib/shared/share/components/post-studio/editor/post-item-rect", "to": "ui/editor/post-item-rect.ts", "entry": "@austencloud/video-editor/ui" },
+		{ "task": 18, "from": "$lib/shared/share/components/post-studio/editor/post-picture-pan-drag", "to": "ui/editor/post-picture-pan-drag.ts", "entry": "@austencloud/video-editor/ui" },
+		{ "task": 18, "from": "$lib/shared/share/components/post-studio/editor/post-source-crop", "to": "ui/editor/post-source-crop.ts", "entry": "@austencloud/video-editor/ui" },
+		{ "task": 18, "from": "$lib/shared/share/components/post-studio/editor/post-source-geometry", "to": "ui/editor/post-source-geometry.ts", "entry": "@austencloud/video-editor/ui" },
+		{ "task": 18, "from": "$lib/shared/share/components/post-studio/editor/timeline/post-timeline-geometry", "to": "ui/editor/timeline/post-timeline-geometry.ts", "entry": "@austencloud/video-editor/ui" },
+		{ "task": 18, "from": "$lib/shared/share/components/post-studio/editor/timeline/post-timeline-selection", "to": "ui/editor/timeline/post-timeline-selection.ts", "entry": "@austencloud/video-editor/ui" },
+		{ "task": 18, "from": "$lib/shared/share/components/post-studio/post-studio-share-export", "to": "ui/share-export.ts", "entry": "@austencloud/video-editor/ui" }
+	],
 	"splits": [],
 	"copies": [
 		{ "task": 10, "from": "$lib/shared/components/panel/PanelButton.svelte", "to": "ui/kit/PanelButton.svelte", "entry": "@austencloud/video-editor/ui" },
