@@ -7,12 +7,13 @@
 -->
 <script lang="ts">
 	import type { Snippet } from "svelte";
+	import type { IconDefinition } from "@fortawesome/free-solid-svg-icons";
 	import Icon from "./Icon.svelte";
 	import { faCheck } from "./icons.js";
 
 	interface MenuItem {
 		label: string;
-		icon: string;
+		icon: IconDefinition;
 		action: () => void;
 		variant?: "danger";
 		/** Keep unavailable actions discoverable without making them activatable. */
@@ -139,7 +140,7 @@
 						if (!item.disabled) handleItemClick(item);
 					}}
 				>
-					<i class={item.icon} aria-hidden="true"></i>
+					<Icon icon={item.icon} />
 					<span class="overflow-item-label">
 						{item.label}
 						{#if item.hint && item.disabled}<small>{item.hint}</small>{/if}
@@ -296,7 +297,6 @@
 		outline-offset: -2px;
 	}
 
-	.overflow-item i,
 	.overflow-item :global(.ve-icon) {
 		width: 18px;
 		text-align: center;

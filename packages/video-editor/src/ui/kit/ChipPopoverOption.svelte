@@ -14,6 +14,7 @@
   their place as the selection moves.
 -->
 <script lang="ts">
+	import type { IconDefinition } from "@fortawesome/free-solid-svg-icons";
 	import Icon from "./Icon.svelte";
 	import { faCheck } from "./icons.js";
 
@@ -22,8 +23,8 @@
 		selected?: boolean;
 		/** Contextual match count, rendered dimmed after the label. */
 		count?: number | null;
-		/** FontAwesome class for a leading glyph (LOOP's per-component marks). */
-		icon?: string;
+		/** Leading glyph (LOOP's per-component marks). */
+		icon?: IconDefinition;
 		/**
 		 * Overrides the accent for this one row. Options that carry their own
 		 * identity colour (LOOP components) pass it here; everything else inherits
@@ -52,7 +53,7 @@
 >
 	<Icon icon={faCheck} class="opt-tick" />
 	{#if icon}
-		<i class="opt-icon {icon}" aria-hidden="true"></i>
+		<Icon {icon} class="opt-icon" />
 	{/if}
 	<span class="opt-label">{label}</span>
 	{#if count != null}
@@ -95,7 +96,7 @@
 		visibility: visible;
 	}
 
-	.opt-icon {
+	.chip-popover-option :global(.opt-icon) {
 		flex-shrink: 0;
 		width: 16px;
 		font-size: 13px;

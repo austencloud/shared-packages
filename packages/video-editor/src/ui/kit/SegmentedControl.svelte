@@ -2,6 +2,7 @@
 	// Declared at module level: a type written inside a generic instance script cannot be named by
 	// the declaration the package build emits.
 	import type { Snippet } from "svelte";
+	import type { IconDefinition } from "@fortawesome/free-solid-svg-icons";
 
 	interface Option<T extends string> {
 		value: T;
@@ -10,7 +11,7 @@
 		shortLabel?: string;
 		/** More descriptive accessible name, such as a label plus result count. */
 		ariaLabel?: string;
-		icon?: string; // FontAwesome class
+		icon?: IconDefinition;
 		/** Optional trailing count badge (e.g. number of items in this group). */
 		count?: number | null;
 		/** Not selectable (e.g. a "coming soon" size). Still rendered, dimmed. */
@@ -82,6 +83,7 @@
 	 * while the visible label remains the cue for anyone who cannot read color.
 	 */
 	import { flip } from "svelte/animate";
+	import Icon from "./Icon.svelte";
 	import { flipDuration, popIn } from "./motion.js";
 
 	let {
@@ -269,7 +271,7 @@
 					{@render optionContent(option.value)}
 				</span>
 			{:else if option.icon}
-				<i class={option.icon} aria-hidden="true"></i>
+				<Icon icon={option.icon} />
 			{:else}
 				<span class="segment-label">{option.shortLabel ?? option.label}</span>
 			{/if}
@@ -518,11 +520,11 @@
 		color: var(--segmented-selected-ink);
 	}
 
-	.segment i {
+	.segment :global(.ve-icon) {
 		font-size: var(--ve-font-size-sm, 0.875rem);
 	}
 
-	.sm .segment i {
+	.sm .segment :global(.ve-icon) {
 		font-size: var(--ve-font-size-compact, 0.75rem);
 	}
 </style>

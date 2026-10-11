@@ -116,7 +116,7 @@
 	class="export-takeover-modal"
 	labelledBy={headingId}
 >
-	<div class="export-takeover" class:opaque>
+	<div class="export-takeover ve-portal" class:opaque>
 		<h2 id={headingId} class="sr-only">{dialogLabel}</h2>
 
 		{#if centerpiece}

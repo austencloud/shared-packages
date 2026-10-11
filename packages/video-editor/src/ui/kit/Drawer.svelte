@@ -652,11 +652,11 @@
 
 	// Compute full class names
 	const overlayClasses = $derived(
-		`drawer-overlay ${backdropClass} ${respectLayoutMode && isSideBySideLayout ? "side-by-side-layout" : ""}`.trim(),
+		`drawer-overlay ve-portal ${backdropClass} ${respectLayoutMode && isSideBySideLayout ? "side-by-side-layout" : ""}`.trim(),
 	);
 
 	const contentClasses = $derived(
-		`drawer-content ${drawerClass} ${respectLayoutMode && isSideBySideLayout ? "side-by-side-layout" : ""}`.trim(),
+		`drawer-content ve-portal ${drawerClass} ${respectLayoutMode && isSideBySideLayout ? "side-by-side-layout" : ""}`.trim(),
 	);
 
 	// Compute transform including drag offset and snap point offset

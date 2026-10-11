@@ -416,7 +416,7 @@
 	<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 	<dialog
 		bind:this={dialogElement}
-		class="base-modal {className}"
+		class="base-modal ve-portal {className}"
 		data-keyboard-shortcuts-ignore
 		data-size={size}
 		data-position={position}

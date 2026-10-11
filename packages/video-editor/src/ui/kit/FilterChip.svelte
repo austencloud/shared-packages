@@ -6,12 +6,13 @@ Popover uses fixed positioning to escape overflow:hidden containers.
 -->
 <script lang="ts">
 	import type { Snippet } from "svelte";
+	import type { IconDefinition } from "@fortawesome/free-solid-svg-icons";
 	import Icon from "./Icon.svelte";
 	import { faChevronDown, faXmark } from "./icons.js";
 
 	interface Props {
 		label: string;
-		icon?: string;
+		icon?: IconDefinition;
 		/** Custom leading glyph rendered in the icon slot in place of `icon`
 		 *  (e.g. an inline SVG mark). Takes precedence over `icon` when set. */
 		iconSnippet?: Snippet;
@@ -235,7 +236,7 @@ Popover uses fixed positioning to escape overflow:hidden containers.
 	{#if iconSnippet}
 		{@render iconSnippet()}
 	{:else if icon}
-		<i class={icon} aria-hidden="true"></i>
+		<Icon {icon} />
 	{/if}
 
 	<span class="chip-label">{label}</span>
@@ -419,7 +420,6 @@ Popover uses fixed positioning to escape overflow:hidden containers.
 		border-color: var(--chip-color);
 		color: var(--ve-theme-text-on-accent, #fff);
 	}
-	.filter-chip.solid.active i:not(.chip-arrow),
 	.filter-chip.solid.active :global(.ve-icon:not(.chip-arrow)) {
 		color: var(--ve-theme-text-on-accent, #fff);
 	}
@@ -463,7 +463,6 @@ Popover uses fixed positioning to escape overflow:hidden containers.
 		outline-offset: 2px;
 	}
 
-	.filter-chip i:not(.chip-arrow),
 	.filter-chip :global(.ve-icon:not(.chip-arrow)) {
 		font-size: var(--ve-font-size-compact, 12px);
 	}
@@ -476,7 +475,6 @@ Popover uses fixed positioning to escape overflow:hidden containers.
 		font-size: var(--ve-font-size-sm, 14px);
 	}
 
-	.filter-chip.scale-readable i:not(.chip-arrow),
 	.filter-chip.scale-readable :global(.ve-icon:not(.chip-arrow)) {
 		font-size: var(--ve-font-size-sm, 14px);
 	}
