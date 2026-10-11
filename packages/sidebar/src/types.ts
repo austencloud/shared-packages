@@ -3,12 +3,22 @@ import type { Snippet } from 'svelte';
 export interface Section {
 	id: string;
 	label: string;
-	icon: string;
+	/** Optional. A section without an icon renders as a text row in the
+	 *  expanded tree and is skipped in the rail (the rail shows icons only). */
+	icon?: string;
 	color?: string;
 	gradient?: string;
 	disabled?: boolean;
 	/** Ties a section to a collapsible SectionGroup (optional grouping feature). */
 	groupId?: string;
+	/** Renders the row as a real `<a href>` (crawlable, router-interceptable)
+	 *  instead of a `<button>`. onSectionChange/onModuleChange still fire on
+	 *  click so a host can close its overlays; the anchor does the navigating. */
+	href?: string;
+	/** With `href`: adds the `download` attribute (a file link). */
+	download?: boolean;
+	/** Indent level in the expanded tree: 1 = a sub-row under the row above. */
+	depth?: 0 | 1;
 	// NOTE: only the fields the component reads are declared. Hosts may pass
 	// richer section objects (extra fields are allowed) — the contract stays a
 	// minimal structural subset so any host superset is assignable.
@@ -35,9 +45,21 @@ export interface ModuleDefinition {
 	groups?: SectionGroup[];
 	disabled?: boolean;
 	disabledMessage?: string;
+	/** Renders the module row as a real `<a href>`. Rail tap (or a module with
+	 *  no sections) follows the link; an expanded tap on a module WITH sections
+	 *  still toggles its section list instead of navigating. */
+	href?: string;
+	/** With `href`: adds the `download` attribute. */
+	download?: boolean;
 }
 
 export interface SidebarProps {
+	/** Localized names for package-owned navigation controls. */
+	navigationLabel?: string;
+	homeLabel?: string;
+	pinLabel?: string;
+	collapseLabel?: string;
+
 	// Data
 	modules: ModuleDefinition[];
 	currentModule: string;

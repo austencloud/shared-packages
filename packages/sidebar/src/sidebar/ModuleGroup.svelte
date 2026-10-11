@@ -6,6 +6,7 @@
   import type { ModuleDefinition, Section } from '../types';
   import ModuleButton from './ModuleButton.svelte';
   import SectionsList from './SectionsList.svelte';
+  import { visibleSections as railAwareSections } from './tap-rules';
 
   let {
     module,
@@ -33,8 +34,8 @@
     isExpanded: boolean;
     isCollapsed?: boolean | undefined;
     moduleColor?: string | undefined;
-    onModuleClick: (moduleId: string, isDisabled: boolean) => void;
-    onSectionClick: (moduleId: string, section: Section) => void;
+    onModuleClick: (moduleId: string, isDisabled: boolean, e?: MouseEvent) => void;
+    onSectionClick: (moduleId: string, section: Section, e?: MouseEvent) => void;
     onModuleContextMenu?: ((e: MouseEvent, moduleId: string) => void) | undefined;
     onSectionContextMenu?: ((e: MouseEvent, moduleId: string, section: Section) => void) | undefined;
     celebrateAppearance?: boolean | undefined;
@@ -59,7 +60,11 @@
       : module.sections
   );
 
-  const hasSections = $derived(isExpanded && filteredSections.length > 0);
+  // The rail shows icons only: a label-only section (no icon) is a row of the
+  // expanded tree and is skipped while collapsed.
+  const visibleSections = $derived(railAwareSections<Section>(filteredSections, isCollapsed));
+
+  const hasSections = $derived(isExpanded && visibleSections.length > 0);
   const showActiveStyle = $derived(hasSections || forceActiveStyle);
 
   // Module-level badge (shown on the rail icon) + per-section badge map.
@@ -110,15 +115,15 @@
     {translateLabel}
     {onModuleHover}
     {renderIcon}
-    onClick={() => onModuleClick(module.id, isDisabled)}
+    onClick={(e: MouseEvent) => onModuleClick(module.id, isDisabled, e)}
     onContextMenu={onModuleContextMenu ? (e) => onModuleContextMenu(e, module.id) : undefined}
   />
 
   <!-- Sections/tabs, rendered in BOTH rail and expanded states. SectionsList
        morphs its tabs on isCollapsed instead of swapping to a separate rail. -->
-  {#if isExpanded && filteredSections.length > 0}
+  {#if isExpanded && visibleSections.length > 0}
     <SectionsList
-      sections={filteredSections}
+      sections={visibleSections}
       groups={module.groups}
       {currentSection}
       moduleId={module.id}

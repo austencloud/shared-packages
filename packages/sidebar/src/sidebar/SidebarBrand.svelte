@@ -10,17 +10,30 @@
   // rail: compact lead mark (not hovered, not pinned)
   // hover: overlay-expanded — the pin button PINS the sidebar open
   // pinned: classic push layout — the pin button collapses back to the rail
-  let { mode, onToggleCollapse, homeHref = null, brandLead, brandRest, brand } = $props<{
+  let {
+    mode,
+    onToggleCollapse,
+    homeHref = null,
+    homeLabel = 'Go to home',
+    pinLabel = 'Pin sidebar open',
+    collapseLabel = 'Collapse sidebar to rail',
+    brandLead,
+    brandRest,
+    brand,
+  } = $props<{
     mode: 'rail' | 'hover' | 'pinned';
     onToggleCollapse: () => void;
     homeHref?: string | null | undefined;
+    homeLabel?: string | undefined;
+    pinLabel?: string | undefined;
+    collapseLabel?: string | undefined;
     brandLead?: Snippet | string | undefined;
     brandRest?: Snippet | string | undefined;
     brand?: Snippet<[expanded: boolean]> | undefined;
   }>();
 
   const expanded = $derived(mode !== 'rail');
-  const pinLabel = $derived(mode === 'pinned' ? 'Collapse sidebar to rail' : 'Pin sidebar open');
+  const toggleLabel = $derived(mode === 'pinned' ? collapseLabel : pinLabel);
   const isLeadString = $derived(typeof brandLead === 'string');
   const isRestString = $derived(typeof brandRest === 'string');
 </script>
@@ -31,7 +44,7 @@
     class="brand-home"
     class:expanded
     href={homeHref ?? undefined}
-    aria-label={homeHref ? 'Go to home' : undefined}
+    aria-label={homeHref ? homeLabel : undefined}
   >
     {#if brand}
       {@render brand(expanded)}
@@ -49,8 +62,8 @@
     class:visible={expanded}
     class:pinned={mode === 'pinned'}
     onclick={onToggleCollapse}
-    aria-label={pinLabel}
-    title={pinLabel}
+    aria-label={toggleLabel}
+    title={toggleLabel}
     tabindex={expanded ? 0 : -1}
     aria-hidden={!expanded}
   >

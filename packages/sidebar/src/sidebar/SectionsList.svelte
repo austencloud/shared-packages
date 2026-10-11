@@ -29,7 +29,7 @@
     moduleId: string;
     isActive: boolean;
     isCollapsed?: boolean | undefined;
-    onSectionClick: (moduleId: string, section: Section) => void;
+    onSectionClick: (moduleId: string, section: Section, e?: MouseEvent) => void;
     onSectionContextMenu?: ((e: MouseEvent, moduleId: string, section: Section) => void) | undefined;
     celebrateAppearance?: boolean | undefined;
     badgeCounts?: Record<string, number> | undefined;
@@ -124,7 +124,7 @@
               {section}
               {moduleId}
               isActive={currentSection === section.id && isActive}
-              onClick={() => onSectionClick(moduleId, section)}
+              onClick={(e: MouseEvent) => onSectionClick(moduleId, section, e)}
               onContextMenu={onSectionContextMenu ? (e) => onSectionContextMenu(e, moduleId, section) : undefined}
               badgeCount={badgeCounts[section.id] || 0}
               {translateSectionLabel}
@@ -140,7 +140,7 @@
         {section}
         {moduleId}
         isActive={currentSection === section.id && isActive}
-        onClick={() => onSectionClick(moduleId, section)}
+        onClick={(e: MouseEvent) => onSectionClick(moduleId, section, e)}
         onContextMenu={onSectionContextMenu ? (e) => onSectionContextMenu(e, moduleId, section) : undefined}
         badgeCount={badgeCounts[section.id] || 0}
         {translateSectionLabel}
@@ -168,7 +168,7 @@
           {moduleId}
           {isCollapsed}
           isActive={isSectionActive}
-          onClick={() => onSectionClick(moduleId, section)}
+          onClick={(e: MouseEvent) => onSectionClick(moduleId, section, e)}
           onContextMenu={onSectionContextMenu ? (e) => onSectionContextMenu(e, moduleId, section) : undefined}
           badgeCount={badgeCounts[section.id] || 0}
           {translateSectionLabel}
