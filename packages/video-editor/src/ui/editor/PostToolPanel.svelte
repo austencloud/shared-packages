@@ -19,6 +19,8 @@
 		tool: PostPanelToolId;
 		/** The plugin's tools, which bring their own icons. */
 		pluginTools?: readonly PluginTool[];
+		/** The selected item's kind, for the tools whose name depends on it. */
+		kind?: string | null;
 		/** The selected item's name; nothing for the post's own tools. */
 		subject?: string | undefined;
 		/** Given on a phone, where Done returns to the tool row. */
@@ -38,6 +40,7 @@
 	let {
 		tool,
 		pluginTools = [],
+		kind = null,
 		subject,
 		onDone,
 		placement,
@@ -61,7 +64,7 @@
 	<header class="head" class:sr-only={bare}>
 		{#if icon}<Icon {icon} class="icon" />{/if}
 		<div class="titles">
-			<h3 id="{id}-title" class="title">{toolLabel(t, tool, pluginTools)}</h3>
+			<h3 id="{id}-title" class="title">{toolLabel(t, tool, pluginTools, kind)}</h3>
 			{#if subject}
 				<p class="subject">{subject}</p>
 			{/if}

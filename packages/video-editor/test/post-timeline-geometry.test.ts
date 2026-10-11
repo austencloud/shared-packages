@@ -13,6 +13,7 @@ import {
 	revealPlayheadScrollLeft,
 	roundToFrameSeconds,
 	rowsYWithoutKeyLanes,
+	unionBand,
 	rulerTickInterval,
 	scrollLeftForStableAnchor,
 	secondsToPixels,
@@ -395,5 +396,16 @@ describe("placeDraggedOverlay", () => {
 
 	it("never lands before 0", () => {
 		expect(placeDraggedOverlay(-3, 2, [], 100).start).toBe(0);
+	});
+});
+
+describe("unionBand", () => {
+	it("spans both bands, either, or none", () => {
+		expect(unionBand(null, null)).toBeNull();
+		expect(unionBand({ topPx: 100, heightPx: 44 }, null)).toEqual({ topPx: 100, heightPx: 44 });
+		expect(unionBand({ topPx: 100, heightPx: 44 }, { topPx: 144, heightPx: 88 })).toEqual({
+			topPx: 100,
+			heightPx: 132,
+		});
 	});
 });

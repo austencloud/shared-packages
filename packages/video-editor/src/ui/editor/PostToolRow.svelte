@@ -24,9 +24,11 @@
 		onpick: (id: PostToolId) => void;
 		/** The plugin's tools, so one that acts at once never reads as pressed. */
 		pluginTools?: readonly PluginTool[];
+		/** The selected item's kind, for the tools whose name depends on it. */
+		kind?: string | null;
 	}
 
-	let { tools, shown = null, isDisabled, onpick, pluginTools = [] }: Props = $props();
+	let { tools, shown = null, isDisabled, onpick, pluginTools = [], kind = null }: Props = $props();
 
 	const KEYS: Partial<Record<PostToolId, string>> = {
 		back: "Escape",
@@ -38,13 +40,13 @@
 	function titleFor(id: PostToolId): string {
 		switch (id) {
 			case "back":
-				return `${toolLabel(t, id, pluginTools)} (Esc)`;
+				return `${toolLabel(t, id, pluginTools, kind)} (Esc)`;
 			case "split":
 				return t("post_editor_split_hint");
 			case "beats":
 				return t("post_editor_beats_hint");
 			default:
-				return toolLabel(t, id, pluginTools);
+				return toolLabel(t, id, pluginTools, kind);
 		}
 	}
 </script>
@@ -63,7 +65,7 @@
 			onclick={() => onpick(id)}
 		>
 			{#if icon}<Icon {icon} />{/if}
-			<span class="label">{toolLabel(t, id, pluginTools)}</span>
+			<span class="label">{toolLabel(t, id, pluginTools, kind)}</span>
 		</button>
 	{/each}
 </div>

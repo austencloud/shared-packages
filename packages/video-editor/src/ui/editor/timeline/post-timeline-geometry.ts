@@ -264,6 +264,15 @@ export interface KeyLanesBand {
 	heightPx: number;
 }
 
+/** The key-lane band and the item-lane band as one span, for the measurements that skip both. */
+export function unionBand(a: KeyLanesBand | null, b: KeyLanesBand | null): KeyLanesBand | null {
+	if (!a) return b;
+	if (!b) return a;
+	const topPx = Math.min(a.topPx, b.topPx);
+	const bottomPx = Math.max(a.topPx + a.heightPx, b.topPx + b.heightPx);
+	return { topPx, heightPx: bottomPx - topPx };
+}
+
 /**
  * A pointer's y as the track rows alone would read it, with the selected
  * clip's keyframe rows (drawn under its own row) taken out. Over those rows

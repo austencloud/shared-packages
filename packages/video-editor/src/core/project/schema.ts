@@ -466,6 +466,15 @@ export const PostTextAnimationSchema = z
 	.strict();
 export type PostTextAnimation = z.infer<typeof PostTextAnimationSchema>;
 
+/** Where a callout's tail aims, as shares of the frame. */
+export const PostCalloutSchema = z
+	.object({
+		x: z.number().finite().min(0).max(1),
+		y: z.number().finite().min(0).max(1),
+	})
+	.strict();
+export type PostCallout = z.infer<typeof PostCalloutSchema>;
+
 const textItemShape = {
 	...itemBase,
 	kind: z.literal("text"),
@@ -473,6 +482,11 @@ const textItemShape = {
 	size: PostTextSizeSchema,
 	style: PostTextStyleSchema.optional(),
 	animation: PostTextAnimationSchema.optional(),
+	/**
+	 * Draws the text as a speech bubble whose tail aims at this point (see
+	 * `callout-layout.ts`). tka's walkthrough puts one beside each click.
+	 */
+	callout: PostCalloutSchema.optional(),
 };
 
 export const PostTextItemSchema = z.object(textItemShape).strict();

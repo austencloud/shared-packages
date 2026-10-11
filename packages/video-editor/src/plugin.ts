@@ -223,13 +223,20 @@ export interface SelectionLayerHandle {
 	contextMenu(event: MouseEvent): boolean;
 }
 
+/**
+ * A plugin tool's name under its icon and over its panel. `kind` is the selected item's, or null
+ * for the post, for a tool whose name depends on it (tka: Look on an arrangement, Animation
+ * defaults on the post).
+ */
+export type ToolLabel = (t: (key: string) => string, kind: string | null) => string;
+
 /** A tool a plugin adds to the tool row. A panel tool opens its panel; an action tool runs. */
 export type PluginTool =
-	| { id: string; type: "panel"; label(t: (key: string) => string): string; icon: IconDefinition }
+	| { id: string; type: "panel"; label: ToolLabel; icon: IconDefinition }
 	| {
 			id: string;
 			type: "action";
-			label(t: (key: string) => string): string;
+			label: ToolLabel;
 			icon: IconDefinition;
 			/** False disables the tool's button (tka: Beats needs a clip with footage). Absent: always enabled. */
 			enabled?(editor: VideoEditorState): boolean;
@@ -240,6 +247,60 @@ export type PluginTool =
 export interface ToolRunContext {
 	/** The library take a panel's row ran the tool for (tka: Tap beats on a video row). */
 	takeId?: string;
+}
+
+/**
+ * A row the timeline draws under the selected item, after its keyframe rows, with one bar on it
+ * (tka: one per cell of an arrangement, the bar where the cell's beats fall).
+ */
+export interface ItemLane {
+	id: string;
+	/** The lane's name, on its header and its bar. */
+	label: string;
+	/** Read after the label by a screen reader (tka: "starts 2 beats after the grid"). */
+	description: string;
+	/** The bar, in project seconds. */
+	startSeconds: number;
+	endSeconds: number;
+	/** The bar is a stub at the item's end, where none of it plays (tka: a cell whose first beat is past the clip's end). */
+	pinned: boolean;
+	selected: boolean;
+	/** Where the snap guide stands while this bar is dragged. Absent: at the bar's start. */
+	guideSeconds?: number;
+	/** `data-*` attributes on the lane's row, keyed without the prefix, for a plugin's tests (tka: `beat-offset`). */
+	data?: Readonly<Record<string, string>>;
+}
+
+/** A lane's bar in hand. */
+export interface ItemLaneDrag {
+	laneId: string;
+	/** How far the pointer has moved along the timeline, in project seconds. */
+	deltaSeconds: number;
+	/** The fine-step modifier (Alt) is held. */
+	fine: boolean;
+}
+
+/** Rows under the selected item; see `ItemLane`. */
+export interface ItemLanesUi {
+	/** The icon on each lane's header. */
+	icon: IconDefinition;
+	/**
+	 * The lanes under `item` while it is selected, none for no lanes. A bar in hand comes as `drag`,
+	 * so its lane previews the move. Read inside a `$derived`.
+	 */
+	lanes(item: PostItem, editor: VideoEditorState, drag: ItemLaneDrag | null): readonly ItemLane[];
+	/** A lane's header or bar was pressed; the editor has selected the item. */
+	select(item: PostItem, laneId: string, editor: VideoEditorState): void;
+	/** A bar was dragged and let go. Absent: the bars don't drag. */
+	move?(item: PostItem, drag: ItemLaneDrag, editor: VideoEditorState): void;
+}
+
+/** `ItemLanesUi` bound to one editor, as the timeline takes it. */
+export interface BoundItemLanes {
+	icon: IconDefinition;
+	lanes(item: PostItem, drag: ItemLaneDrag | null): readonly ItemLane[];
+	select(itemId: string, laneId: string): void;
+	move?(itemId: string, drag: ItemLaneDrag): void;
 }
 
 /** An entry the plugin adds to the add panel. */
@@ -344,6 +405,12 @@ export interface PluginUi {
 		coreRow: readonly string[],
 		editor: VideoEditorState,
 	): readonly string[];
+	/**
+	 * False keeps Transition off the selection's panels though its kind is a visual (tka: while a
+	 * cell of an arrangement is in hand). Read inside a `$derived`. Absent: offered.
+	 */
+	transitionOffered?(item: PostItem, editor: VideoEditorState): boolean;
+	itemLanes?: ItemLanesUi;
 	addItems?(
 		coreItems: readonly string[],
 		editor: VideoEditorState,

@@ -1,6 +1,13 @@
 <script lang="ts">
 	import { flushSync, onDestroy, tick, untrack, type Snippet } from "svelte";
-	import type { ItemKindUi, ItemPart, VideoEditorPlugin } from "../../../plugin.js";
+	import type {
+		BoundItemLanes,
+		ItemKindUi,
+		ItemLane,
+		ItemLaneDrag,
+		ItemPart,
+		VideoEditorPlugin,
+	} from "../../../plugin.js";
 	import type { PostItem, PostProject, PostTrack } from "../../../core/project/item-kinds.js";
 	import type { PostKeyframeChannel } from "../../../core/project/schema.js";
 	import {
@@ -30,6 +37,8 @@
 	import { growFade } from "../../kit/motion.js";
 	import TimeRuler from "../../kit/TimeRuler.svelte";
 	import PostTimelineItem from "./PostTimelineItem.svelte";
+	import PostTimelineItemLane from "./PostTimelineItemLane.svelte";
+	import PostTimelineItemLaneHeader from "./PostTimelineItemLaneHeader.svelte";
 	import PostTimelineKeyLane from "./PostTimelineKeyLane.svelte";
 	import PostTimelineKeyLaneHeader from "./PostTimelineKeyLaneHeader.svelte";
 	import PostTimelineMusicLane from "./PostTimelineMusicLane.svelte";
@@ -53,6 +62,7 @@
 		revealPlayheadScrollLeft,
 		roundToFrameSeconds,
 		rowsYWithoutKeyLanes,
+		unionBand,
 		rulerTickInterval,
 		scrollLeftForStableAnchor,
 		secondsToPixels,
@@ -143,6 +153,8 @@
 		onMoveDownbeat?: (downbeatSeconds: number) => void;
 		/** The plugin whose timeline join draws two items as one block. */
 		plugin?: VideoEditorPlugin | null;
+		/** The plugin's rows under the selected item, bound to the editor. */
+		itemLanes?: BoundItemLanes | null;
 		/** The empty main track's text in place of the editor's own. */
 		emptyHint?: string | null;
 	}
@@ -184,6 +196,7 @@
 		onTrimMusic,
 		onMoveDownbeat,
 		plugin = null,
+		itemLanes = null,
 		emptyHint = null,
 	}: Props = $props();
 
@@ -392,7 +405,21 @@
 		pendingSeconds: number;
 	}
 
-	type DragState = TrimDrag | MoveMainDrag | MoveOverlayDrag | KeyframeDrag;
+	/** A plugin lane's bar in hand: the plugin previews the move and makes it on release. */
+	interface ItemLaneBarDrag {
+		kind: "item-lane";
+		itemId: string;
+		laneId: string;
+		pointerId: number;
+		startClientX: number;
+		startClientY: number;
+		didDrag: boolean;
+		frozenPixelsPerSecond: number;
+		deltaSeconds: number;
+		fine: boolean;
+	}
+
+	type DragState = TrimDrag | MoveMainDrag | MoveOverlayDrag | KeyframeDrag | ItemLaneBarDrag;
 
 	let dragState = $state<DragState | null>(null);
 	let dragExtensionPx = $state(0);
@@ -511,26 +538,76 @@
 		// Drawn under the row the clip sits on, which for a joined square is the
 		// animation's.
 		const rowTrackIndex = rowTrackIndexOf(item.id, trackIndex);
-		let topPx = 0;
-		for (const row of rows) {
-			topPx += row.heightPx;
-			if (row.trackIndex === rowTrackIndex) break;
-		}
 		return {
 			item,
 			trackIndex: rowTrackIndex,
 			locked: project.tracks[trackIndex]?.locked ?? false,
 			channels,
-			topPx,
+			topPx: rowBottomPx(rowTrackIndex),
 			heightPx: channels.length * KEY_LANE_HEIGHT_PX,
 		};
 	});
 
-	// The keyframe rows sit above the main row whenever the selected clip is
-	// on an overlay track.
+	/** The bottom edge of a track's row in the rows stack, where its lanes begin. */
+	function rowBottomPx(rowTrackIndex: number): number {
+		let topPx = 0;
+		for (const row of rows) {
+			topPx += row.heightPx;
+			if (row.trackIndex === rowTrackIndex) break;
+		}
+		return topPx;
+	}
+
+	interface ItemLanesBand extends KeyLanesBand {
+		item: PostItem;
+		trackIndex: number;
+		locked: boolean;
+		lanes: readonly ItemLane[];
+	}
+
+	/**
+	 * The plugin's rows under the selected item, after its keyframe rows. A bar
+	 * in hand goes to the plugin as a drag, so its lane previews the move before
+	 * the plugin makes it.
+	 */
+	const itemLanesBand = $derived.by((): ItemLanesBand | null => {
+		if (selectedItemId === null || !itemLanes) return null;
+		const located = findItem(project, selectedItemId);
+		if (!located) return null;
+		const { item, trackIndex } = located;
+		const held = dragState?.kind === "item-lane" ? dragState : null;
+		const drag: ItemLaneDrag | null =
+			held && held.didDrag && held.itemId === item.id
+				? { laneId: held.laneId, deltaSeconds: held.deltaSeconds, fine: held.fine }
+				: null;
+		const lanes = itemLanes.lanes(item, drag);
+		if (lanes.length === 0) return null;
+		const rowTrackIndex = rowTrackIndexOf(item.id, trackIndex);
+		const keys = keyLanes;
+		return {
+			item,
+			trackIndex: rowTrackIndex,
+			locked: project.tracks[trackIndex]?.locked ?? false,
+			lanes,
+			topPx:
+				keys && keys.trackIndex === rowTrackIndex
+					? keys.topPx + keys.heightPx
+					: rowBottomPx(rowTrackIndex),
+			heightPx: lanes.length * KEY_LANE_HEIGHT_PX,
+		};
+	});
+
+	/** Both bands under the selected clip, for what measures past the rows. */
+	const extraBands = $derived(unionBand(keyLanes, itemLanesBand));
+	const extraBandsTrackIndex = $derived(
+		itemLanesBand?.trackIndex ?? keyLanes?.trackIndex ?? null,
+	);
+
+	// The lanes sit above the main row whenever the selected clip is on an
+	// overlay track.
 	const mainRowTopPx = $derived(
 		overlayTrackCount * OVERLAY_ROW_HEIGHT_PX +
-			(keyLanes && keyLanes.trackIndex !== MAIN_TRACK_INDEX ? keyLanes.heightPx : 0),
+			(extraBands && extraBandsTrackIndex !== MAIN_TRACK_INDEX ? extraBands.heightPx : 0),
 	);
 	/** Music may run past the post's end; its lane shows all of it. */
 	const contentEndSeconds = $derived(
@@ -913,6 +990,35 @@
 		onSeek(seconds);
 	}
 
+	/** A bar drag ends with a click on the bar, which must not re-select. */
+	let suppressNextItemLaneClick = false;
+
+	function beginItemLaneDrag(event: PointerEvent, band: ItemLanesBand, lane: ItemLane): void {
+		if (event.button !== 0 || band.locked || !itemLanes?.move) return;
+		suppressNextItemLaneClick = false;
+		(event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
+		dragState = {
+			kind: "item-lane",
+			itemId: band.item.id,
+			laneId: lane.id,
+			pointerId: event.pointerId,
+			startClientX: event.clientX,
+			startClientY: event.clientY,
+			didDrag: false,
+			frozenPixelsPerSecond: pixelsPerSecond,
+			deltaSeconds: 0,
+			fine: false,
+		};
+	}
+
+	function handleItemLaneBarClick(band: ItemLanesBand, lane: ItemLane): void {
+		if (suppressNextItemLaneClick) {
+			suppressNextItemLaneClick = false;
+			return;
+		}
+		itemLanes?.select(band.item.id, lane.id);
+	}
+
 	function handleKeyKeydown(
 		event: KeyboardEvent,
 		lanes: KeyLanes,
@@ -987,17 +1093,20 @@
 		return moveKeyframe(lanes.item, channel, state.originalSeconds, state.pendingSeconds);
 	}
 
-	// Once a clip is picked, scroll its keyframe rows into view if they sit
-	// below the fold, without pushing the clip's own row off the top.
+	// Once a clip is picked, scroll its keyframe and item rows into view if
+	// they sit below the fold, without pushing the clip's own row off the top.
 	let revealedLanesFor: string | null = null;
 	$effect(() => {
-		const lanes = keyLanes;
-		const key = lanes ? `${lanes.item.id}:${lanes.channels.length}` : null;
+		const lanes = extraBands;
+		const trackIndex = extraBandsTrackIndex;
+		const key = lanes
+			? `${selectedItemId}:${keyLanes?.channels.length ?? 0}:${itemLanesBand?.lanes.length ?? 0}`
+			: null;
 		if (key === revealedLanesFor) return;
 		revealedLanesFor = key;
 		if (!lanes) return;
 		const rowHeightPx =
-			lanes.trackIndex === MAIN_TRACK_INDEX ? MAIN_ROW_HEIGHT_PX : OVERLAY_ROW_HEIGHT_PX;
+			trackIndex === MAIN_TRACK_INDEX ? MAIN_ROW_HEIGHT_PX : OVERLAY_ROW_HEIGHT_PX;
 		const rowTopPx = lanes.topPx - rowHeightPx;
 		const bottomPx = lanes.topPx + lanes.heightPx;
 		void tick().then(() => {
@@ -1021,7 +1130,7 @@
 		if (hit.kind === "new-layer") return 0;
 		const rankFromTop = overlayTrackCount - hit.trackIndex;
 		const topPx = rankFromTop * OVERLAY_ROW_HEIGHT_PX;
-		return keyLanes && topPx >= keyLanes.topPx ? topPx + keyLanes.heightPx : topPx;
+		return extraBands && topPx >= extraBands.topPx ? topPx + extraBands.heightPx : topPx;
 	}
 
 	function memberGhostTopPx(state: MoveMainDrag | MoveOverlayDrag, member: DragMember): number {
@@ -1182,6 +1291,14 @@
 			return;
 		}
 
+		if (state.kind === "item-lane") {
+			state.deltaSeconds = deltaXPx / state.frozenPixelsPerSecond;
+			state.fine = event.altKey;
+			const lane = itemLanesBand?.lanes.find((candidate) => candidate.id === state.laneId);
+			snapGuideSeconds = lane ? (lane.guideSeconds ?? lane.startSeconds) : null;
+			return;
+		}
+
 		// move-overlay: the ghost's x is the snapped position (not a raw pixel
 		// follow like the main-track ghost), since overlays can land anywhere.
 		const placed = placeDraggedOverlay(
@@ -1203,7 +1320,7 @@
 		const pointerYPx =
 			event.clientY < lanesTopPx
 				? -1
-				: rowsYWithoutKeyLanes(event.clientY - contentOrigin().top, keyLanes);
+				: rowsYWithoutKeyLanes(event.clientY - contentOrigin().top, extraBands);
 		const hit = overlayRowAtPointerY(pointerYPx, {
 			overlayTrackCount,
 			overlayRowHeightPx: OVERLAY_ROW_HEIGHT_PX,
@@ -1225,6 +1342,19 @@
 			} else {
 				onTrim(state.itemId, state.edge, state.pendingSeconds);
 				onGestureEnd();
+			}
+			finishDrag();
+			return;
+		}
+
+		if (state.kind === "item-lane") {
+			if (state.didDrag) {
+				suppressNextItemLaneClick = true;
+				itemLanes?.move?.(state.itemId, {
+					laneId: state.laneId,
+					deltaSeconds: state.deltaSeconds,
+					fine: state.fine,
+				});
 			}
 			finishDrag();
 			return;
@@ -1345,6 +1475,21 @@
 										onKeyChannel(channel);
 										onToggleKey(lanes.item.id, channel, playheadSeconds);
 									}}
+								/>
+							</div>
+						{/each}
+					{/if}
+					{#if itemLanes && itemLanesBand && itemLanesBand.trackIndex === row.trackIndex}
+						{@const band = itemLanesBand}
+						{@const icon = itemLanes.icon}
+						{#each band.lanes as lane (lane.id)}
+							<div class="key-lane-slot" transition:growFade|global>
+								<PostTimelineItemLaneHeader
+									label={lane.label}
+									{icon}
+									heightPx={KEY_LANE_HEIGHT_PX}
+									selected={lane.selected}
+									onSelect={() => itemLanes?.select(band.item.id, lane.id)}
 								/>
 							</div>
 						{/each}
@@ -1511,6 +1656,23 @@
 										onKeyKeydown={(event, seconds) =>
 											handleKeyKeydown(event, lanes, channel, seconds)}
 										onCurveClick={(fromSeconds) => onOpenCurve(lanes.item.id, channel, fromSeconds)}
+									/>
+								</div>
+							{/each}
+						{/if}
+						{#if itemLanesBand && itemLanesBand.trackIndex === row.trackIndex}
+							{@const band = itemLanesBand}
+							{#each band.lanes as lane (lane.id)}
+								<div class="key-lane-slot" transition:growFade|global>
+									<PostTimelineItemLane
+										item={band.item}
+										{lane}
+										heightPx={KEY_LANE_HEIGHT_PX}
+										{pixelsPerSecond}
+										locked={band.locked}
+										{onSeek}
+										onBarPointerDown={(event) => beginItemLaneDrag(event, band, lane)}
+										onBarClick={() => handleItemLaneBarClick(band, lane)}
 									/>
 								</div>
 							{/each}

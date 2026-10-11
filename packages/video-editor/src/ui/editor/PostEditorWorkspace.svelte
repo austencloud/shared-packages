@@ -52,7 +52,12 @@
 	import type { CompositionSourceBinding } from "../../state/source-binding.js";
 	import type { KeptExport, LibraryTake, VideoEditorHost } from "../../host.js";
 	import type { PostEdit, VideoEditorState } from "../../state/video-editor-state.svelte.js";
-	import type { ToolRunContext, VideoEditorPlugin } from "../../plugin.js";
+	import type {
+		BoundItemLanes,
+		ItemLaneDrag,
+		ToolRunContext,
+		VideoEditorPlugin,
+	} from "../../plugin.js";
 	import type { PostStudioLayerPainter } from "../../render/layer-painter.js";
 	import { createTextPainters } from "../../render/painter-registry.js";
 	import {
@@ -693,10 +698,38 @@
 			transitionVisual:
 				item !== null &&
 				(["video", "image", "card"].includes(item.kind) ||
-					kindDefinition(plugin, item.kind)?.transitionVisual === true),
+					kindDefinition(plugin, item.kind)?.transitionVisual === true) &&
+				(plugin?.ui?.transitionOffered?.(item, editor) ?? true),
 		};
 	});
 	const tools = $derived(toolRow(selection, editor.selectedItem ?? null, plugin, editor));
+
+	/** The plugin's rows under the selected item, bound to this editor for the timeline. */
+	const boundItemLanes = ((): BoundItemLanes | null => {
+		const lanesUi = plugin?.ui?.itemLanes;
+		if (!lanesUi) return null;
+		const itemOf = (itemId: string) => findItem(editor.project, itemId)?.item ?? null;
+		const move = lanesUi.move;
+		return {
+			icon: lanesUi.icon,
+			lanes: (item, drag) => lanesUi.lanes(item, editor, drag),
+			select: (itemId, laneId) => {
+				const item = itemOf(itemId);
+				if (!item) return;
+				musicSelected = false;
+				editor.selectedItemId = itemId;
+				lanesUi.select(item, laneId, editor);
+			},
+			...(move
+				? {
+						move: (itemId: string, drag: ItemLaneDrag) => {
+							const item = itemOf(itemId);
+							if (item) move(item, drag, editor);
+						},
+					}
+				: {}),
+		};
+	})();
 	const rowKey = $derived(`row:${tools.join(" ")}`);
 	const shown = $derived(
 		shownPanel(activeTool, selection, tools, panelBeside, plugin?.ui?.tools ?? []),
@@ -2005,6 +2038,7 @@
 	<PostToolRow
 		{tools}
 		pluginTools={plugin?.ui?.tools ?? []}
+		kind={editor.selectedItem?.kind ?? null}
 		shown={panelBeside ? shown : null}
 		isDisabled={toolDisabled}
 		onpick={pickTool}
@@ -2135,6 +2169,7 @@
 	<PostToolPanel
 		{tool}
 		pluginTools={plugin?.ui?.tools ?? []}
+		kind={editor.selectedItem?.kind ?? null}
 		subject={tool === "transition" && transitionCut
 			? `${labelFor(transitionCut.outgoing)} ${ARROW} ${labelFor(transitionCut.incoming)}`
 			: tool === "music"
@@ -2418,6 +2453,7 @@
 				>
 					<PostTimeline
 						{plugin}
+						itemLanes={boundItemLanes}
 						emptyHint={plugin?.ui?.emptyHint?.(editor, "timeline", translateKey(t)) ?? null}
 						project={editor.project}
 						durationSeconds={editor.durationSeconds}

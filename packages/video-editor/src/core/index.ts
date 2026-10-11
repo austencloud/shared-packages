@@ -11,6 +11,7 @@ export * from "./plan/post-plan.js";
 export * from "./plan/presets.js";
 export * from "./plan/plan-compiler.js";
 export * from "./caption-layout.js";
+export * from "./callout-layout.js";
 export * from "./color-grade.js";
 export * from "./preview-video.js";
 export * from "./edit-copy-manifest.js";

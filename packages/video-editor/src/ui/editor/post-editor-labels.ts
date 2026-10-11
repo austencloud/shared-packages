@@ -124,12 +124,13 @@ export function toolIcon(
 
 /**
  * The short name under a tool's icon, also its panel's title: a core tool's,
- * else the one the plugin's tool of that id gives.
+ * else the one the plugin's tool of that id gives for the selected `kind`.
  */
 export function toolLabel(
 	t: Translate,
 	id: PostToolId,
 	pluginTools: readonly PluginTool[] = [],
+	kind: string | null = null,
 ): string {
 	switch (id) {
 		case "transition":
@@ -191,7 +192,7 @@ export function toolLabel(
 		case "delete":
 			return t("post_editor_delete");
 		default:
-			return pluginTools.find((tool) => tool.id === id)?.label(translateKey(t)) ?? id;
+			return pluginTools.find((tool) => tool.id === id)?.label(translateKey(t), kind) ?? id;
 	}
 }
 
