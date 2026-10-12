@@ -19,6 +19,11 @@ export interface VideoEditorHost<E = unknown> {
 	translate?: Translate;
 	/** Default: Date.now. */
 	now?: () => number;
+	/**
+	 * The draft status's words for where saves land (Ringmaster: "Saved to Ringmaster"). Default:
+	 * "Saved to this computer" when the host passes onSaveDraft, else "Saved in this browser".
+	 */
+	savedPlace?: string;
 	/** Development-only behaviour; replaces import.meta.env.DEV in moved code. */
 	dev?: boolean;
 	/** The app-wide preview video cache the previews read. Default: an unsupported cache, so takes play their original files. */

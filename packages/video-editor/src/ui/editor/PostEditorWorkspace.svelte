@@ -1961,6 +1961,7 @@
 			saving={draftSaving}
 			error={draftError ?? editor.saveError}
 			disk={!!onSaveDraft}
+			place={host.savedPlace ?? null}
 		/>
 	{/if}
 {/snippet}
@@ -2005,6 +2006,7 @@
 			saving={draftSaving}
 			error={saveFailure}
 			disk={!!onSaveDraft}
+			place={host.savedPlace ?? null}
 			{savedAt}
 			header
 		/>

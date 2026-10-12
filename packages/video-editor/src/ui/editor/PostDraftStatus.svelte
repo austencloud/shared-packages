@@ -15,18 +15,23 @@
 		saving,
 		error,
 		disk,
+		place: placeProp = null,
 		savedAt = null,
 		header = false,
 	}: {
 		saving: boolean;
 		error: string | null;
 		disk: boolean;
+		/** The host's words for where saves land (host.savedPlace); wins over `disk`. */
+		place?: string | null;
 		/** When the last save finished, shown after the place. */
 		savedAt?: number | null;
 		header?: boolean;
 	} = $props();
 
-	const place = $derived(disk ? "Saved to this computer" : "Saved in this browser");
+	const place = $derived(
+		placeProp ?? (disk ? "Saved to this computer" : "Saved in this browser"),
+	);
 	const time = $derived(
 		savedAt === null
 			? null
