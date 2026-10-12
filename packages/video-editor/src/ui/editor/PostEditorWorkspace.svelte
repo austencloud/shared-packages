@@ -1896,7 +1896,7 @@
 			// Cancel stopped the upload, which is no failure to report.
 			if (exportCancelled) return;
 			const reason = cause instanceof Error ? cause.message : "The dev server did not answer.";
-			saveExportError = `Not saved to exports/. ${reason}`;
+			saveExportError = `Not saved to ${sync.exportPlace ?? "exports/"}. ${reason}`;
 		}
 	}
 
@@ -2132,6 +2132,7 @@
 			{exportFilename}
 			{exportError}
 			savedTo={savedExport?.file ?? null}
+			savedNote={savedExport?.saved ?? null}
 			saveError={saveExportError}
 			onRender={() => void renderPost()}
 			onCancel={cancelExport}

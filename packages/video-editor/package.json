@@ -1,6 +1,6 @@
 {
   "name": "@austencloud/video-editor",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "private": true,
   "description": "Keyframe video editor for Svelte 5 apps: project schema, frame compositor, WebCodecs export and the editor UI. Shared by tka-platform and Ringmaster.",
   "type": "module",

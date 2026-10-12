@@ -73,6 +73,8 @@ export interface EditorNotify {
 /** Where a kept render landed, as the host names it (tka: exports/<name>.mp4 inside the feature's folder). */
 export interface KeptExport {
 	file: string;
+	/** What the export panel says about it (Ringmaster: "Saved to Media."). Default: "Saved to <file> in the project folder." */
+	saved?: string;
 }
 
 /**
@@ -88,6 +90,8 @@ export interface EditorSync {
 		name: string | undefined,
 		signal: AbortSignal | undefined,
 	): Promise<KeptExport>;
+	/** Where keepExport keeps renders, for its failure ("Not saved to <place>."). Default: "exports/". */
+	exportPlace?: string;
 	/** Set when device videos are refused: the message the media panel shows instead of opening the picker. */
 	devicePickBlocked?: string;
 	/** False: no browser tab sync for this project, because the sync keeps every copy current itself. Default true. */

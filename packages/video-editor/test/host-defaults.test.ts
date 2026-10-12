@@ -1,8 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createWindowShortcuts, resolveServices } from "../src/host-defaults.js";
 
-const press = (init: KeyboardEventInit, target: EventTarget = window) =>
-	target.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, cancelable: true, ...init }));
+/** Dispatches a key as the page would get it; resolves to whether a listener claimed it. */
+const press = (init: KeyboardEventInit, target: EventTarget = document.body) =>
+	!target.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, cancelable: true, ...init }));
 
 describe("default editor services", () => {
 	it("says nothing outside dev and logs in dev", () => {
@@ -74,16 +75,26 @@ describe("window shortcuts", () => {
 		expect(redo).toHaveBeenCalledTimes(2);
 	});
 
-	it("does nothing when there is nothing to undo", () => {
+	it("does nothing when there is nothing to undo, yet keeps the key from a page-wide undo", () => {
 		const undo = vi.fn();
+		// A host's own undo on the window that skips claimed keys (Ringmaster's tag history).
+		const pageUndo = vi.fn();
+		const onWindow = (event: KeyboardEvent) => {
+			if (!event.defaultPrevented) pageUndo();
+		};
+		window.addEventListener("keydown", onWindow);
+		stops.push(() => window.removeEventListener("keydown", onWindow));
 		stops.push(
 			shortcuts.editHistory(
 				{ undo, redo: vi.fn(), canUndo: () => false, canRedo: () => false },
 				document.createElement("div"),
 			),
 		);
-		press({ key: "z", ctrlKey: true });
+		expect(press({ key: "z", ctrlKey: true })).toBe(true);
 		expect(undo).not.toHaveBeenCalled();
+		expect(pageUndo).not.toHaveBeenCalled();
+		// Other chords pass through.
+		expect(press({ key: "c", ctrlKey: true })).toBe(false);
 	});
 
 	it("leaves keys typed into a field alone", () => {
@@ -144,7 +155,7 @@ describe("window shortcuts", () => {
 	});
 
 	it("stops listening when the last registration goes", () => {
-		const remove = vi.spyOn(window, "removeEventListener");
+		const remove = vi.spyOn(document, "removeEventListener");
 		const off = shortcuts.escapeLayer("only", vi.fn());
 		off();
 		expect(remove).toHaveBeenCalledWith("keydown", expect.any(Function));

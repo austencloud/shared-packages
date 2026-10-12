@@ -104,9 +104,11 @@ function owns(history: History): boolean {
 }
 
 /**
- * One keydown listener on the window, there only while something is registered. Suppressors
+ * One keydown listener on the document, there only while something is registered. Suppressors
  * run first; Escape closes the topmost layer; Ctrl or Cmd with Z undoes, with Shift+Z or Ctrl+Y
- * redoes, in the newest editor that holds focus, unless the key is typed into a field.
+ * redoes, in the newest editor that holds focus, unless the key is typed into a field. The
+ * editor claims those keys (preventDefault) whether or not it can act, so a host's window
+ * listener that skips prevented events stays out of the editor's way.
  */
 export function createWindowShortcuts(): EditorShortcuts {
 	const histories: History[] = [];
@@ -129,19 +131,19 @@ export function createWindowShortcuts(): EditorShortcuts {
 		const redo =
 			(key === "z" && event.shiftKey) || (key === "y" && event.ctrlKey && !event.metaKey);
 		const undo = key === "z" && !event.shiftKey;
-		if (redo && history.canRedo()) {
-			event.preventDefault();
-			history.redo();
-		} else if (undo && history.canUndo()) {
-			event.preventDefault();
-			history.undo();
-		}
+		if (!redo && !undo) return;
+		// The editor owns its undo keys while it holds focus, even with nothing to undo, so a
+		// page-wide undo on the window (Ringmaster's tag history) never acts unseen behind it.
+		event.preventDefault();
+		if (redo && history.canRedo()) history.redo();
+		else if (undo && history.canUndo()) history.undo();
 	}
 
 	function sync(): void {
 		const wanted = histories.length + layers.length > 0;
-		if (wanted && !listening) window.addEventListener("keydown", onKeydown);
-		if (!wanted && listening) window.removeEventListener("keydown", onKeydown);
+		// On the document, which hears a key before the window does.
+		if (wanted && !listening) document.addEventListener("keydown", onKeydown);
+		if (!wanted && listening) document.removeEventListener("keydown", onKeydown);
 		listening = wanted;
 	}
 

@@ -27,6 +27,8 @@
 		onSharePost?: (() => void) | undefined;
 		/** A feature video's render, once it is in the project's exports/ folder. */
 		savedTo?: string | null;
+		/** What to say about the kept render instead of naming its file in the project folder. */
+		savedNote?: string | null;
 		/** Why a feature video's render did not reach exports/. */
 		saveError?: string;
 		/** Extra steps from the plugin's bindings, listed after a take's missing-file step. */
@@ -50,6 +52,7 @@
 		onTapBeats,
 		onSharePost,
 		savedTo = null,
+		savedNote = null,
 		saveError = "",
 		exportTodos,
 	}: Props = $props();
@@ -181,7 +184,9 @@
 					</PanelButton>
 				{/if}
 			</div>
-			{#if savedTo}
+			{#if savedNote}
+				<p class="help">{savedNote}</p>
+			{:else if savedTo}
 				<p class="help">Saved to {savedTo} in the project folder.</p>
 			{/if}
 			{#if saveError}
