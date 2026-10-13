@@ -14,3 +14,10 @@ export {
 	type TrustedPhoneKey,
 	type TrustedPhoneKeyOptions
 } from './trusted-phone-key';
+export {
+	createNotificationApprover,
+	opensApprovePage,
+	type NotificationApprover,
+	type NotificationApproverOptions,
+	type NotificationOutcome
+} from './notification-approval';

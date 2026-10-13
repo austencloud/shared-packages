@@ -14,6 +14,7 @@ export {
 	type PhoneSignInServerConfig,
 	type RouteContext,
 	type RouteHandler,
+	type SignInNotice,
 	type VerifiedUser
 } from './handlers';
 export type { PhoneSignInStore, StoredDocument } from './store';

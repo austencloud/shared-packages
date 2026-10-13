@@ -1,6 +1,6 @@
 {
   "name": "@austencloud/phone-sign-in",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Scan a QR code with your signed-in phone to sign a computer in to a Firebase app. One-time approvals, a trusted-phone key for scan-only sign-in, a same-network check, and \"That wasn't me\". Shared across AustenCloud apps.",
   "type": "module",
   "svelte": "./dist/index.js",

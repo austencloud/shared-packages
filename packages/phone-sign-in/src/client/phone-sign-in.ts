@@ -30,7 +30,8 @@ export interface PhoneSignInClientOptions {
 }
 
 export interface PhoneSignInClient {
-	startPhoneSignIn(): Promise<StartedRequest>;
+	/** `notify` also asks the server to send the request to the owner's phone as a notification. */
+	startPhoneSignIn(options?: { notify?: boolean }): Promise<StartedRequest>;
 	collectPhoneSignIn(id: string, secret: string): Promise<CollectAnswer>;
 	loadApprovalRequest(id: string): Promise<ApprovalRequest | null>;
 	decideApprovalRequest(id: string, decision: 'approve' | 'deny', confirmDifferentNetwork?: boolean): Promise<DecisionResult>;
@@ -95,13 +96,13 @@ export function createPhoneSignInClient({
 		}
 	}
 
-	async function startPhoneSignIn(): Promise<StartedRequest> {
+	async function startPhoneSignIn(options: { notify?: boolean } = {}): Promise<StartedRequest> {
 		const fallback = 'Could not start a phone sign-in';
 		const response = await send(() =>
 			fetch(basePath, {
 				method: 'POST',
 				headers: { 'content-type': 'application/json' },
-				body: '{}',
+				body: options.notify ? '{"notify":true}' : '{}',
 				signal: AbortSignal.timeout(START_TIMEOUT_MS)
 			})
 		);
@@ -125,7 +126,9 @@ export function createPhoneSignInClient({
 			secret: body.secret,
 			expiresAt: body.expiresAt,
 			expiresInMs: body.expiresInMs,
-			approveUrl: body.approveUrl
+			approveUrl: body.approveUrl,
+			// An older server never sends it, and anything but a plain true means show the QR code.
+			notified: body.notified === true
 		};
 	}
 

@@ -13,6 +13,8 @@ export interface StartedRequest {
 	 */
 	expiresInMs: number;
 	approveUrl: string;
+	/** True when the server sent this request to the owner's phone as a notification. */
+	notified: boolean;
 }
 
 export type CollectAnswer =
