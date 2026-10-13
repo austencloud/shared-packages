@@ -16,6 +16,7 @@
   import { createHoverIntent } from './services/hover-intent';
   import { shouldStayOpen, isKeyboardFocus } from './services/overlay-hold';
   import { readPinState, writePinState } from './sidebar/pin-state';
+  import { isModifiedClick, moduleTapAction } from './sidebar/tap-rules';
   import SidebarBrand from './sidebar/SidebarBrand.svelte';
   import ModuleGroup from './sidebar/ModuleGroup.svelte';
 
@@ -45,6 +46,10 @@
     filterSection,
     getBadgeCount,
 
+    navigationLabel = 'Main navigation',
+    homeLabel = 'Go to home',
+    pinLabel = 'Pin sidebar open',
+    collapseLabel = 'Collapse sidebar to rail',
     homeHref = null,
     brandLead,
     brandRest,
@@ -212,24 +217,33 @@
     expandedModules = next;
   }
 
-  function handleModuleTap(moduleId: string, isDisabled = false) {
+  function handleModuleTap(moduleId: string, isDisabled = false, e?: MouseEvent) {
     if (isDisabled) return;
-    onHaptic?.();
     const moduleDefinition = modules.find((m: ModuleDefinition) => m.id === moduleId);
-    const hasNoSections = !moduleDefinition?.sections?.length;
-    // Rail or no sections → navigate. Expanded with sections → peek (toggle the
-    // tab list); tabs are the navigators (navigating here would yank the overlay
-    // shut mid-browse via a view transition).
-    if (!visuallyExpanded || hasNoSections) {
+    const isLink = !!moduleDefinition?.href;
+    const action = moduleTapAction({
+      visuallyExpanded,
+      hasSections: !!moduleDefinition?.sections?.length,
+      isLink,
+      modified: !!e && isModifiedClick(e),
+    });
+    if (action === 'browser') return;
+    onHaptic?.();
+    if (action === 'navigate') {
+      // A link row navigates through its own anchor; the callback still fires
+      // so the host can close overlays or record the choice.
       onModuleChange?.(moduleId);
       if (visuallyExpanded) toggleModuleExpansion(moduleId);
     } else {
+      // Peek: toggle the tab list. It wins over a link row's href.
+      if (isLink) e?.preventDefault();
       toggleModuleExpansion(moduleId);
     }
   }
 
-  async function handleSectionTap(moduleId: string, section: Section) {
+  async function handleSectionTap(moduleId: string, section: Section, e?: MouseEvent) {
     if (section.disabled) return;
+    if (section.href && e && isModifiedClick(e)) return;
     onHaptic?.();
     if (moduleId !== currentModule) {
       await onModuleChange?.(moduleId, section.id);
@@ -291,7 +305,7 @@
   class:hover-expanded={hoverExpanded && collapsed}
   bind:this={sidebarElement}
   style="--sidebar-rail-width: {railWidth}px; --sidebar-expanded-width: {expandedWidth}px; --sidebar-reserved-width: {reservedWidth}px; view-transition-name: sidebar;"
-  aria-label="Main navigation"
+  aria-label={navigationLabel}
   onpointerenter={handleSidebarPointerEnter}
   onpointerleave={handleSidebarPointerLeave}
   onfocusin={handleSidebarFocusIn}
@@ -301,10 +315,14 @@
   <SidebarBrand
     mode={!visuallyExpanded ? 'rail' : collapsed ? 'hover' : 'pinned'}
     onToggleCollapse={handleTogglePin}
+    {homeLabel}
+    {pinLabel}
+    {collapseLabel}
     {homeHref}
     {brandLead}
     {brandRest}
     {brand}
+    {renderIcon}
   />
 
   <div class="navigation-content" class:tabs-mode={!visuallyExpanded}>
@@ -354,7 +372,9 @@
   .ac-sidebar {
     position: fixed;
     left: 0;
-    top: 0;
+    /* A host with its own fixed header sits the rail under it by setting
+       --sidebar-top (e.g. to the header height). */
+    top: var(--sidebar-top, 0px);
     bottom: 0;
     /* Visual width is driven by the .collapsed class (absent = expanded). The
        host offsets content by --sidebar-reserved-width instead, so the hover

@@ -1,0 +1,55 @@
+{
+  "name": "@austencloud/undo",
+  "version": "0.2.0",
+  "description": "Async command history with undo and redo, guarded before/after transitions, keyboard binding, and a Svelte 5 reactive view. Shared across AustenCloud apps.",
+  "type": "module",
+  "svelte": "./dist/index.js",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "svelte": "./dist/index.js",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "src",
+    "!src/**/*.test.ts"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "check": "tsc --noEmit",
+    "test": "vitest run",
+    "clean": "rimraf dist"
+  },
+  "peerDependencies": {
+    "svelte": "^5.0.0"
+  },
+  "devDependencies": {
+    "rimraf": "^5.0.0",
+    "svelte": "^5.0.0",
+    "typescript": "^5.0.0",
+    "vitest": "^2.1.0"
+  },
+  "keywords": [
+    "undo",
+    "redo",
+    "command",
+    "history",
+    "svelte",
+    "austencloud"
+  ],
+  "author": "Austen Cloud <austencloud@gmail.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/austencloud/shared-packages.git",
+    "directory": "packages/undo"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

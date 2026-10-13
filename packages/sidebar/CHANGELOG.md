@@ -1,5 +1,30 @@
 # @austencloud/sidebar
 
+## 1.1.1
+
+### Patch Changes
+
+- 929c41b: The pin button draws its thumbtack and chevron through `renderIcon` when the host passes one, so hosts that render icons as SVG (no Font Awesome webfont) no longer get an empty button. Hosts without `renderIcon` keep the webfont class.
+
+## 1.1.0
+
+### Minor Changes
+
+- a8250f9: Link rows, label-only rows, row depth, a top inset, and localized control names.
+
+  - `href` (+ `download`) on `Section` and `ModuleDefinition` renders the row as a
+    real `<a href>` with `aria-current="page"` when active, so a host's navigation
+    stays crawlable. The click still fires `onSectionChange` / `onModuleChange`;
+    a module with sections and an `href` still peeks when tapped in the expanded
+    tree. Modified clicks are left to the browser.
+  - `Section.icon` is optional. A section without an icon is a text row in the
+    expanded tree and is skipped in the rail.
+  - `Section.depth` (`0 | 1`) indents a sub-row.
+  - `top: var(--sidebar-top, 0px)` lets a host with a fixed header sit the rail
+    under it.
+  - `navigationLabel`, `homeLabel`, `pinLabel` and `collapseLabel` props name the
+    package-owned controls (folded in from a downstream patch).
+
 ## 1.0.1
 
 ### Patch Changes

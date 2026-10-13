@@ -23,7 +23,7 @@
     isActive: boolean;
     isExpanded: boolean;
     isCollapsed: boolean;
-    onClick: () => void;
+    onClick: (e: MouseEvent) => void;
     onContextMenu?: ((e: MouseEvent) => void) | undefined;
     hasSections?: boolean | undefined;
     insideGlassContainer?: boolean | undefined;
@@ -35,6 +35,9 @@
 
   const isDisabled = $derived(module.disabled ?? false);
   const label = $derived(translateLabel?.(module.id) ?? module.label);
+  // A module with an href is a real link (crawlable, router-interceptable). A
+  // disabled one stays a button so it can carry the disabled state.
+  const asLink = $derived(!!module.href && !isDisabled);
 
   // Haptics are owned by the orchestrator's tap handlers (single fire per
   // action), so this button just forwards the click.
@@ -45,8 +48,11 @@
   }
 </script>
 
-<button
+<svelte:element
+  this={asLink ? 'a' : 'button'}
+  role={asLink ? 'link' : 'button'}
   class="module-button"
+  class:is-link={asLink}
   class:active={isActive}
   class:expanded={isExpanded}
   class:disabled={isDisabled}
@@ -61,9 +67,12 @@
   aria-label={label}
   aria-expanded={isExpanded}
   aria-controls="module-sections-{module.id}"
-  aria-current={isActive ? 'page' : undefined}
+  aria-current={isActive ? (asLink && module.sections.length > 0 ? 'true' : 'page') : undefined}
   aria-disabled={isDisabled}
-  disabled={isDisabled}
+  disabled={asLink ? undefined : isDisabled}
+  type={asLink ? undefined : 'button'}
+  href={asLink ? module.href : undefined}
+  download={asLink && module.download ? '' : undefined}
   style="--module-color: {module.color || 'var(--theme-accent)'};"
 >
   <div class="icon-wrapper">
@@ -86,7 +95,7 @@
       </span>
     {/if}
   {/if}
-</button>
+</svelte:element>
 
 <style>
   /* ============================================================================
@@ -120,6 +129,13 @@
       transform var(--duration-emphasis) cubic-bezier(0.4, 0, 0.2, 1);
     position: relative;
     overflow: hidden;
+  }
+
+  /* Link rows read exactly like button rows. */
+  .module-button.is-link {
+    box-sizing: border-box;
+    text-decoration: none;
+    font: inherit;
   }
 
   /* Rail: keep the icon LEFT-anchored in its fixed 44px column so on collapse

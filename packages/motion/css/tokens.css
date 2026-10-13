@@ -1,0 +1,16 @@
+/* The motion clock: src/durations.ts. Feature CSS uses these, never raw values. */
+:root {
+	--duration-instant: 100ms;
+	--duration-fast: 150ms;
+	--duration-normal: 200ms;
+	--duration-emphasis: 280ms;
+	--duration-dramatic: 350ms;
+	--duration-scene: 800ms;
+	--ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+	--ease-standard-out: cubic-bezier(0, 0, 0.2, 1);
+	--ease-standard-in: cubic-bezier(0.4, 0, 1, 1);
+	/* Gaps between one list item's arrival and the next (STAGGER). */
+	--stagger-micro: 30ms;
+	--stagger-normal: 50ms;
+	--stagger-relaxed: 80ms;
+}

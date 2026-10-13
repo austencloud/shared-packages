@@ -90,6 +90,36 @@ changes on pin/unpin — never on hover.
 </Sidebar>
 ```
 
+### Link rows, label-only rows, depth
+
+- `href` on a module or section renders that row as a real `<a href>` with
+  `aria-current="page"` when active, instead of a `<button>`. Use it for
+  crawlable navigation (prerendered pages, SEO entry points). The click still
+  fires `onModuleChange` / `onSectionChange` so the host can close overlays; a
+  client-side router (SvelteKit) intercepts the anchor. `download: true` adds the
+  `download` attribute. A modified click (Ctrl/Cmd/Shift/Alt or middle button)
+  is left to the browser and fires no callback.
+- A module with sections **and** an `href` keeps the package tap rule: rail tap
+  follows the link; an expanded tap peeks (toggles the section list) and the
+  href is suppressed.
+- `icon` on a section is optional. A section without one renders as a text row
+  in the expanded tree and is skipped in the rail (the rail shows icons only).
+  Its label truncates with an ellipsis and carries the full text as `title`.
+- `depth: 1` indents a section as a sub-row of the row above it.
+
+### Top inset
+
+The nav is `position: fixed` to the left edge. A host with its own fixed header
+sits the rail under it with `--sidebar-top` (and usually `--z-sidebar` so the
+header's menus stay above the rail):
+
+```css
+.guide-host {
+  --sidebar-top: var(--site-header-h, 64px);
+  --z-sidebar: 150;
+}
+```
+
 ### Brand
 
 - `brandLead` + `brandRest` (strings or snippets) get the shared slide-reveal:
@@ -104,7 +134,7 @@ changes on pin/unpin — never on hover.
 
 | Prop | Type | Notes |
 |---|---|---|
-| `modules` | `ModuleDefinition[]` | Required. Nav data. |
+| `modules` | `ModuleDefinition[]` | Required. Nav data. A module or section may set `href` / `download` (link row), a section may omit `icon` (label-only row) and set `depth: 0 \| 1`. |
 | `currentModule` / `currentSection` | `string` | Active route. |
 | `onModuleChange(id, targetSection?)` | fn | Navigate to a module. |
 | `onSectionChange(sectionId)` | fn | Navigate to a section. |
@@ -126,6 +156,8 @@ changes on pin/unpin — never on hover.
 | `brand` | `Snippet<[expanded]>` | Full brand override (pin kept). |
 | `renderIcon` | `Snippet<[name, size]>` | Icon renderer (else `{@html icon}`). |
 | `beforeTree` / `account` / `footer` | `Snippet<[expanded]>` | Host slots. |
+| `navigationLabel` | `string` | `aria-label` of the `<nav>`. Default `Main navigation`. |
+| `homeLabel` / `pinLabel` / `collapseLabel` | `string` | Localized names for the brand home link and the pin toggle. |
 | `class` | `string` | Extra class on the `<nav>`. |
 
 ## Theming
@@ -133,5 +165,5 @@ changes on pin/unpin — never on hover.
 Consumes `--theme-{panel-bg,stroke,stroke-strong,accent,accent-strong,text,
 text-dim,card-bg,card-hover-bg,shadow}`, `--semantic-{error,info,success}`,
 `--duration-{instant,fast,normal,emphasis}`, `--ease-out`, `--min-touch-target`,
-`--font-size-*`, `--z-sidebar`. Every `var()` carries an inline fallback.
+`--font-size-*`, `--z-sidebar`, `--sidebar-top`. Every `var()` carries an inline fallback.
 `css/sidebar-tokens.css` ships defaults for a bare consumer.

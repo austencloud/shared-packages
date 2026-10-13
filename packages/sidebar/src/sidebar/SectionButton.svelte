@@ -20,7 +20,7 @@
     moduleId: string;
     isActive: boolean;
     isCollapsed?: boolean | undefined;
-    onClick: () => void;
+    onClick: (e: MouseEvent) => void;
     onContextMenu?: ((e: MouseEvent) => void) | undefined;
     badgeCount?: number | undefined;
     translateSectionLabel?: ((moduleId: string, sectionId: string, fallback: string) => string) | undefined;
@@ -30,32 +30,50 @@
   const label = $derived(
     translateSectionLabel?.(moduleId, section.id, section.label) ?? section.label
   );
+  // A section with an href is a real link (crawlable, router-interceptable).
+  const asLink = $derived(!!section.href && !section.disabled);
+  // No icon: a plain text row of the expanded tree (the rail skips these).
+  const labelOnly = $derived(!section.icon);
 </script>
 
-<button
+<svelte:element
+  this={asLink ? 'a' : 'button'}
+  role={asLink ? 'link' : 'button'}
   class="section-button"
+  class:is-link={asLink}
+  class:label-only={labelOnly}
   class:active={isActive}
   class:disabled={section.disabled}
   class:collapsed={isCollapsed}
   onclick={onClick}
   oncontextmenu={onContextMenu}
-  disabled={section.disabled}
-  aria-label={label}
-  style="--section-color: {section.color ||
+  disabled={asLink ? undefined : section.disabled}
+  type={asLink ? undefined : 'button'}
+  href={asLink ? section.href : undefined}
+  download={asLink && section.download ? '' : undefined}
+  aria-current={isActive && asLink ? 'page' : undefined}
+  aria-label={labelOnly ? undefined : label}
+  title={labelOnly ? label : undefined}
+  style="--section-depth: {section.depth ?? 0}; --section-color: {section.color ||
     'var(--muted-foreground)'}; --section-gradient: {section.gradient ||
     section.color ||
     'var(--muted-foreground)'};"
 >
-  <div class="icon-wrapper">
-    <span class="section-icon">
-      {#if renderIcon}{@render renderIcon(section.icon, 22)}{:else}{@html section.icon}{/if}
-    </span>
-    {#if badgeCount > 0}
-      <NotificationBadge count={badgeCount} />
-    {/if}
-  </div>
+  {#if section.icon}
+    <div class="icon-wrapper">
+      <span class="section-icon">
+        {#if renderIcon}{@render renderIcon(section.icon, 22)}{:else}{@html section.icon}{/if}
+      </span>
+      {#if badgeCount > 0}
+        <NotificationBadge count={badgeCount} />
+      {/if}
+    </div>
+  {/if}
   <span class="section-label">{label}</span>
-</button>
+  {#if labelOnly && badgeCount > 0}
+    <NotificationBadge count={badgeCount} />
+  {/if}
+</svelte:element>
 
 <style>
   /* ============================================================================
@@ -88,6 +106,29 @@
     position: relative;
     margin-bottom: 3px;
     overflow: hidden;
+  }
+
+  /* Link rows read exactly like button rows. */
+  .section-button.is-link {
+    box-sizing: border-box;
+    text-decoration: none;
+    font: inherit;
+  }
+
+  /* Depth indents a sub-row under the row above it (expanded tree only). */
+  .section-button {
+    padding-inline-start: calc(var(--section-depth, 0) * 16px);
+  }
+
+  /* Label-only rows have no icon column; a small lead inset keeps the text off
+     the edge, and depth adds to it. The label truncates instead of wrapping so
+     the row pitch never changes while the sidebar width animates. */
+  .section-button.label-only {
+    padding-inline-start: calc(12px + var(--section-depth, 0) * 16px);
+  }
+
+  .section-button.label-only .section-label {
+    text-overflow: ellipsis;
   }
 
   .section-button.collapsed {
