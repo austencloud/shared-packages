@@ -1,5 +1,11 @@
 # @austencloud/sidebar
 
+## 1.1.1
+
+### Patch Changes
+
+- 929c41b: The pin button draws its thumbtack and chevron through `renderIcon` when the host passes one, so hosts that render icons as SVG (no Font Awesome webfont) no longer get an empty button. Hosts without `renderIcon` keep the webfont class.
+
 ## 1.1.0
 
 ### Minor Changes
