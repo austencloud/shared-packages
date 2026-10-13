@@ -1,4 +1,4 @@
-export const VIDEO_EDITOR_VERSION = "0.1.0";
+export const VIDEO_EDITOR_VERSION = "0.1.2";
 export { formatTimecode } from "./timecode.js";
 export * from "./sequence-types.js";
 export * from "./preset/playback-bpm.js";
