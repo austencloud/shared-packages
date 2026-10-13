@@ -20,6 +20,7 @@
     brandLead,
     brandRest,
     brand,
+    renderIcon,
   } = $props<{
     mode: 'rail' | 'hover' | 'pinned';
     onToggleCollapse: () => void;
@@ -30,10 +31,12 @@
     brandLead?: Snippet | string | undefined;
     brandRest?: Snippet | string | undefined;
     brand?: Snippet<[expanded: boolean]> | undefined;
+    renderIcon?: Snippet<[name: string, size: number]> | undefined;
   }>();
 
   const expanded = $derived(mode !== 'rail');
   const toggleLabel = $derived(mode === 'pinned' ? collapseLabel : pinLabel);
+  const toggleIcon = $derived(mode === 'pinned' ? 'chevron-left' : 'thumbtack');
   const isLeadString = $derived(typeof brandLead === 'string');
   const isRestString = $derived(typeof brandRest === 'string');
 </script>
@@ -67,7 +70,13 @@
     tabindex={expanded ? 0 : -1}
     aria-hidden={!expanded}
   >
-    <i class="fas {mode === 'pinned' ? 'fa-chevron-left' : 'fa-thumbtack'}" aria-hidden="true"></i>
+    <!-- Consumers that draw icons as SVG (no Font Awesome webfont) pass
+         renderIcon; without it the webfont class is the fallback. -->
+    {#if renderIcon}
+      {@render renderIcon(toggleIcon, 12)}
+    {:else}
+      <i class="fas fa-{toggleIcon}" aria-hidden="true"></i>
+    {/if}
   </button>
 </div>
 

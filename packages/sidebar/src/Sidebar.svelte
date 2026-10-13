@@ -322,6 +322,7 @@
     {brandLead}
     {brandRest}
     {brand}
+    {renderIcon}
   />
 
   <div class="navigation-content" class:tabs-mode={!visuallyExpanded}>
