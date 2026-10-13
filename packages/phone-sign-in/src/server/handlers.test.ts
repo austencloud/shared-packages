@@ -163,7 +163,8 @@ describe('POST /api/phone-sign-in', () => {
 			secret: 'the-secret',
 			expiresAt: '2026-10-07T20:03:00.000Z',
 			expiresInMs: 180_000,
-			approveUrl: `https://ringmaster.cirqueaflame.com/sign-in/${ID}`
+			approveUrl: `https://ringmaster.cirqueaflame.com/sign-in/${ID}`,
+			notified: false
 		});
 		const network = await hashNetwork(COMPUTER_IP);
 		expect(network).toMatch(/^[0-9a-f]{64}$/);

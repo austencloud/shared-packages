@@ -1,7 +1,7 @@
 // Every phone sign-in route, as plain functions over a standard Request. An
 // app's route files only pass the request and { id, clientAddress, cf }:
 //
-//   POST   /api/phone-sign-in                    create        public
+//   POST   /api/phone-sign-in                    create        public; { notify: true } also notifies the phone
 //   GET    /api/phone-sign-in/<id>               lookup        admin
 //   POST   /api/phone-sign-in/<id>/decision      decision      fresh Google admin
 //   POST   /api/phone-sign-in/<id>/collect       collect       holder of the secret
@@ -79,6 +79,23 @@ export interface PhoneSignInServerConfig {
 	disabled: () => boolean;
 	/** A dev build: stamps local callers with this computer's public network (requester-address.ts). */
 	dev: boolean;
+	/**
+	 * Sends a new request to the owner's phone as a notification, when the
+	 * computer asks with `{ notify: true }`. Resolves true when a phone accepted
+	 * it. The app owns where notifications go and how many it sends; a throw
+	 * counts as false. Without it, `notified` is always false and the computer
+	 * shows the QR code.
+	 */
+	notifyPhones?: (notice: SignInNotice) => Promise<boolean>;
+}
+
+/** A new request, as the phone's notification describes it. */
+export interface SignInNotice {
+	id: string;
+	code: string;
+	device: { label: string; place: string; site: string };
+	/** How long the request lasts from now, by the server's clock. */
+	expiresInMs: number;
 }
 
 /** The pieces the handlers are built from. Tests replace some; apps never need to. */
@@ -274,18 +291,31 @@ export function createPhoneSignInServer(
 			return json({ error: 'Too many sign-in codes. Try again in a few minutes.' }, { status: 429 });
 		}
 
+		// A body that is missing, oversized or unreadable only means no notification.
+		const wantsNotice = (await readCappedJsonObject(request, MAX_BODY))?.notify === true;
+
 		const userAgent = request.headers.get('user-agent') ?? '';
+		const device = { label: describeDevice(userAgent), place: describePlace(context.cf), site: describeSite(url, liveHost) };
 		const created = await requests.createRequest(
-			{
-				label: describeDevice(userAgent),
-				userAgent,
-				place: describePlace(context.cf),
-				site: describeSite(url, liveHost)
-			},
+			{ ...device, userAgent },
 			await requests.networkInfo(
 				await requesterAddress({ address: ip, headers: request.headers, dev: config.dev, lookup: lookupPublicAddress })
 			)
 		);
+
+		let notified = false;
+		if (wantsNotice && config.notifyPhones) {
+			try {
+				notified = await config.notifyPhones({
+					id: created.id,
+					code: created.code,
+					device,
+					expiresInMs: created.expiresInMs
+				});
+			} catch (e) {
+				console.error(`[phone-sign-in] notifying the phone failed: ${logMessage(e, '')}`);
+			}
+		}
 
 		return json({
 			id: created.id,
@@ -298,7 +328,9 @@ export function createPhoneSignInServer(
 			approveUrl: approveUrl(created.id, url.origin, config.serverSecret() === null, {
 				liveOrigin: config.liveOrigin,
 				approvePath: config.approvePath
-			})
+			}),
+			// True when a phone accepted the notification, so the computer can say "Approve on your phone".
+			notified
 		});
 	};
 

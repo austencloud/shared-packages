@@ -18,7 +18,7 @@ the request, turns automatic approval off and signs every session out.
 | ------------------------------------- | ------------------------------------------------------------------------------- |
 | `@austencloud/phone-sign-in`          | Types and page logic both sides share: code format, approve gate, clocks, notices |
 | `@austencloud/phone-sign-in/server`   | `createPhoneSignInServer`: every route as a function over a standard `Request`   |
-| `@austencloud/phone-sign-in/client`   | `createPhoneSignInClient` and `createTrustedPhoneKey` for the browser            |
+| `@austencloud/phone-sign-in/client`   | `createPhoneSignInClient`, `createTrustedPhoneKey` and `createNotificationApprover` |
 | `@austencloud/phone-sign-in/svelte`   | `QrCode`                                                                         |
 | `@austencloud/phone-sign-in/testing`  | `createMemoryStore`, an in-memory Firestore stand-in                             |
 
@@ -58,6 +58,22 @@ export const POST: RequestHandler = ({ request, params, platform, url, getClient
 a numeric `status` (SvelteKit's `error()`) become JSON responses with that
 status. The salt, purpose, IndexedDB name and collections are fixed per app:
 changing the salt or purpose invalidates every trusted phone.
+
+### Notifying the phone
+
+With an optional `notifyPhones(notice)` in the config, a computer that starts a
+request with `startPhoneSignIn({ notify: true })` also has the request sent to
+the owner's phone. The app owns the delivery (Web Push, rate limits, which
+phone) and resolves true when a phone accepted it; the create answer carries
+`notified`, so the computer can say "Approve on your phone" or fall back to the
+QR code. A throw counts as false.
+
+On the phone, `createNotificationApprover` from `/client` runs the
+notification's own Approve and Deny buttons where the app handles notification
+clicks, usually its service worker. Approve is the trusted phone's automatic
+approval, with every check the approve page has; `opensApprovePage(outcome)`
+says when the approve page must take over (another network, no key, signed
+out, any failure).
 
 The Firestore rules must keep browsers out of `phone_sign_in_requests` and
 `trusted_phones`; only the server writes them.

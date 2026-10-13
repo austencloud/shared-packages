@@ -50,13 +50,25 @@ describe('startPhoneSignIn', () => {
 	it('posts an empty JSON body so the server accepts it', async () => {
 		fetchMock.mockResolvedValue(reply(started));
 
-		await expect(startPhoneSignIn()).resolves.toEqual(started);
+		await expect(startPhoneSignIn()).resolves.toEqual({ ...started, notified: false });
 
 		const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
 		expect(url).toBe('/api/phone-sign-in');
 		expect(init.method).toBe('POST');
 		expect(init.headers).toEqual({ 'content-type': 'application/json' });
 		expect(init.body).toBe('{}');
+	});
+
+	it('asks for a notification when told to, and reads whether a phone got one', async () => {
+		fetchMock.mockResolvedValue(reply({ ...started, notified: true }));
+
+		await expect(startPhoneSignIn({ notify: true })).resolves.toEqual({ ...started, notified: true });
+		expect(sentBody(fetchMock)).toEqual({ notify: true });
+	});
+
+	it('reads anything but a plain true as not notified, so the QR code shows', async () => {
+		fetchMock.mockResolvedValue(reply({ ...started, notified: 'yes' }));
+		await expect(startPhoneSignIn({ notify: true })).resolves.toMatchObject({ notified: false });
 	});
 
 	it.each([
